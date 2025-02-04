@@ -20,12 +20,15 @@ python3 ./app.py -c ./
 ## Docker
 For `docker-compose`, use the [configuration included](https://github.com/weirdtangent/govee2mqtt/blob/master/docker-compose.yaml) in this repository.
 
-An docker image is available at `weirdtangent/govee2mqtt:latest`. You can mount your configuration volume at `/config` or use the ENV variables.
+An docker image is available at `weirdtangent/govee2mqtt:latest`. You can mount your configuration volume at `/config` (and see the
+included `config.yaml.sample` file) or use the ENV variables:
 
-
-# Getting an API KEY
-* Open the Govee App
-* Tap on the "profile" icon (bottom right)
-* Tap on "about us"
-* Tap on "Apply for API Key"
-* Get the API key via email within minutes
+  MQTT_HOST: 192.168.0.2
+  MQTT_USERNAME: admin
+  MQTT_PASSWORD: password
+  MQTT_PREFIX: govee
+  MQTT_HOMEASSISTANT: homeassistant
+  GOVEE_API_KEY: [your_api_key](https://developer.govee.com/reference/apply-you-govee-api-key)
+  GOVEE_DEVICE_INTERVAL: 30
+  GOVEE_DEVICE_BOOST_INTERVAL: 5
+  GOVEE_LIST_INTERVAL: 300
