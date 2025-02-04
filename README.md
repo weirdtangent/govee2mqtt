@@ -1,5 +1,5 @@
 
-Forked 2025-02-04 from https://github.com/weirdtangent/govee2mqtt
+Forked 2025-02-04 from [dlashua/govee2mqtt](https://github.com/weirdtangent/govee2mqtt)
 
 A few notes:
 * Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip.
