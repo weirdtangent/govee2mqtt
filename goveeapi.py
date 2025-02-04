@@ -5,7 +5,6 @@ import json
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class GoveeAPI(object):
     def __init__(self, api_key):
         self.api_key = api_key

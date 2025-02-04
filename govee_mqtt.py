@@ -8,9 +8,7 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class GoveeMqtt(object):
-
     def __init__(self, config):
         self.mqtt_config = config['mqtt']
         self.govee_config = config['govee']
@@ -45,9 +43,7 @@ class GoveeMqtt(object):
             'color': ['color', lambda x: {'r': x['r'], 'g': x['g'], 'b': x['b']}],
         }
 
-
         asyncio.run(self.start_govee_loop())
-
 
     # MQTT Functions
     ################################
@@ -76,7 +72,6 @@ class GoveeMqtt(object):
     def mqtt_on_subscribe(self, *args, **kwargs):
         _LOGGER.debug('subscribed')
 
-
     # Topic Helpers
     ########################################
     def get_sub_topic(self):
@@ -91,11 +86,9 @@ class GoveeMqtt(object):
     def get_set_topic(self, device_id):
         return "{}/{}/set".format(self.mqtt_config['prefix'], device_id)
 
-
     def get_homeassistant_config_topic(self, device_id):
         formatted_device_id = "govee_" + device_id.replace(':','')
         return "{}/light/{}/config".format(self.mqtt_config['homeassistant'], formatted_device_id)
-
 
     # MQTT Helpers
     #########################################
@@ -145,10 +138,8 @@ class GoveeMqtt(object):
         
         self.mqttc.publish(self.get_homeassistant_config_topic(device_id), json.dumps(config), retain=True)
 
-
     # Govee Helpers
     ###########################################
-
     def refresh_device_list(self):
         data = self.goveec.get_device_list()
         if 'devices' not in data:
@@ -250,7 +241,6 @@ class GoveeMqtt(object):
         if device_id not in self.boosted:
             self.boosted.append(device_id)
 
-
     def publish_handler(self, device_id, attribute, value):
         self.mqttc.publish(self.get_pub_topic(device_id, attribute), json.dumps(value), retain=True)
         self.devices[device_id][attribute] = value
@@ -284,5 +274,3 @@ class GoveeMqtt(object):
         while self.running == True:
             self.refresh_boosted_devices()
             await asyncio.sleep(self.device_update_boosted_interval)
-    
-    
