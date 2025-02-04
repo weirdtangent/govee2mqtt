@@ -1,19 +1,15 @@
 
-Govee recently released a public API to control their WiFi light strips, among other things.
-
-I've created govee2mqtt (with homeassistant discovery) to integrate these devices.
-
-This is very early code with little documentation. However, if you're interested, please give it a spin and feel free to submit PRs to help finish the feature set.
+Forked 2025-02-04 from https://github.com/weirdtangent/govee2mqtt
 
 A few notes:
-* Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip. Hopefully, they'll speed this up as time goes on.
-* I only have model H6159. I've not tested with anything else though, in theory, it should work.
-* Support is there for power on/off, brightness, and rgb_color. White Temperature is next in my list.
+* Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip.
+* If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests.
+* Support is there for power on/off, brightness, and rgb_color.
 
 # Getting Started
 ## Direct Install
 ```bash
-git clone https://github.com/dlashua/govee2mqtt.git
+git clone https://github.com/weirdtangent/govee2mqtt.git
 cd govee2mqtt
 pip3 install -r ./requirements.txt
 cp config.yaml.sample config.yaml
@@ -22,9 +18,9 @@ python3 ./app.py -c ./
 ```
 
 ## Docker
-For `docker-compose`, use the [configuration included](https://github.com/dlashua/govee2mqtt/blob/master/docker-compose.yaml) in this repository.
+For `docker-compose`, use the [configuration included](https://github.com/weirdtangent/govee2mqtt/blob/master/docker-compose.yaml) in this repository.
 
-An docker image is available at `dlashua/govee2mqtt:latest`. Mount your configuration volume at `/config`.
+An docker image is available at `weirdtangent/govee2mqtt:latest`. You can mount your configuration volume at `/config` or use the ENV variables.
 
 
 # Getting an API KEY
