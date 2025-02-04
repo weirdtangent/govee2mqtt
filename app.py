@@ -1,6 +1,6 @@
 import yaml
 import argparse
-import govee_mqtt
+from govee_mqtt import GoveeMqtt
 import os
 
 import logging
@@ -14,14 +14,14 @@ argparser.add_argument(
 )
 args = argparser.parse_args()
 
-configdir = args.config
-if not configdir.endswith("/"):
-    configdir = configdir + "/"
-
 try:
+    configdir = args.config
+    if not configdir.endswith("/"):
+        configdir = configdir + "/"
     with open(configdir + "config.yaml") as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
 except:
+    config = {}
     config['mqtt'] = {}
     config['mqtt']['host'] = os.getenv("MQTT_HOST") or "localhost"
     config['mqtt']['qos'] = int(os.getenv("MQTT_QOS") or 0)
@@ -29,7 +29,7 @@ except:
     config['mqtt']['username'] = os.getenv("MQTT_USERNAME")
     config['mqtt']['password'] = os.getenv("MQTT_PASSWORD")  # can be None
 
-    config['mqtt']['prefix'] = os.genenv("MQTT_PREFIX") or "govee"
+    config['mqtt']['prefix'] = os.getenv("MQTT_PREFIX") or "govee"
     config['mqtt']['homeassistant'] = os.getenv("MQTT_HOMEASSISTANT") or "homeassistant"
 
     config['mqtt']['tls_enabled'] = os.getenv("MQTT_TLS_ENABLED") == "true"
@@ -51,4 +51,4 @@ else:
     logging.basicConfig(level=logging.INFO)
 
 logging.info('Starting Application')
-govee_mqtt.GoveeMqtt(config)
+GoveeMqtt(config)
