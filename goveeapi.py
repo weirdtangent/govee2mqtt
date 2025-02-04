@@ -83,5 +83,6 @@ class GoveeAPI(object):
                 return {}
         except:
             _LOGGER.error('ERROR SENDING DEVICE COMMAND')
+            return {}
             
         _LOGGER.debug(r)
