@@ -31,7 +31,7 @@ class GoveeMqtt(object):
 
         self.mqtt_from_govee_field_map = {
             'state': ['powerState', lambda x: 'ON' if x == 'on' else 'OFF'],
-            # 'kelvin': ['colorTemInKelvin', int],
+            'kelvin': ['colorTemInKelvin', int],
             'brightness': ['brightness', int],
             'color': ['color', lambda x: {'r': x['r'], 'g': x['g'], 'b': x['b']}],
             'availability': ['online', lambda x: 'online' if x is True else 'offline'],
@@ -143,7 +143,7 @@ class GoveeMqtt(object):
     def refresh_device_list(self):
         data = self.goveec.get_device_list()
         if 'devices' not in data:
-            return
+            return 1
 
         for device in data['devices']:
             device_id = device['device']
@@ -167,6 +167,8 @@ class GoveeMqtt(object):
                 _LOGGER.debug('saw but not controlable {}'.format(device_id))
 
         _LOGGER.debug(self.devices)
+
+        return 0
 
     def refresh_all_devices(self):
         for device_id in self.devices:
@@ -262,8 +264,8 @@ class GoveeMqtt(object):
 
     async def device_list_loop(self):
         while self.running == True:
-            self.refresh_device_list()
-            await asyncio.sleep(self.device_list_update_interval)
+            error = self.refresh_device_list()
+            await asyncio.sleep(self.device_list_update_interval if not error else 60)
 
     async def device_loop(self):
         while self.running == True:

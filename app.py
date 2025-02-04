@@ -43,7 +43,7 @@ except:
     config['govee']['device_boost_interval'] = os.getenv("GOVEE_DEVICE_BOOST_INTERVAL") or 5
     config['govee']['device_list_interval'] = os.getenv("GOVEE_LIST_INTERVAL") or 300
 
-    config['debug'] = os.getenv("GOVEE_DEBUG") or False
+    config['debug'] = True if os.getenv("GOVEE_DEBUG") else False
 
 if 'debug' in config and config['debug'] is True:
     logging.basicConfig(level=logging.DEBUG)
