@@ -30,7 +30,7 @@ class GoveeAPI(object):
                 time.sleep(600)
                 return {}
             if r.status_code >= 400:
-                _LOGGER.error('BAD RESPONSE CODE (%d) GETTING DEVICE %s'. r.status_code, device_id)
+                _LOGGER.error('BAD RESPONSE CODE (%s) GETTING DEVICE %s', r.status_code, device_id)
                 return {}
             data = r.json()
         except:
@@ -64,7 +64,7 @@ class GoveeAPI(object):
                 time.sleep(600)
                 return {}
             if r.status_code >= 400:
-                _LOGGER.error('BAD RESPONSE CODE (%d) GETTING DEVICE LIST'. r.status_code)
+                _LOGGER.error('BAD RESPONSE CODE (%s) GETTING DEVICE LIST', r.status_code)
                 return {}
             data = r.json()
         except Exception as error:
@@ -105,7 +105,7 @@ class GoveeAPI(object):
                 time.sleep(600)
                 return {}
             if r.status_code >= 400:
-                _LOGGER.error('BAD RESPONSE CODE SENDING COMMAND {} {}'.format(device_id, data))
+                _LOGGER.error('BAD RESPONSE CODE (%s) SENDING COMMAND: %s %s', r.status_code, device_id, data)
                 return {}
         except:
             _LOGGER.error('ERROR SENDING DEVICE COMMAND')
