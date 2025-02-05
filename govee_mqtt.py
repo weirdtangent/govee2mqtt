@@ -65,7 +65,7 @@ class GoveeMqtt(object):
         topic = msg.topic
         payload = json.loads(msg.payload)
         device_id = topic[(len(self.mqtt_config['prefix']) + 1):-4]
-        _LOGGER.debug('got a message {}: {}'.format(device_id, payload))
+        _LOGGER.info('got a message {}: {}'.format(device_id, payload))
 
         self.send_command(device_id, payload)
 
@@ -143,7 +143,7 @@ class GoveeMqtt(object):
     def refresh_device_list(self):
         data = self.goveec.get_device_list()
         if 'devices' not in data:
-            return 1
+           return
 
         for device in data['devices']:
             device_id = device['device']
@@ -167,8 +167,6 @@ class GoveeMqtt(object):
                 _LOGGER.debug('saw but not controlable {}'.format(device_id))
 
         _LOGGER.debug(self.devices)
-
-        return 0
 
     def refresh_all_devices(self):
         for device_id in self.devices:
@@ -264,8 +262,8 @@ class GoveeMqtt(object):
 
     async def device_list_loop(self):
         while self.running == True:
-            error = self.refresh_device_list()
-            await asyncio.sleep(self.device_list_update_interval if not error else 60)
+            self.refresh_device_list()
+            await asyncio.sleep(self.device_list_update_interval)
 
     async def device_loop(self):
         while self.running == True:
