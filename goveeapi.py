@@ -22,15 +22,14 @@ class GoveeAPI(object):
         try:
             r = requests.get('https://developer-api.govee.com/v1/devices/state', headers=headers, params=params)
             if r.status_code == 429:
-                _LOGGER.error('TOO MANY REQUESTS RateLimit-Remaining: %s RateLimit-Reset: %s',
-                  r.headers['API-RateLimit-Remaining'] or '<unknown>',
-                  r.headers['API-RateLimit-Reset'] or '<unknown>'
+                _LOGGER.error('TOO MANY REQUESTS RateLimit-Remaining: {} RateLimit-Reset: {}',
+                  format(r.headers['API-RateLimit-Remaining'] or '<unknown>', r.headers['API-RateLimit-Reset'] or '<unknown>')
                 )
                 _LOGGER.debug('SLOWING DOWN, SLEEPING FOR 10 MIN')
                 time.sleep(600)
                 return {}
             if r.status_code >= 400:
-                _LOGGER.error('BAD RESPONSE CODE (%s) GETTING DEVICE %s', r.status_code, device_id)
+                _LOGGER.error('BAD RESPONSE CODE ({}) GETTING DEVICE {}', format(r.status_code, device_id))
                 return {}
             data = r.json()
         except:
@@ -56,15 +55,14 @@ class GoveeAPI(object):
         try:
             r = requests.get('https://developer-api.govee.com/v1/devices', headers=headers)
             if r.status_code == 429:
-                _LOGGER.error('TOO MANY REQUESTS RateLimit-Remaining: %s RateLimit-Reset: %s',
-                  r.headers['API-RateLimit-Remaining'] or '<unknown>',
-                  r.headers['API-RateLimit-Reset'] or '<unknown>'
+                _LOGGER.error('TOO MANY REQUESTS RateLimit-Remaining: {} RateLimit-Reset: {}',
+                  format(r.headers['API-RateLimit-Remaining'] or '<unknown>', r.headers['API-RateLimit-Reset'] or '<unknown>')
                 )
                 _LOGGER.debug('SLOWING DOWN, SLEEPING FOR 10 MIN')
                 time.sleep(600)
                 return {}
             if r.status_code >= 400:
-                _LOGGER.error('BAD RESPONSE CODE (%s) GETTING DEVICE LIST', r.status_code)
+                _LOGGER.error('BAD RESPONSE CODE ({}) GETTING DEVICE LIST', format(r.status_code))
                 return {}
             data = r.json()
         except Exception as error:
@@ -97,15 +95,14 @@ class GoveeAPI(object):
         try:
             r = requests.put('https://developer-api.govee.com/v1/devices/control', headers=headers, data=json.dumps(data))
             if r.status_code == 429:
-                _LOGGER.error('TOO MANY REQUESTS RateLimit-Remaining: %s RateLimit-Reset: %s',
-                  r.headers['API-RateLimit-Remaining'] or '<unknown>',
-                  r.headers['API-RateLimit-Reset'] or '<unknown>'
+                _LOGGER.error('TOO MANY REQUESTS RateLimit-Remaining: {} RateLimit-Reset: {}',
+                  format(r.headers['API-RateLimit-Remaining'] or '<unknown>', r.headers['API-RateLimit-Reset'] or '<unknown>')
                 )
                 _LOGGER.debug('SLOWING DOWN, SLEEPING FOR 10 MIN')
                 time.sleep(600)
                 return {}
             if r.status_code >= 400:
-                _LOGGER.error('BAD RESPONSE CODE (%s) SENDING COMMAND: %s %s', r.status_code, device_id, data)
+                _LOGGER.error('BAD RESPONSE CODE ({}) SENDING COMMAND: {} {}', format(r.status_code, device_id, data))
                 return {}
         except:
             _LOGGER.error('ERROR SENDING DEVICE COMMAND')
