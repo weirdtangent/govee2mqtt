@@ -39,9 +39,9 @@ except:
 
     config['govee'] = {}
     config['govee']['api_key'] = os.getenv("GOVEE_API_KEY")
-    config['govee']['device_interval'] = os.getenv("GOVEE_DEVICE_INTERVAL") or 30
-    config['govee']['device_boost_interval'] = os.getenv("GOVEE_DEVICE_BOOST_INTERVAL") or 5
-    config['govee']['device_list_interval'] = os.getenv("GOVEE_LIST_INTERVAL") or 300
+    config['govee']['device_interval'] = int(os.getenv("GOVEE_DEVICE_INTERVAL")) or 30
+    config['govee']['device_boost_interval'] = int(os.getenv("GOVEE_DEVICE_BOOST_INTERVAL")) or 5
+    config['govee']['device_list_interval'] = int(os.getenv("GOVEE_LIST_INTERVAL")) or 300
 
     config['debug'] = True if os.getenv("GOVEE_DEBUG") else False
 
