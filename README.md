@@ -1,5 +1,6 @@
+# weirdtangent/amcrest2mqtt
 
-Forked 2025-02-04 from [dlashua/govee2mqtt](https://github.com/weirdtangent/govee2mqtt)
+Forked from [dchesterton/amcrest2mqtt](https://github.com/dchesterton/amcrest2mqtt)
 
 A few notes:
 * Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip.
@@ -23,17 +24,25 @@ For `docker-compose`, use the [configuration included](https://github.com/weirdt
 An docker image is available at `weirdtangent/govee2mqtt:latest`. You can mount your configuration volume at `/config` (and see the
 included `config.yaml.sample` file) or use the ENV variables:
 
-  MQTT_HOST: 192.168.0.2
-  MQTT_USERNAME: admin
-  MQTT_PASSWORD: password
-  MQTT_PREFIX: govee
-  MQTT_HOMEASSISTANT: homeassistant
-  GOVEE_API_KEY: [your_api_key](https://developer.govee.com/reference/apply-you-govee-api-key)
-  GOVEE_DEVICE_INTERVAL: 30
-  GOVEE_DEVICE_BOOST_INTERVAL: 5
-  GOVEE_LIST_INTERVAL: 300
+It supports the following environment variables:
 
-  ## Buy Me A Coffee
+-   `MQTT_HOST: 192.168.0.2`
+-   `MQTT_USERNAME: admin`
+-   `MQTT_PASSWORD: password`
+-   `MQTT_PREFIX: govee`
+-   `MQTT_HOMEASSISTANT: homeassistant`
+-   `GOVEE_API_KEY: [your_api_key]` (https://developer.govee.com/reference/apply-you-govee-api-key)
+-   `GOVEE_DEVICE_INTERVAL: 30`
+-   `GOVEE_DEVICE_BOOST_INTERVAL: 5`
+-   `GOVEE_LIST_INTERVAL: 300`
+
+## Out of Scope
+
+### Non-Docker Environments
+
+Docker is the only supported way of deploying the application. The app should run directly via Python but this is not supported.
+
+### Buy Me A Coffee
 
 A few people have kindly requested a way to donate a small amount of money. If you feel so inclined I've set up a "Buy Me A Coffee"
 page where you can donate a small sum. Please do not feel obligated to donate in any way - I work on the app because it's
