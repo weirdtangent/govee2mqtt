@@ -32,3 +32,11 @@ included `config.yaml.sample` file) or use the ENV variables:
   GOVEE_DEVICE_INTERVAL: 30
   GOVEE_DEVICE_BOOST_INTERVAL: 5
   GOVEE_LIST_INTERVAL: 300
+
+  ## Buy Me A Coffee
+
+A few people have kindly requested a way to donate a small amount of money. If you feel so inclined I've set up a "Buy Me A Coffee"
+page where you can donate a small sum. Please do not feel obligated to donate in any way - I work on the app because it's
+useful to myself and others, not for any financial gain - but any token of appreciation is much appreciated 🙂
+
+<a href="https://buymeacoffee.com/weirdtangent">Buy Me A Coffee</a>
