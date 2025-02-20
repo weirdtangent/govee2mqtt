@@ -121,6 +121,7 @@ class GoveeMqtt(object):
             'brightness_scale': 255,
             # 'color_temp': True,
             'supported_color_modes': [
+              'color_temp',
               'rgbw',
             ],
             'command_topic': self.get_set_topic(device_id),
