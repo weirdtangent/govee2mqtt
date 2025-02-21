@@ -13,7 +13,7 @@ COPY . .
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-RUN addgroup -G $GROUP_ID appuser && \
+RUN addgroup -g $GROUP_ID appuser && \
     adduser -u $USER_ID -G appuser --disabled-password --gecos "" appuser
 
 USER appuser
