@@ -73,7 +73,7 @@ class GoveeAPI(object):
         _LOGGER.debug(data)
         return data['data']
 
-
+ 
     def get_headers(self):
         return {
             'Content-Type': "application/json",
@@ -107,5 +107,5 @@ class GoveeAPI(object):
         except:
             _LOGGER.error('ERROR SENDING DEVICE COMMAND')
             return {}
-
+            
         _LOGGER.debug(r)
