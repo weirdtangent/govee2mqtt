@@ -1,10 +1,9 @@
 FROM python:3.9-alpine
 
-# Update package lists and upgrade system packages
-RUN apt-get update && apt-get upgrade -y
+RUN python3 -m ensurepip
 
 # Upgrade pip and setuptools
-RUN pip install --upgrade pip setuptools
+RUN pip3 install --upgrade pip setuptools
 
 # Install dependencies
 RUN apk add --no-cache gcc libffi-dev musl-dev
@@ -12,9 +11,9 @@ RUN apk add --no-cache gcc libffi-dev musl-dev
 WORKDIR /usr/src/app
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --upgrade -r requirements.txt
+RUN pip3 install --no-cache-dir --upgrade -r requirements.txt
 
-RUN pip check
+RUN pip3 check
 
 COPY . .
 
@@ -26,4 +25,4 @@ RUN addgroup -g $GROUP_ID appuser && \
 
 USER appuser
 
-CMD [ "python", "./app.py", "-c", "/config"]
+CMD [ "python", "-u", "./app.py", "-c", "/config"]
