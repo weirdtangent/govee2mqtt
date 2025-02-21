@@ -5,6 +5,7 @@ import paho.mqtt.client as mqtt
 import time
 import json
 import logging
+import ssl
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,20 +95,33 @@ class GoveeMqtt(object):
     #########################################
     def mqttc_create(self):
         self.mqttc = mqtt.Client(client_id="govee2mqtt")
-        self.mqttc.username_pw_set(
-            username=self.mqtt_config.get("username"),
-            password=self.mqtt_config.get("password"),
-        )
+        if self.mqtt_config.get("tls_enabled"):
+            self.mqttcnt.tls_set(
+                ca_certs=self.mqtt_config.get("tls_ca_cert"),
+                certfile=self.mqtt_config.get("tls_cert"),
+                keyfile=self.mqtt_config.get("tls_key"),
+                cert_reqs=ssl.CERT_REQUIRED,
+                tls_version=ssl.PROTOCOL_TLS,
+            )
+        else:
+            self.mqttc.username_pw_set(
+                username=self.mqtt_config.get("username"),
+                password=self.mqtt_config.get("password"),
+            )
         _LOGGER.debug("CALLING MQTT CONNECT")
         self.mqttc.on_connect = self.mqtt_on_connect
         self.mqttc.on_disconnect = self.mqtt_on_disconnect
         self.mqttc.on_message = self.mqtt_on_message
         self.mqttc.on_subscribe = self.mqtt_on_subscribe
-        self.mqttc.connect(
-            self.mqtt_config.get("host"), self.mqtt_config.get("port",1883), keepalive=60
-        )
-        self.mqtt_connect_time = time.time()
-        self.mqttc.loop_start()
+        try:
+            self.mqttc.connect(
+                self.mqtt_config.get("host"), self.mqtt_config.get("port",self.mqtt_config.get("port")), keepalive=60
+            )
+            self.mqtt_connect_time = time.time()
+            self.mqttc.loop_start()
+        except ConnectionError as error:
+            _LOGGER.error(f"Could not connect to MQTT server: {error}")
+            exit(1)
 
         self.running = True
 
