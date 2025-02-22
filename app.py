@@ -29,7 +29,7 @@ except:
             'port': int(os.getenv("MQTT_PORT") or 1883),
             'username': os.getenv("MQTT_USERNAME"),
             'password': os.getenv("MQTT_PASSWORD"),  # can be None
-            'prefix': os.getenv("MQTT_PREFIX") or 'govee',
+            'prefix': os.getenv("MQTT_PREFIX") or 'govee2mqtt',
             'homeassistant': os.getenv("MQTT_HOMEASSISTANT") or 'homeassistant',
             'tls_enabled': os.getenv("MQTT_TLS_ENABLED") == "true",
             'tls_ca_cert': os.getenv("MQTT_TLS_CA_CERT"),
