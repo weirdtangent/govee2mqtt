@@ -1,27 +1,56 @@
-import yaml
 import argparse
 from govee_mqtt import GoveeMqtt
-import os
-
 import logging
+import os
+import signal
+import sys
+import yaml
 
+is_exiting = False
+
+def signal_handler(sig, frame):
+    # exit immediately upon receiving a second SIGINT
+    global is_exiting
+
+    if is_exiting:
+        os._exit(1)
+
+    is_exiting = True
+    exit_gracefully(0)
+
+def exit_gracefully(rc, skip_mqtt=False):
+    logging.info(f"Exiting app...")
+
+    # Use os._exit instead of sys.exit to ensure an MQTT disconnect event causes the program to exit correctly as they
+    # occur on a separate thread
+    os._exit(rc)
+
+# Handle interruptions
+signal.signal(signal.SIGINT, signal_handler)
+
+# cmd-line args
 argparser = argparse.ArgumentParser()
 argparser.add_argument(
     "-c",
     "--config",
     required=False,
-    help="Directory holding config.yaml and application storage",
+    help="Directory holding config.yaml or full path to config file",
 )
 args = argparser.parse_args()
 
-try:
-    configdir = args.config
-    if not configdir.endswith("/"):
-        configdir = configdir + "/"
-    with open(configdir + "config.yaml") as file:
-        config = yaml.safe_load(file, Loader=yaml.FullLoader)
-except:
-    logging.info(f"Failed to load {args.config}config.yml, checking ENV")
+# load config file
+configpath = args.config
+if configpath:
+    if not configpath.endswith(".yaml"):
+        if not configpath.endswith("/"):
+            configpath += "/"
+        configpath += "config.yaml"
+    print(f"INFO:root:Trying to load config file {configpath}")
+    with open(configpath) as file:
+        config = yaml.safe_load(file) # , Loader=yaml.FullLoader)
+# or check env vars
+else:
+    print(f"INFO:root:No config file specified, checking ENV")
     config = {
         'mqtt': {
             'host': os.getenv("MQTT_HOST") or 'localhost',
@@ -49,6 +78,11 @@ if 'debug' in config and config['debug'] is True:
     logging.basicConfig(level=logging.DEBUG)
 else:
     logging.basicConfig(level=logging.INFO)
+
+# make sure we at least got the ONE required value
+if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
+    logging.error(f"govee.api_key required in config file or in GOVEE_API_KEY env var")
+    sys.exit(1)
 
 logging.info('Starting Application')
 try:
