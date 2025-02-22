@@ -94,7 +94,11 @@ class GoveeMqtt(object):
     # MQTT Helpers
     #########################################
     def mqttc_create(self):
-        self.mqttc = mqtt.Client(client_id="govee2mqtt")
+        self.mqttc = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION1,
+            client_id=f"govee2mqtt_broker",
+            clean_session=False,
+        )
         if self.mqtt_config.get("tls_enabled"):
             self.mqttcnt.tls_set(
                 ca_certs=self.mqtt_config.get("tls_ca_cert"),
@@ -115,12 +119,14 @@ class GoveeMqtt(object):
         self.mqttc.on_subscribe = self.mqtt_on_subscribe
         try:
             self.mqttc.connect(
-                self.mqtt_config.get("host"), self.mqtt_config.get("port",self.mqtt_config.get("port")), keepalive=60
+                self.mqtt_config.get("host"),
+                port=self.mqtt_config.get("port"),
+                keepalive=60,
             )
             self.mqtt_connect_time = time.time()
             self.mqttc.loop_start()
         except ConnectionError as error:
-            _LOGGER.error(f"Could not connect to MQTT server: {error}")
+            _LOGGER.error(f"Could not connect to MQTT server {self.mqtt_config.get("host")}: {error}")
             exit(1)
 
         self.running = True
