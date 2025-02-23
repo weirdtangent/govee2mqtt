@@ -52,7 +52,7 @@ class GoveeAPI(object):
             }
         }
 
-        log(f'GETTING DEVICE FROM GOVEE: {json.dumps(body)}')
+        log(f'GETTING DEVICE FROM GOVEE: {json.dumps(body)}', level='DEBUG')
 
         try:
             r = requests.post(DEVICE_URL, headers=headers, json=body)
@@ -100,7 +100,7 @@ class GoveeAPI(object):
         }
 
         headers = self.get_headers()
-        log(f'SENDING DEVICE CONTROL TO GOVEE: {json.dumps(body)}')
+        log(f'SENDING DEVICE CONTROL TO GOVEE: {json.dumps(body)}', level="DEBUG")
         try:
             r = requests.post(COMMAND_URL, headers=headers, json=body)
             if r.status_code == 429:

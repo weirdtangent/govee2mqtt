@@ -53,7 +53,7 @@ class GoveeMqtt(object):
             return
         payload = json.loads(msg.payload)
         device_id = topic[(len(self.mqtt_config['prefix']) + 1):-4]
-        log(f'GOT MQTT MSG: {device_id}: {payload}')
+        log(f'GOT MQTT MSG: {device_id}: {payload}', level='DEBUG')
 
         self.send_command(device_id, payload)
 
