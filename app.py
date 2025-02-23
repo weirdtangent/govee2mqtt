@@ -1,6 +1,6 @@
 import argparse
 from govee_mqtt import GoveeMqtt
-import logging
+from log import log
 import os
 import signal
 import sys
@@ -8,6 +8,7 @@ import yaml
 
 is_exiting = False
 
+# Helper functions and callbacks
 def signal_handler(sig, frame):
     # exit immediately upon receiving a second SIGINT
     global is_exiting
@@ -19,11 +20,23 @@ def signal_handler(sig, frame):
     exit_gracefully(0)
 
 def exit_gracefully(rc, skip_mqtt=False):
-    logging.info(f"Exiting app...")
+    log(f"Exiting app...")
 
     # Use os._exit instead of sys.exit to ensure an MQTT disconnect event causes the program to exit correctly as they
     # occur on a separate thread
     os._exit(rc)
+
+def read_file(file_name):
+    with open(file_name, 'r') as file:
+        data = file.read().replace('\n', '')
+
+    return data
+
+def read_version():
+    if os.path.isfile("./VERSION"):
+        return read_file("./VERSION")
+
+    return read_file("../VERSION")
 
 # Handle interruptions
 signal.signal(signal.SIGINT, signal_handler)
@@ -47,7 +60,7 @@ if configpath:
         configpath += "config.yaml"
     print(f"INFO:root:Trying to load config file {configpath}")
     with open(configpath) as file:
-        config = yaml.safe_load(file) # , Loader=yaml.FullLoader)
+        config = yaml.safe_load(file)
 # or check env vars
 else:
     print(f"INFO:root:No config file specified, checking ENV")
@@ -74,19 +87,16 @@ else:
         'debug': True if os.getenv("GOVEE_DEBUG") else False,
     }
 
-if 'debug' in config and config['debug'] is True:
-    logging.basicConfig(level=logging.DEBUG)
-else:
-    logging.basicConfig(level=logging.INFO)
-
 # make sure we at least got the ONE required value
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
-    logging.error(f"govee.api_key required in config file or in GOVEE_API_KEY env var")
+    log(f"govee.api_key required in config file or in GOVEE_API_KEY env var", level="ERROR")
     sys.exit(1)
 
-logging.info('Starting Application')
+config['version'] = read_version()
+log(f"App Version: {config['version']}")
+
 try:
   GoveeMqtt(config)
 except ConnectionError as error:
-  logging.error(f"Could not connect to MQTT server: {error}")
+  log(f"Could not connect to MQTT server: {error}", level="ERROR")
   sys.exit(1)

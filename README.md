@@ -4,7 +4,7 @@ Forked from [dlashua/govee2mqtt](https://github.com/dlashua/govee2mqtt)
 
 A few notes:
 * Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip.
-* If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests.
+* If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests (currently 10,000/day)
 * Support is there for power on/off, brightness, and rgb_color.
 
 # Getting Started
@@ -26,13 +26,13 @@ included `config.yaml.sample` file) or use the ENV variables:
 
 It supports the following environment variables:
 
--   `MQTT_HOST: 192.168.0.2`
+-   `MQTT_HOST: 10.10.10.1`
 -   `MQTT_USERNAME: admin`
 -   `MQTT_PASSWORD: password`
 -   `MQTT_PREFIX: govee`
 -   `MQTT_HOMEASSISTANT: homeassistant`
 -   `GOVEE_API_KEY: [your_api_key]` (https://developer.govee.com/reference/apply-you-govee-api-key)
--   `GOVEE_DEVICE_INTERVAL: 30`
+-   `GOVEE_DEVICE_INTERVAL: 30` (higher if 10+ Govee devices)
 -   `GOVEE_DEVICE_BOOST_INTERVAL: 5`
 -   `GOVEE_LIST_INTERVAL: 300`
 
