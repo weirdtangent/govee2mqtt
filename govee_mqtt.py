@@ -140,7 +140,7 @@ class GoveeMqtt(object):
             'state_topic': self.get_state_topic(device_id),
             'json_attributes_topic': self.get_state_topic(device_id),
             'unique_id': "govee_light_" + device_id.replace(':',''),
-            "name": "control"
+            "name": "Control"
         }
         for capability in device['capabilities']:
             instance = capability['instance']
