@@ -2,11 +2,11 @@ from datetime import datetime, timezone
 import os
 
 def log(msg, level='INFO'):
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     if len(msg) > 20480:
-        raise ValueError("Log message exceeds max length")
-    if level != "DEBUG" or os.getenv('DEBUG'):
-        print(f"{ts} [{level}] {msg}")
+        raise ValueError('Log message exceeds max length')
+    if level != 'DEBUG' or os.getenv('DEBUG'):
+        print(f'{ts} [{level}] {msg}')
 
 def number_to_rgb(number, max_value):
     normalized_value = number / max_value

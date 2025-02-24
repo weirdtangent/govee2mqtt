@@ -89,22 +89,22 @@ class GoveeMqtt(object):
     def mqttc_create(self):
         self.mqttc = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION1,
-            client_id="govee2mqtt_broker",
+            client_id=self.mqtt_config["prefix"] + '_broker',
             clean_session=False,
         )
 
-        if self.mqtt_config.get("tls_enabled"):
+        if self.mqtt_config.get('tls_enabled'):
             self.mqttcnt.tls_set(
-                ca_certs=self.mqtt_config.get("tls_ca_cert"),
-                certfile=self.mqtt_config.get("tls_cert"),
-                keyfile=self.mqtt_config.get("tls_key"),
+                ca_certs=self.mqtt_config.get('tls_ca_cert'),
+                certfile=self.mqtt_config.get('tls_cert'),
+                keyfile=self.mqtt_config.get('tls_key'),
                 cert_reqs=ssl.CERT_REQUIRED,
                 tls_version=ssl.PROTOCOL_TLS,
             )
         else:
             self.mqttc.username_pw_set(
-                username=self.mqtt_config.get("username"),
-                password=self.mqtt_config.get("password"),
+                username=self.mqtt_config.get('username'),
+                password=self.mqtt_config.get('password'),
             )
 
         self.mqttc.on_connect = self.mqtt_on_connect
@@ -113,8 +113,8 @@ class GoveeMqtt(object):
         self.mqttc.on_subscribe = self.mqtt_on_subscribe
         try:
             self.mqttc.connect(
-                self.mqtt_config.get("host"),
-                port=self.mqtt_config.get("port"),
+                self.mqtt_config.get('host'),
+                port=self.mqtt_config.get('port'),
                 keepalive=60,
             )
             self.mqtt_connect_time = time.time()
@@ -131,24 +131,36 @@ class GoveeMqtt(object):
 
         device = self.devices[device_id]
         device_type = 'sensor' if device['sku'] == 'H5179' else 'light'
-        sensor_type = {}
-        light = {
-            'name': 'Light',
+
+        base = {
+            'qos': 0,
             'device': {
-                "name": f"Govee {device['sku']} - {device['name']}",
-                "manufacturer": "Govee",
-                "model": device['sku'],
-                "identifiers": "govee_" + device_id.replace(':',''),
-                "via_device": f'govee2mqtt v{self.version}',
-            },
-            "qos": 0,
+                'name': f'Govee {device["sku"]} - {device["name"]}',
+                'manufacturer': 'Govee',
+                'model': device['sku'],
+                'identifiers': 'govee_' + device_id.replace(':',''),
+                'via_device': f'self.mqtt_config["prefix"] v{self.version}',
+            }
+        }
+        light_base = base | {
+            'name': 'Light',
             'schema': 'json',
             'supported_color_modes': [],
             'state_topic': self.get_state_topic(device_id),
             'command_topic': self.get_set_topic(device_id),
             'json_attributes_topic': self.get_state_topic(device_id),
-            'unique_id': f"govee_{device_type}_" + device_id.replace(':',''),
+            'unique_id': f'govee_{device_type}_' + device_id.replace(':',''),
         }
+        sensor_base = base | {
+            'state_class': 'measurement',
+            '~': f'self.mqtt_config["prefix"]/{device_id}',
+            'stat_t': '~/telemetry',
+            'state_topic': self.get_state_topic(device_id),
+            'json_attributes_topic': self.get_state_topic(device_id),
+        }
+
+        light = light_base
+        sensor_type = {}
 
         for capability in device['capabilities']:
             instance = capability['instance']
@@ -176,46 +188,20 @@ class GoveeMqtt(object):
                     light['min_kelvin'] = capability['parameters']['range']['min'] or 2000
                     light['max_kelvin'] = capability['parameters']['range']['max'] or 6535
                 case 'sensorTemperature':
-                    sensor_type['temperature'] = {
+                    sensor_type['temperature'] = sensor_base | {
                         'name': 'Temperature',
-                        'device': {
-                            "name": f"Govee {device['sku']} - {device['name']}",
-                            "manufacturer": "Govee",
-                            "model": device['sku'],
-                            "identifiers": "govee_" + device_id.replace(':',''),
-                            "via_device": f'govee2mqtt v{self.version}',
-                        },
-                        "qos": 0,
-                        'state_class': 'measurement',
                         'device_class': 'temperature',
                         'value_template': '{{ value_json.temperature }}',
                         'unit_of_measurement': '°F',
-                        '~': f'govee2mqtt/{device_id}',
-                        'stat_t': '~/telemetry',
-                        'state_topic': self.get_state_topic(device_id),
-                        'json_attributes_topic': self.get_state_topic(device_id),
-                        'unique_id': f"govee_{device_type}_" + device_id.replace(':','') + '_temperature',
+                        'unique_id': f'govee_{device_type}_' + device_id.replace(':','') + '_temperature',
                     }
                 case 'sensorHumidity':
-                    sensor_type['humidity'] = {
+                    sensor_type['humidity'] = sensor_base | {
                         'name': 'Humidity',
-                        'device': {
-                            "name": f"Govee {device['sku']} - {device['name']}",
-                            "manufacturer": "Govee",
-                            "model": device['sku'],
-                            "identifiers": "govee_" + device_id.replace(':',''),
-                            "via_device": f'govee2mqtt v{self.version}',
-                        },
-                        "qos": 0,
-                        'state_class': 'measurement',
                         'device_class': 'humidity',
                         'value_template': '{{ value_json.humidity }}',
                         'unit_of_measurement': '%',
-                        '~': f'govee2mqtt/{device_id}',
-                        'stat_t': '~/telemetry',
-                        'state_topic': self.get_state_topic(device_id),
-                        'json_attributes_topic': self.get_state_topic(device_id),
-                        'unique_id': f"govee_{device_type}_" + device_id.replace(':','') + '_humidity',
+                        'unique_id': f'govee_{device_type}_' + device_id.replace(':','') + '_humidity',
                     }
 
         # Note that if `onoff` or `brightness` are used, that must be the only value in the list.
@@ -237,7 +223,7 @@ class GoveeMqtt(object):
     # Govee Helpers
     ###########################################
     def refresh_device_list(self):
-        log(f'Refresh device list every {self.device_list_update_interval} sec')
+        log(f'Refreshing device list (every {self.device_list_update_interval} sec)')
         devices = self.goveec.get_device_list()
 
         for device in devices:
@@ -263,14 +249,14 @@ class GoveeMqtt(object):
                 log(f'Saw device, but not supported yet: {device["deviceName"]} ({device_id}) - Govee {device["sku"]}')
 
     def refresh_all_devices(self):
-        log(f'Refresh {len(self.devices)} devices every {self.device_update_interval} sec')
+        log(f'Refreshing {len(self.devices)} device states (every {self.device_update_interval} sec)')
         for device_id in self.devices:
             if device_id not in self.boosted:
                 self.refresh_device(device_id)
 
     def refresh_boosted_devices(self):
         if len(self.boosted) > 0:
-          log(f'Refresh {len(self.boosted)} boosted devices')
+          log(f'Refreshing {len(self.boosted)} boosted devices (every {self.device_update_boosted_interval} sec)')
         for device_id in self.boosted:
             self.refresh_device(device_id)
 
