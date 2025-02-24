@@ -41,6 +41,12 @@ class GoveeAPI(object):
 
 
     def get_device(self, device_id, sku):
+        if sku == 'broker':
+            return {
+                'online': True,
+                'status': True,
+            }
+
         headers = self.get_headers()
 
         body = {
