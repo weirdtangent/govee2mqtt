@@ -120,7 +120,7 @@ class GoveeMqtt(object):
             self.mqtt_connect_time = time.time()
             self.mqttc.loop_start()
         except ConnectionError as error:
-            log(f"Could not connect to MQTT server {self.mqtt_config.get("host")}: {error}", level='ERROR')
+            log(f'Could not connect to MQTT server {self.mqtt_config.get("host")}: {error}', level='ERROR')
             exit(1)
 
         self.running = True
@@ -152,7 +152,7 @@ class GoveeMqtt(object):
 
         for capability in device['capabilities']:
             instance = capability['instance']
-            log(f"FOUND INSTANCE {instance} FOR {device_id}", level="DEBUG")
+            log(f'FOUND INSTANCE {instance} FOR {device_id}', level='DEBUG')
 
             capability_type = capability['type']
 
@@ -254,13 +254,13 @@ class GoveeMqtt(object):
                 self.devices[device_id]['capabilities'] = device['capabilities']
 
                 if first:
-                    log(f'Adding new device: {device['deviceName']} ({device_id}) - Govee {device['sku']}')
+                    log(f'Adding new device: {device['deviceName']} ({device_id}) - Govee {device["sku"]}')
                     log(f'new device config: {device}', level='DEBUG')
                     self.homeassistant_config(device_id)
                 else:
-                    log(f'Updated device: {self.devices[device_id]['name']}', level='DEBUG')
+                    log(f'Updated device: {self.devices[device_id]["name"]}', level='DEBUG')
             else:
-                log(f'Saw device, but not supported yet: {device['deviceName']} ({device_id}) - Govee {device['sku']}')
+                log(f'Saw device, but not supported yet: {device["deviceName"]} ({device_id}) - Govee {device["sku"]}')
 
     def refresh_all_devices(self):
         log(f"Refresh {len(self.devices)} devices every {self.device_update_interval} sec")
@@ -283,7 +283,7 @@ class GoveeMqtt(object):
     def publish_attributes(self, device_id, orig_data):
         changed = False
         data = {}
-        log(f"PUBLISHING ATTRIBUTES: {orig_data}", level="DEBUG")
+        log(f'PUBLISHING ATTRIBUTES: {orig_data}', level='DEBUG')
         for key in orig_data:
             match key:
                 case 'online':
@@ -361,7 +361,7 @@ class GoveeMqtt(object):
         for key in cmd:
             if not first:
                 time.sleep(1)
-            log(f'CMD DEVICE {self.devices[device_id]['name']} ({device_id}) {key} = {cmd[key]}', level='DEBUG')
+            log(f'CMD DEVICE {self.devices[device_id]["name"]} ({device_id}) {key} = {cmd[key]}', level='DEBUG')
             self.goveec.send_command(device_id, sku, cmd[key]['type'], cmd[key]['instance'], cmd[key]['value'])
             first = False
 
@@ -372,11 +372,11 @@ class GoveeMqtt(object):
         self.mqttc.publish(self.get_pub_topic(device_id, attribute), json.dumps(value), retain=True)
         self.devices[device_id][attribute] = value
         name = self.devices[device_id]['name']
-        log(f"UPDATE: {self.devices[device_id]['name']} ({device_id}): {attribute} = {value}", level='DEBUG')
+        log(f'UPDATE: {self.devices[device_id]['name']} ({device_id}): {attribute} = {value}', level='DEBUG')
 
     def publish_state_handler(self, device_id):
         self.mqttc.publish(self.get_state_topic(device_id), json.dumps(self.devices[device_id]), retain=True)
-        log(f"PUBLISHED: {self.devices[device_id]['name']} ({device_id}): {self.devices[device_id]})", level='DEBUG')
+        log(f'PUBLISHED: {self.devices[device_id]['name']} ({device_id}): {self.devices[device_id]})', level='DEBUG')
 
     async def start_govee_loop(self):
         await asyncio.gather(

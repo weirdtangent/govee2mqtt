@@ -89,7 +89,7 @@ else:
 
 # make sure we at least got the ONE required value
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
-    log(f"govee.api_key required in config file or in GOVEE_API_KEY env var", level="ERROR")
+    log("govee.api_key required in config file or in GOVEE_API_KEY env var", level="ERROR")
     sys.exit(1)
 
 config['version'] = read_version()

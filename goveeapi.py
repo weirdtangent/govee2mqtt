@@ -94,7 +94,7 @@ class GoveeAPI(object):
         }
 
         headers = self.get_headers()
-        log(f'SENDING DEVICE CONTROL TO GOVEE: {json.dumps(body)}', level="DEBUG")
+        log(f'SENDING DEVICE CONTROL TO GOVEE: {json.dumps(body)}', level='DEBUG')
         try:
             r = requests.post(COMMAND_URL, headers=headers, json=body)
             if r.status_code == 429:
@@ -104,7 +104,7 @@ class GoveeAPI(object):
                 log(f'BAD RESPONSE FOR DEVICE COMMAND {data}: RESPONSE CODE: ({r.status_code})', level='ERROR')
                 return {}
         except:
-            log('ERROR SENDING DEVICE COMMAND: {data}', level='ERROR')
+            log(f'ERROR SENDING DEVICE COMMAND: {data}', level='ERROR')
             return {}
 
         log(f'GOVEE DEVICE COMMAND: {json.dumps(body)}, RESPONSE: {r}', level='DEBUG')
