@@ -1,9 +1,9 @@
 import argparse
 from govee_mqtt import GoveeMqtt
-from log import log
 import os
 import signal
 import sys
+from util import *
 import yaml
 
 is_exiting = False
@@ -93,7 +93,7 @@ if not 'govee' in config or not 'api_key' in config['govee'] or not config['gove
     sys.exit(1)
 
 config['version'] = read_version()
-log(f"App Version: {config['version']}")
+log(f"App v{config['version']}")
 
 try:
   GoveeMqtt(config)

@@ -1,8 +1,8 @@
 import asyncio
 import json
-from log import log
 import requests
 import time
+from util import *
 import uuid
 
 def slow_down(r):
@@ -37,7 +37,6 @@ class GoveeAPI(object):
             log(f'{type(error).__name__} - {error}', level='DEBUG')
             return {}
 
-        # log(f"GOT DEVICE LIST FROM GOVEE: {data}", level='DEBUG')
         return data['data']
 
 
@@ -53,7 +52,6 @@ class GoveeAPI(object):
         }
 
         log(f'GETTING DEVICE FROM GOVEE: {json.dumps(body)}', level='DEBUG')
-
         try:
             r = requests.post(DEVICE_URL, headers=headers, json=body)
             if r.status_code == 429:
@@ -67,8 +65,6 @@ class GoveeAPI(object):
             log(f'ERROR GETTING DEVICE {device_id}', level='ERROR')
             return {}
 
-        # log(f"GOT DEVICE FROM GOVEE: {data}", level='DEBUG')
-
         device = data['payload']
 
         new_capabilities = {}
@@ -77,13 +73,11 @@ class GoveeAPI(object):
 
         return new_capabilities
 
-
     def get_headers(self):
         return {
             'Content-Type': "application/json",
             'Govee-API-Key': self.api_key
         }
-
 
     def send_command(self, device_id, sku, capability, instance, value):
         body = {

@@ -1,11 +1,10 @@
 import asyncio
 import goveeapi
 import json
-from log import log
 import paho.mqtt.client as mqtt
 import ssl
 import time
-
+from util import *
 
 class GoveeMqtt(object):
     def __init__(self, config):
@@ -35,13 +34,13 @@ class GoveeMqtt(object):
     ################################
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc != 0:
-            log("MQTT Connection Issue", level='DEBUG')
+            log(f"MQTT connection issue ({rc})", level='ERROR')
             exit()
         log('MQTT CONNECTED', level='DEBUG')
         client.subscribe(self.get_sub_topic())
 
     def mqtt_on_disconnect(self, client, userdata, rc):
-        log("MQTT Disconnected", level='DEBUG')
+        log("MQTT DISCONNECTED", level='DEBUG')
         if time.time() > self.mqtt_connect_time + 10:
             self.mqttc_create()
         else:
@@ -53,7 +52,7 @@ class GoveeMqtt(object):
             return
         payload = json.loads(msg.payload)
         device_id = topic[(len(self.mqtt_config['prefix']) + 1):-4]
-        log(f'GOT MQTT MSG: {device_id}: {payload}', level='DEBUG')
+        log(f'Got MQTT message: {device_id}: {payload}')
 
         self.send_command(device_id, payload)
 
@@ -68,6 +67,9 @@ class GoveeMqtt(object):
     def get_pub_topic(self, device, attribute):
         return "{}/{}/{}".format(self.mqtt_config['prefix'], device, attribute)
 
+    def get_sensor_pub_topic(self, device, sensor, attribute):
+        return "{}/{}/{}/{}".format(self.mqtt_config['prefix'], device, sensor, attribute)
+
     def get_state_topic(self, device_id):
         return "{}/{}".format(self.mqtt_config['prefix'], device_id)
 
@@ -77,6 +79,10 @@ class GoveeMqtt(object):
     def get_homeassistant_config_topic(self, device_id):
         formatted_device_id = "govee_" + device_id.replace(':','')
         return "{}/light/{}/config".format(self.mqtt_config['homeassistant'], formatted_device_id)
+
+    def get_homeassistant_sensor_topic(self, device_id, sensor_type):
+        formatted_device_id = "govee_" + device_id.replace(':','')
+        return "{}/sensor/{}/{}/config".format(self.mqtt_config['homeassistant'], formatted_device_id, sensor_type)
 
     # MQTT Helpers
     #########################################
@@ -101,7 +107,6 @@ class GoveeMqtt(object):
                 password=self.mqtt_config.get("password"),
             )
 
-        log("CALLING MQTT CONNECT", level='DEBUG')
         self.mqttc.on_connect = self.mqtt_on_connect
         self.mqttc.on_disconnect = self.mqtt_on_disconnect
         self.mqttc.on_message = self.mqtt_on_message
@@ -125,8 +130,10 @@ class GoveeMqtt(object):
             return
 
         device = self.devices[device_id]
-        config = {
-            'command_topic': self.get_set_topic(device_id),
+        device_type = 'sensor' if device['sku'] == 'H5179' else 'light'
+        sensor_type = {}
+        light = {
+            'name': 'Light',
             'device': {
                 "name": f"Govee {device['sku']} - {device['name']}",
                 "manufacturer": "Govee",
@@ -134,62 +141,109 @@ class GoveeMqtt(object):
                 "identifiers": "govee_" + device_id.replace(':',''),
                 "via_device": f'govee2mqtt v{self.version}',
             },
-            'supported_color_modes': [],
             "qos": 0,
             'schema': 'json',
+            'supported_color_modes': [],
             'state_topic': self.get_state_topic(device_id),
+            'command_topic': self.get_set_topic(device_id),
             'json_attributes_topic': self.get_state_topic(device_id),
-            'unique_id': "govee_light_" + device_id.replace(':',''),
-            "name": "Control"
+            'unique_id': f"govee_{device_type}_" + device_id.replace(':',''),
         }
+
         for capability in device['capabilities']:
             instance = capability['instance']
             log(f"FOUND INSTANCE {instance} FOR {device_id}", level="DEBUG")
-            type = capability['type']
-            if type == 'devices.capabilities.range':
-                range_min = capability['parameters']['range']['min']
-                range_max = capability['parameters']['range']['max']
 
-            if instance == 'brightness':
-                config['supported_color_modes'].append('brightness')
-                if range_max:
-                    config |= {
-                        'brightness_scale': range_max,
+            capability_type = capability['type']
+
+            match capability_type:
+                case 'devices.capabilities.online':
+                    if capability['instance'] == 'online':
+                        light['state'] = 'ON' if capability['state']['value'] == True else 'OFF'
+
+            match instance:
+                case 'brightness':
+                    light['supported_color_modes'].append('brightness')
+                    light['brightness_scale'] = capability['parameters']['range']['max']
+                    device['brightness_scale'] = capability['parameters']['range']['max']
+                case 'powerSwitch':
+                    light['supported_color_modes'].append('onoff')
+                case 'colorRgb':
+                    light['supported_color_modes'].append('rgb')
+                case 'colorTemperatureK':
+                    light['supported_color_modes'].append('color_temp')
+                    light['color_temp_kelvin'] = True
+                    light['min_kelvin'] = capability['parameters']['range']['min'] or 2000
+                    light['max_kelvin'] = capability['parameters']['range']['max'] or 6535
+                case 'sensorTemperature':
+                    sensor_type['temperature'] = {
+                        'name': 'Temperature',
+                        'device': {
+                            "name": f"Govee {device['sku']} - {device['name']}",
+                            "manufacturer": "Govee",
+                            "model": device['sku'],
+                            "identifiers": "govee_" + device_id.replace(':',''),
+                            "via_device": f'govee2mqtt v{self.version}',
+                        },
+                        "qos": 0,
+                        'state_class': 'measurement',
+                        'device_class': 'temperature',
+                        'value_template': '{{ value_json.temperature }}',
+                        'unit_of_measurement': '°F',
+                        '~': f'govee2mqtt/{device_id}',
+                        'stat_t': '~/telemetry',
+                        'state_topic': self.get_state_topic(device_id),
+                        'json_attributes_topic': self.get_state_topic(device_id),
+                        'unique_id': f"govee_{device_type}_" + device_id.replace(':','') + '_temperature',
                     }
-                    device['brightness_scale'] = range_max
-                
-            if instance == 'powerSwitch':
-                config['supported_color_modes'].append('onoff')
-            
-            if instance == 'colorRgb':
-                config['supported_color_modes'].append('rgb')
+                case 'sensorHumidity':
+                    sensor_type['humidity'] = {
+                        'name': 'Humidity',
+                        'device': {
+                            "name": f"Govee {device['sku']} - {device['name']}",
+                            "manufacturer": "Govee",
+                            "model": device['sku'],
+                            "identifiers": "govee_" + device_id.replace(':',''),
+                            "via_device": f'govee2mqtt v{self.version}',
+                        },
+                        "qos": 0,
+                        'state_class': 'measurement',
+                        'device_class': 'humidity',
+                        'value_template': '{{ value_json.humidity }}',
+                        'unit_of_measurement': '%',
+                        '~': f'govee2mqtt/{device_id}',
+                        'stat_t': '~/telemetry',
+                        'state_topic': self.get_state_topic(device_id),
+                        'json_attributes_topic': self.get_state_topic(device_id),
+                        'unique_id': f"govee_{device_type}_" + device_id.replace(':','') + '_humidity',
+                    }
 
-            if instance == 'colorTemperatureK':
-                config['supported_color_modes'].append('color_temp')
-                config |= {
-                    'color_temp_kelvin': True,
-                    'min_kelvin': capability['parameters']['range']['min'] or 2000,
-                    'max_kelvin': capability['parameters']['range']['max'] or 6535,
-                }
-        # Note that if onoff or brightness are used, that must be the only value in the list.
-        if len(config['supported_color_modes']) > 1:
-            config['supported_color_modes'].remove('brightness')
-            config['supported_color_modes'].remove('onoff')
+        # Note that if `onoff` or `brightness` are used, that must be the only value in the list.
+        # so we'll remove 1 and maybe both, if we have other supported modes
+        if 'supported_color_modes' in light and len(light['supported_color_modes']) > 1:
+            light['supported_color_modes'].remove('brightness')
+            if len(light['supported_color_modes']) > 1:
+                light['supported_color_modes'].remove('onoff')
+        # lets not send this mess to home assistant
         del device['capabilities']
 
-        log(f'HOME_ASSISTANT DEVICE CONFIG: {config}', level='DEBUG')
-
-        self.mqttc.publish(self.get_homeassistant_config_topic(device_id), json.dumps(config), retain=True)
+        if device_type == 'light':
+            log(f'HOME_ASSISTANT LIGHT CONFIG: {light}', level='DEBUG')
+            self.mqttc.publish(self.get_homeassistant_config_topic(device_id), json.dumps(light), retain=True)
+        for sensor in sensor_type:
+            log(f'HOME_ASSISTANT SENSOR CONFIG: {sensor}', level='DEBUG')
+            self.mqttc.publish(self.get_homeassistant_sensor_topic(device_id, sensor), json.dumps(sensor_type[sensor]), retain=True)
 
     # Govee Helpers
     ###########################################
     def refresh_device_list(self):
+        log(f"Refresh device list every {self.device_list_update_interval} sec")
         devices = self.goveec.get_device_list()
 
         for device in devices:
             device_id = device['device']
 
-            if 'type' in device:
+            if 'type' in device: #  and device['sku'] != 'H5179':
                 first = False
                 if device_id not in self.devices:
                     first = True
@@ -200,47 +254,40 @@ class GoveeMqtt(object):
                 self.devices[device_id]['capabilities'] = device['capabilities']
 
                 if first:
-                    log(f'NEW DEVICE: {self.devices[device_id]['name']} : ({device_id})')
-                    # log(f'NEW DEVICE CONFIG: {self.devices[device_id]}', level='DEBUG')
+                    log(f'Adding new device: {device['deviceName']} ({device_id}) - Govee {device['sku']}')
+                    log(f'new device config: {device}', level='DEBUG')
                     self.homeassistant_config(device_id)
                 else:
-                    log(f'SAW DEVICE: {device_id}', level='DEBUG')
+                    log(f'Updated device: {self.devices[device_id]['name']}', level='DEBUG')
             else:
-                log(f'SAW BUT NOT SUPPORTED YET: {device['sku']} - {device['deviceName']}')
-
-        # log(self.devices, level='DEBUG')
+                log(f'Saw device, but not supported yet: {device['deviceName']} ({device_id}) - Govee {device['sku']}')
 
     def refresh_all_devices(self):
+        log(f"Refresh {len(self.devices)} devices every {self.device_update_interval} sec")
         for device_id in self.devices:
             if device_id not in self.boosted:
                 self.refresh_device(device_id)
 
     def refresh_boosted_devices(self):
+        if len(self.boosted) > 0:
+          log(f"Refresh {len(self.boosted)} boosted devices")
         for device_id in self.boosted:
             self.refresh_device(device_id)
 
     def refresh_device(self, device_id):
         sku = self.devices[device_id]['sku']
         data = self.goveec.get_device(device_id, sku)
-        # log(f'ORIGINAL DATA: {device_id} {data}', level='DEBUG')
 
         self.publish_attributes(device_id, data)
-
-    def number_to_rgb(self, number, max_value):
-        normalized_value = number / max_value
-        r = int((1 - normalized_value) * 255)
-        g = int(normalized_value * 255)
-        b = int((0.5 - abs(normalized_value - 0.5)) * 2 * 255) if normalized_value > 0.5 else 0
-        return { 'r': r, 'g': g, 'b': b }
-
-    def rgb_to_number(self, rgb):
-        return int(((rgb['r'] & 0xFF) << 16) + ((rgb['g'] & 0xFF) << 8) + (rgb['b'] & 0xFF))
 
     def publish_attributes(self, device_id, orig_data):
         changed = False
         data = {}
+        log(f"PUBLISHING ATTRIBUTES: {orig_data}", level="DEBUG")
         for key in orig_data:
             match key:
+                case 'online':
+                    data['availability'] = 'online' if orig_data[key] == True else 'offline'
                 case 'powerSwitch':
                     data['state'] = 'ON' if orig_data[key] == 1 else 'OFF'
                 case 'brightness':
@@ -248,11 +295,18 @@ class GoveeMqtt(object):
                 case 'brightness_scale':
                     data['brightness_scale'] = orig_data[key]
                 case 'colorRgb':
-                    data['color'] = self.number_to_rgb(orig_data[key], 16777215)
+                    data['color'] = number_to_rgb(orig_data[key], 16777215)
+                case 'sensorTemperature':
+                    if not 'telemetry' in data:
+                        data['telemetry'] = {}
+                    data['telemetry']['temperature'] = orig_data[key]
+                case 'sensorHumidity':
+                    if not 'telemetry' in data:
+                        data['telemetry'] = {}
+                    data['telemetry']['humidity'] = orig_data[key]
                 case _:
                     continue
 
-        # log(f'CONVERTED DATA: {device_id} {data}', level='DEBUG')
         for attribute in data:
             if attribute not in self.devices[device_id] or self.devices[device_id][attribute] != data[attribute]:
                 changed = True
@@ -283,7 +337,7 @@ class GoveeMqtt(object):
                     cmd['colorRgb'] = {
                         'type': 'devices.capabilities.color_setting',
                         'instance': 'colorRgb',
-                        'value': self.rgb_to_number(data[key]),
+                        'value': rgb_to_number(data[key]),
                     }
                 case 'color_temp':
                     cmd['colorRgb'] = {
