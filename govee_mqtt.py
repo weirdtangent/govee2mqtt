@@ -247,8 +247,8 @@ class GoveeMqtt(object):
     ###########################################
     def refresh_device_list(self):
         log(f'Refreshing device list (every {self.device_list_update_interval} sec)')
-        self.devices['broker'] = {
-            'name': self.broker_name,
+        self.devices[self.broker_name] = {
+            'name': f'{self.mqtt_config['prefix']} broker',
             'sku': 'broker',
         }
         self.homeassistant_broker_config()
@@ -280,7 +280,7 @@ class GoveeMqtt(object):
     def refresh_all_devices(self):
         log(f'Refreshing {len(self.devices)-1} device states (every {self.device_update_interval} sec)')
 
-        self.publish_attributes('broker', {
+        self.publish_attributes(self.broker_name, {
             'online': True,
             'status': True,
             'config': {
