@@ -3,7 +3,7 @@ import os
 
 def log(msg, level="INFO"):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    if len(msg) > 1024:
+    if len(msg) > 10240:
         raise ValueError("Log message exceeds max length")
     if level != "DEBUG" or os.getenv('DEBUG'):
         print(f"{ts} [{level}] {msg}")
