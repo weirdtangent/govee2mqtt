@@ -34,13 +34,13 @@ class GoveeMqtt(object):
     ################################
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc != 0:
-            log(f"MQTT connection issue ({rc})", level='ERROR')
+            log(f'MQTT connection issue ({rc})', level='ERROR')
             exit()
         log('MQTT CONNECTED', level='DEBUG')
         client.subscribe(self.get_sub_topic())
 
     def mqtt_on_disconnect(self, client, userdata, rc):
-        log("MQTT DISCONNECTED", level='DEBUG')
+        log('MQTT DISCONNECTED', level='DEBUG')
         if time.time() > self.mqtt_connect_time + 10:
             self.mqttc_create()
         else:
@@ -237,7 +237,7 @@ class GoveeMqtt(object):
     # Govee Helpers
     ###########################################
     def refresh_device_list(self):
-        log(f"Refresh device list every {self.device_list_update_interval} sec")
+        log(f'Refresh device list every {self.device_list_update_interval} sec')
         devices = self.goveec.get_device_list()
 
         for device in devices:
@@ -263,14 +263,14 @@ class GoveeMqtt(object):
                 log(f'Saw device, but not supported yet: {device["deviceName"]} ({device_id}) - Govee {device["sku"]}')
 
     def refresh_all_devices(self):
-        log(f"Refresh {len(self.devices)} devices every {self.device_update_interval} sec")
+        log(f'Refresh {len(self.devices)} devices every {self.device_update_interval} sec')
         for device_id in self.devices:
             if device_id not in self.boosted:
                 self.refresh_device(device_id)
 
     def refresh_boosted_devices(self):
         if len(self.boosted) > 0:
-          log(f"Refresh {len(self.boosted)} boosted devices")
+          log(f'Refresh {len(self.boosted)} boosted devices')
         for device_id in self.boosted:
             self.refresh_device(device_id)
 

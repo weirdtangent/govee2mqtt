@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import os
 
-def log(msg, level="INFO"):
+def log(msg, level='INFO'):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     if len(msg) > 20480:
         raise ValueError("Log message exceeds max length")

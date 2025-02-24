@@ -20,7 +20,7 @@ def signal_handler(sig, frame):
     exit_gracefully(0)
 
 def exit_gracefully(rc, skip_mqtt=False):
-    log(f"Exiting app...")
+    log(f'Exiting app...')
 
     # Use os._exit instead of sys.exit to ensure an MQTT disconnect event causes the program to exit correctly as they
     # occur on a separate thread
@@ -89,14 +89,14 @@ else:
 
 # make sure we at least got the ONE required value
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
-    log("govee.api_key required in config file or in GOVEE_API_KEY env var", level="ERROR")
+    log('govee.api_key required in config file or in GOVEE_API_KEY env var', level='ERROR')
     sys.exit(1)
 
 config['version'] = read_version()
-log(f"App v{config['version']}")
+log(f'Starting: govee2mqtt v{config["version"]}')
 
 try:
   GoveeMqtt(config)
 except ConnectionError as error:
-  log(f"Could not connect to MQTT server: {error}", level="ERROR")
+  log(f'Could not connect to MQTT server: {error}', level='ERROR')
   sys.exit(1)
