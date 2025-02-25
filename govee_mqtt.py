@@ -158,7 +158,7 @@ class GoveeMqtt(object):
         base = {
             'qos': 0,
             'device': {
-                'name': f'Govee {device["sku"]} - {device["name"]}',
+                'name': device["name"],
                 'manufacturer': 'Govee',
                 'model': device['sku'],
                 'identifiers': self.mqtt_config["prefix"] + '-' + device_id.replace(':',''),
