@@ -352,7 +352,7 @@ class GoveeMqtt(object):
 
         # we got this far, so drop device from boosted list
         if device_id in self.boosted:
--           self.boosted.remove(device_id)
+           self.boosted.remove(device_id)
 
     def send_command(self, device_id, data):
         cmd = {}

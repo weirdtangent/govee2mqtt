@@ -35,7 +35,7 @@ class GoveeAPI(object):
                 return {}
             data = r.json()
         except Exception as err:
-            log(f'ERROR GETTING DEVICE LIST ({r.status_code}) {type(err).__name__} - {err=}', level='ERROR')
+            log(f'ERROR GETTING DEVICE LIST DATA {data}', level="ERROR")
             log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
             log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
@@ -74,7 +74,7 @@ class GoveeAPI(object):
                 return {}
             data = r.json()
         except Exception as err:
-            log(f'ERROR GETTING DEVICE {device_id} ({r.status_code}) {err=}', level='ERROR')
+            log(f'ERROR GETTING DEVICE DATA {data}', level="ERROR")
             log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
             log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
@@ -121,10 +121,10 @@ class GoveeAPI(object):
                 time.sleep(5)
                 return {}
             if r.status_code != 200:
-                log(f'BAD RESPONSE FOR DEVICE COMMAND {data}: RESPONSE CODE: ({r.status_code})', level='ERROR')
+                log(f'ERROR SENDING DEVICE COMMAND ({r.status_code}) {type(err).__name__} - {err=}', level='ERROR')
                 return {}
         except Exception as err:
-            log(f'ERROR SENDING DEVICE COMMAND ({r.status_code}) {type(err).__name__} - {err=}', level='ERROR')
+            log(f'ERROR SENDING DEVICE COMMAND {type(err).__name__} - {err=}', level='ERROR')
             log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
             log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
