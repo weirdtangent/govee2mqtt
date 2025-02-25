@@ -301,12 +301,20 @@ class GoveeMqtt(object):
 
     def refresh_device(self, device_id):
         data = self.goveec.get_device(device_id, self.devices[device_id]['sku'])
+        log(f'REFRESHED {device_id} GOT {data=}', level='DEBUG')
         self.publish_attributes(device_id, data)
 
     def publish_attributes(self, device_id, orig_data):
+        # if no data, we were probably rate-limited (and then paused our requests)
+        # so nothing to update, but leave in boosted (if there) so it will try again
+        if len(orig_data) == 0:
+            return
+
         changed = False
         data = {}
         log(f'PUBLISHING ATTRIBUTES: {orig_data}', level='DEBUG')
+
+        # convert Govee key/values to MQTT
         for key in orig_data:
             match key:
                 case 'config':
@@ -341,11 +349,15 @@ class GoveeMqtt(object):
 
         if changed:
             self.publish_state_handler(device_id)
+
+        # we got this far, so drop device from boosted list
         if device_id in self.boosted:
-            self.boosted.remove(device_id)
+-           self.boosted.remove(device_id)
 
     def send_command(self, device_id, data):
         cmd = {}
+
+        # convert MQTT to Govee key/values
         for key in data:
             match key:
                 case 'state':
@@ -375,7 +387,6 @@ class GoveeMqtt(object):
                 case _:
                     continue;
 
-        log(f'COMMAND {device_id} = {cmd}', level='DEBUG')
         sku = self.devices[device_id]['sku']
 
         if 'brightness' in cmd and 'turn' in cmd:
@@ -383,6 +394,8 @@ class GoveeMqtt(object):
 
         if 'color' in cmd and 'turn' in cmd:
             del cmd['turn']
+
+        log(f'COMMAND {device_id} = {cmd}', level='DEBUG')
 
         first = True
         for key in cmd:

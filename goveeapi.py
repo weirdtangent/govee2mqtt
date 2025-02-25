@@ -6,10 +6,11 @@ from util import *
 import uuid
 
 def slow_down(r):
-    sleep_for = (int(r.headers['x-ratelimit-reset']) - int(time.time())) or 60
-    log(f'TOO MANY REQUESTS X-RateLimit-Reset: {r.headers['x-ratelimit-reset']} Now: {int(time.time())} Remaining: {sleep_for}', level='ERROR')
-    log(f'SORRY, SLEEPING FOR {sleep_for} SEC')
-    time.sleep(sleep_for)
+    if 'x-rate-limit-reset' in r.headers:
+        sleep_for = (int(r.headers['x-ratelimit-reset']) - int(time.time())) or 60
+        log(f'TOO MANY REQUESTS X-RateLimit-Reset: {r.headers['x-ratelimit-reset']} Now: {int(time.time())} Remaining: {sleep_for}', level='ERROR')
+        log(f'SORRY, SLEEPING FOR {sleep_for} SEC')
+        time.sleep(sleep_for)
 
 DEVICE_URL = 'https://openapi.api.govee.com/router/api/v1/device/state'
 DEVICE_LIST_URL = 'https://openapi.api.govee.com/router/api/v1/user/devices'
@@ -26,16 +27,20 @@ class GoveeAPI(object):
         try:
             r = requests.get(DEVICE_LIST_URL, headers=headers)
             if r.status_code == 429:
-                slow_down(r)
+                log(f'RATE-LIMITED BY GOVEE, SLEEP FOR 5 SEC')
+                time.sleep(5)
                 return {}
-            if r.status_code >= 400:
+            if r.status_code != 200:
                 log(f'BAD RESPONSE CODE ({r.status_code}) GETTING DEVICE LIST', level='ERROR')
                 return {}
             data = r.json()
-        except Exception as error:
-            log('ERROR GETTING DEVICE LIST', level='ERROR')
-            log(f'{type(error).__name__} - {error}', level='DEBUG')
+        except Exception as err:
+            log(f'ERROR GETTING DEVICE LIST ({r.status_code}) {type(err).__name__} - {err=}', level='ERROR')
+            log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
+            log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
+
+        log(f'GOT DEVICE LIST: ({r.status_code}) {data}', level='DEBUG')
 
         return data['data']
 
@@ -61,21 +66,29 @@ class GoveeAPI(object):
         try:
             r = requests.post(DEVICE_URL, headers=headers, json=body)
             if r.status_code == 429:
-                slow_down(r)
+                log(f'RATE-LIMITED BY GOVEE, SLEEP FOR 5 SEC')
+                time.sleep(5)
                 return {}
-            if r.status_code >= 400:
-                log(f'BAD RESPONSE CODE ({r.status_code}) GETTING DEVICE', level="ERROR")
+            if r.status_code != 200:
+                log(f'ERROR ({r.status_code}) GETTING DEVICE', level="ERROR")
                 return {}
             data = r.json()
-        except:
-            log(f'ERROR GETTING DEVICE {device_id}', level='ERROR')
+        except Exception as err:
+            log(f'ERROR GETTING DEVICE {device_id} ({r.status_code}) {err=}', level='ERROR')
+            log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
+            log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
+
+        log(f'GOT DEVICE: ({r.status_code}) {data}', level='DEBUG')
 
         device = data['payload']
 
         new_capabilities = {}
         for capability in device['capabilities']:
             new_capabilities[capability['instance']] = capability['state']['value']
+
+        if len(new_capabilities) == 0:
+            log(f'GOT DEVICE FROM GOVEE BUT NO ATTRIBUTES: {device=}')
 
         return new_capabilities
 
@@ -104,13 +117,16 @@ class GoveeAPI(object):
         try:
             r = requests.post(COMMAND_URL, headers=headers, json=body)
             if r.status_code == 429:
-                slow_down(r)
+                log(f'RATE-LIMITED BY GOVEE, SLEEP FOR 5 SEC')
+                time.sleep(5)
                 return {}
-            if r.status_code >= 400:
+            if r.status_code != 200:
                 log(f'BAD RESPONSE FOR DEVICE COMMAND {data}: RESPONSE CODE: ({r.status_code})', level='ERROR')
                 return {}
-        except:
-            log(f'ERROR SENDING DEVICE COMMAND: {data}', level='ERROR')
+        except Exception as err:
+            log(f'ERROR SENDING DEVICE COMMAND ({r.status_code}) {type(err).__name__} - {err=}', level='ERROR')
+            log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
+            log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
 
-        log(f'GOVEE DEVICE COMMAND: {json.dumps(body)}, RESPONSE: {r}', level='DEBUG')
+        log(f'SEND COMMAND: ({r.status_code}) {data}', level='DEBUG')
