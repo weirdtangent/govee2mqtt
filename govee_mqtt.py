@@ -8,28 +8,69 @@ from util import *
 
 class GoveeMqtt(object):
     def __init__(self, config):
+        self._interrupted = False
+
+        self.mqttc = None
+        self.mqtt_connect_time = None
+
         self.mqtt_config = config['mqtt']
         self.govee_config = config['govee']
+
         self.version = config['version']
         self.broker_name = self.mqtt_config['prefix'] + '-broker'
+        self.device_update_interval = config['govee'].get('device_interval', 30)
+        self.device_update_boosted_interval = config['govee'].get('device_boost_interval', 5)
+        self.device_list_update_interval = config['govee'].get('device_list_interval', 300)
 
         self.devices = {}
         self.running = False
 
         self.boosted = []
 
-        self.mqttc = None
-        self.mqtt_connect_time = None
+    async def __aenter__(self):
+        # Save signal handlers
+        self.original_sigint_handler = signal.getsignal(signal.SIGINT)
+        self.original_sigterm_handler = signal.getsignal(signal.SIGTERM)
 
+        signal.signal(signal.SIGINT, self._handle_signal)
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        # Restore original signal handlers
+        signal.signal(signal.SIGINT, self.original_sigint_handler)
+        signal.signal(signal.SIGTERM, self.original_sigterm_handler)
+
+        if self._interrupted:
+            log("Exiting due to signal interrupt")
+        else:
+            log("Exiting normally")
+
+    def _handle_signal(self, signum, frame):
+        self._interrupted = True
+        log(f"Signal {signum} received")
+
+    def _handle_interrupt(self):
+        sys.exit()
+
+    def __enter__(self):
         self.mqttc_create()
-
         self.goveec = goveeapi.GoveeAPI(self.govee_config['api_key'])
+        self.running = True
+        return self
 
-        self.device_update_interval = config['govee'].get('device_interval', 30)
-        self.device_update_boosted_interval = config['govee'].get('device_boost_interval', 5)
-        self.device_list_update_interval = config['govee'].get('device_list_interval', 300)
-
-        asyncio.run(self.start_govee_loop())
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        log('Exiting gracefully, telling MQTT')
+        self.running = False
+        if self.mqttc is not None and self.mqttc.is_connected():
+            if self.broker_name in self.devices:
+                self.publish_attributes(self.broker_name, { 'online': False, 'status': False })
+            for device_id in self.devices:
+                self.publish_attributes(device_id, { 'online': False, 'status': False })
+            self.mqttc.disconnect()
+            log('Disconnected from MQTT')
+        else:
+            log('Lost connection to MQTT')
 
     # MQTT Functions
     ################################
@@ -81,9 +122,9 @@ class GoveeMqtt(object):
         formatted_device_id = self.mqtt_config["prefix"] + '-' + device_id.replace(':','')
         return "{}/light/{}/config".format(self.mqtt_config['homeassistant'], formatted_device_id)
 
-    def get_homeassistant_sensor_topic(self, device_id, sensor_type):
+    def get_homeassistant_sensor_topic(self, device_id, device_type, sensor_name):
         formatted_device_id = self.mqtt_config["prefix"] + '-' + device_id.replace(':','')
-        return "{}/sensor/{}/{}/config".format(self.mqtt_config['homeassistant'], formatted_device_id, sensor_type)
+        return "{}/{}/{}/{}/config".format(self.mqtt_config['homeassistant'], device_type, formatted_device_id, sensor_name)
 
     # MQTT Helpers
     #########################################
@@ -125,13 +166,12 @@ class GoveeMqtt(object):
             exit(1)
 
         self.mqttc.will_set(self.get_state_topic(self.broker_name)+'/status', payload="offline", qos=0, retain=True)
-        self.running = True
 
     def homeassistant_broker_config(self):
         if 'homeassistant' not in self.mqtt_config:
             return
 
-        self.mqttc.publish(self.get_homeassistant_sensor_topic('broker', 'broker'), json.dumps({
+        self.mqttc.publish(self.get_homeassistant_sensor_topic('broker', 'sensor', 'broker'), json.dumps({
             'availability_topic': self.get_state_topic(self.broker_name)+'/availability',
             'state_topic': self.get_state_topic(self.broker_name)+'/status',
             'json_attributes_topic': self.get_state_topic(self.broker_name),
@@ -144,6 +184,20 @@ class GoveeMqtt(object):
             'icon': 'mdi:language-python',
             'unique_id': self.broker_name,
             'name': "govee2mqtt broker",
+            }),
+            retain=True,
+        )
+        self.mqttc.publish(self.get_homeassistant_sensor_topic('broker', 'binary_sensor', 'rate-limited'), json.dumps({
+            'json_attributes_topic': self.get_state_topic(self.broker_name),
+            'value_template': '{{ value_json.rate-limited }}',
+            'qos': 0,
+            'device': {
+                'name': 'govee2mqtt broker rate-limited',
+                'identifiers': self.broker_name + '_rate-limited',
+            },
+            'icon': 'mdi:car-speed-limiter',
+            'unique_id': self.broker_name + '_rate-limited',
+            'name': "govee2mqtt broker rate-limited",
             }),
             retain=True,
         )
@@ -176,7 +230,7 @@ class GoveeMqtt(object):
         }
         sensor_base = base | {
             'state_class': 'measurement',
-            '~': f'self.mqtt_config["prefix"]/{device_id}',
+            '~': f'{self.mqtt_config["prefix"]}/{device_id}',
             'stat_t': '~/telemetry',
             'state_topic': self.get_state_topic(device_id),
             'json_attributes_topic': self.get_state_topic(device_id),
@@ -241,7 +295,7 @@ class GoveeMqtt(object):
             self.mqttc.publish(self.get_homeassistant_config_topic(device_id), json.dumps(light), retain=True)
         for sensor in sensor_type:
             log(f'HOME_ASSISTANT SENSOR CONFIG: {sensor}', level='DEBUG')
-            self.mqttc.publish(self.get_homeassistant_sensor_topic(device_id, sensor), json.dumps(sensor_type[sensor]), retain=True)
+            self.mqttc.publish(self.get_homeassistant_sensor_topic(device_id, 'sensor', sensor), json.dumps(sensor_type[sensor]), retain=True)
 
     # Govee Helpers
     ###########################################
@@ -254,6 +308,7 @@ class GoveeMqtt(object):
         self.homeassistant_broker_config()
 
         devices = self.goveec.get_device_list()
+        self.publish_attributes(self.broker_name, { 'rate-limited': self.goveec.rate_limited })
         for device in devices:
             device_id = device['device']
 
@@ -283,6 +338,7 @@ class GoveeMqtt(object):
         self.publish_attributes(self.broker_name, {
             'online': True,
             'status': True,
+            'rate-limited': self.goveec.rate_limited,
             'config': {
                 'device_name': 'govee2mqtt broker',
                 'sw_version': self.version,
@@ -292,6 +348,9 @@ class GoveeMqtt(object):
         for device_id in self.devices:
             if device_id not in self.boosted:
                 self.refresh_device(device_id)
+                # if we just got rate-limited, no need to try any more
+                if self.goveec.rate_limited:
+                    break
 
     def refresh_boosted_devices(self):
         if len(self.boosted) > 0:
@@ -301,6 +360,7 @@ class GoveeMqtt(object):
 
     def refresh_device(self, device_id):
         data = self.goveec.get_device(device_id, self.devices[device_id]['sku'])
+        self.publish_attributes(self.broker_name, { 'rate-limited': self.goveec.rate_limited })
         log(f'REFRESHED {device_id} GOT {data=}', level='DEBUG')
         self.publish_attributes(device_id, data)
 
@@ -317,18 +377,14 @@ class GoveeMqtt(object):
         # convert Govee key/values to MQTT
         for key in orig_data:
             match key:
-                case 'config':
-                    data['config'] = orig_data[key]
+                case 'config' | 'brightness' | 'brightness_scale' | 'rate-limited':
+                    data[key] = orig_data[key]
                 case 'online':
                     data['availability'] = 'online' if orig_data[key] == True else 'offline'
                 case 'status':
                     data['status'] = 'online' if orig_data[key] == True else 'offline'
                 case 'powerSwitch':
                     data['state'] = 'ON' if orig_data[key] == 1 else 'OFF'
-                case 'brightness':
-                    data['brightness'] = orig_data[key]
-                case 'brightness_scale':
-                    data['brightness_scale'] = orig_data[key]
                 case 'colorRgb':
                     data['color'] = number_to_rgb(orig_data[key], 16777215)
                 case 'sensorTemperature':
@@ -385,7 +441,7 @@ class GoveeMqtt(object):
                         'value': data[key],
                     }
                 case _:
-                    continue;
+                    continue
 
         sku = self.devices[device_id]['sku']
 
@@ -417,17 +473,21 @@ class GoveeMqtt(object):
         self.mqttc.publish(self.get_state_topic(device_id), json.dumps(self.devices[device_id]), retain=True)
         log(f'PUBLISHED: {self.devices[device_id]['name']} ({device_id}): {self.devices[device_id]})', level='DEBUG')
 
-    async def start_govee_loop(self):
-        await asyncio.gather(
-            self.device_list_loop(),
-            self.device_loop(),
-            self.device_boosted_loop(),
-        )
+    async def main_loop(self):
+        try:
+            await asyncio.gather(
+                self.device_list_loop(),
+                self.device_loop(),
+                self.device_boosted_loop(),
+            )
+        except asyncio.exceptions.CancelledError:
+            self.running = False
 
     async def device_list_loop(self):
         while self.running == True:
             self.refresh_device_list()
             await asyncio.sleep(self.device_list_update_interval)
+
 
     async def device_loop(self):
         while self.running == True:

@@ -1,31 +1,13 @@
+import asyncio
 import argparse
 from govee_mqtt import GoveeMqtt
 import os
-import signal
 import sys
+import time
 from util import *
 import yaml
 
-is_exiting = False
-
 # Helper functions and callbacks
-def signal_handler(sig, frame):
-    # exit immediately upon receiving a second SIGINT
-    global is_exiting
-
-    if is_exiting:
-        os._exit(1)
-
-    is_exiting = True
-    exit_gracefully(0)
-
-def exit_gracefully(rc, skip_mqtt=False):
-    log(f'Exiting app...')
-
-    # Use os._exit instead of sys.exit to ensure an MQTT disconnect event causes the program to exit correctly as they
-    # occur on a separate thread
-    os._exit(rc)
-
 def read_file(file_name):
     with open(file_name, 'r') as file:
         data = file.read().replace('\n', '')
@@ -41,9 +23,6 @@ def read_version():
 # Let's go!
 version = read_version()
 log(f'Starting: govee2mqtt v{version}')
-
-# Handle interruptions
-signal.signal(signal.SIGINT, signal_handler)
 
 # cmd-line args
 argparser = argparse.ArgumentParser()
@@ -62,12 +41,12 @@ if configpath:
         if not configpath.endswith('/'):
             configpath += '/'
         configpath += 'config.yaml'
-    log(f'INFO:root:Trying to load config file {configpath}')
+    log(f'Reading config file {configpath}')
     with open(configpath) as file:
         config = yaml.safe_load(file)
 # or check env vars
 else:
-    log(f'INFO:root:No config file specified, checking ENV')
+    log(f'No config path/file specified, checking ENV')
     config = {
         'mqtt': {
             'host': os.getenv('MQTT_HOST') or 'localhost',
@@ -96,10 +75,7 @@ config['version'] = version
 # make sure we at least got the ONE required value
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
     log('govee.api_key required in config file or in GOVEE_API_KEY env var', level='ERROR')
-    sys.exit(1)
+    exit()
 
-try:
-  GoveeMqtt(config)
-except ConnectionError as error:
-  log(f'Could not connect to MQTT server: {error}', level='ERROR')
-  sys.exit(1)
+with GoveeMqtt(config) as mqtt:
+    asyncio.run(mqtt.main_loop())
