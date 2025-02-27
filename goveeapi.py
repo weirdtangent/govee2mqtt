@@ -2,6 +2,7 @@ import asyncio
 from datetime import date
 import json
 import requests
+from requests.exceptions import RequestException
 import time
 from util import *
 import uuid
@@ -17,12 +18,24 @@ class GoveeAPI(object):
         self.api_calls = 0
         self.last_call_date = ''
 
+    def restore_state(self, api_calls, last_call_date):
+        self.api_calls = api_calls
+        self.last_call_date = last_call_date
+        log(f'Restored state to {self.api_calls} for {self.last_call_date}')
+
     def increase_api_calls(self):
         self.api_calls += 1
 
     def reset_api_call_count(self):
         self.api_calls = 0
-        self.last_call_date = date.today()
+        self.last_call_date = str(date.today())
+        log(f'Reset api call count for new day')
+
+    def get_headers(self):
+        return {
+            'Content-Type': "application/json",
+            'Govee-API-Key': self.api_key
+        }
 
     def get_device_list(self):
         log('GETTING DEVICE LIST FROM GOVEE', level='DEBUG')
@@ -35,10 +48,12 @@ class GoveeAPI(object):
                 log(f'BAD RESPONSE CODE ({r.status_code}) GETTING DEVICE LIST', level='ERROR')
                 return {}
             data = r.json()
+        except RequestException as err:
+            log(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name} - {err=}', level='ERROR')
+            time.sleep(10)
         except Exception as err:
-            log(f'ERROR GETTING DEVICE LIST DATA {data}', level="ERROR")
+            log(f'ERROR GETTING DEVICE LIST DATA {r.content}', level="ERROR")
             log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
-            log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
 
         log(f'GOT DEVICE LIST: ({r.status_code}) {data}', level='DEBUG')
@@ -70,10 +85,12 @@ class GoveeAPI(object):
                 log(f'ERROR ({r.status_code}) GETTING DEVICE', level="ERROR")
                 return {}
             data = r.json()
+        except RequestException as err:
+            log(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name} - {err=}', level='ERROR')
+            time.sleep(10)
         except Exception as err:
-            log(f'ERROR GETTING DEVICE DATA {data}', level="ERROR")
+            log(f'ERROR GETTING DEVICE DATA {r.content}', level="ERROR")
             log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
-            log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
 
         log(f'GOT DEVICE: ({r.status_code}) {data}', level='DEBUG')
@@ -88,12 +105,6 @@ class GoveeAPI(object):
             log(f'GOT DEVICE FROM GOVEE BUT NO ATTRIBUTES: {device=}')
 
         return new_capabilities
-
-    def get_headers(self):
-        return {
-            'Content-Type': "application/json",
-            'Govee-API-Key': self.api_key
-        }
 
     def send_command(self, device_id, sku, capability, instance, value):
         body = {
@@ -117,10 +128,12 @@ class GoveeAPI(object):
             if r.status_code != 200:
                 log(f'ERROR SENDING DEVICE COMMAND ({r.status_code}) {type(err).__name__} - {err=}', level='ERROR')
                 return {}
+        except RequestException as err:
+            log(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name} - {err=}', level='ERROR')
+            time.sleep(10)
+            return {}
         except Exception as err:
             log(f'ERROR SENDING DEVICE COMMAND {type(err).__name__} - {err=}', level='ERROR')
-            log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')
-            log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
 
-        log(f'SEND COMMAND: ({r.status_code}) {body}', level='DEBUG')
+        log(f'SENT COMMAND: ({r.status_code}) {body}', level='DEBUG')

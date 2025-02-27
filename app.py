@@ -35,18 +35,17 @@ argparser.add_argument(
 args = argparser.parse_args()
 
 # load config file
-configpath = args.config
-if configpath:
+configpath = args.config or '/config'
+try:
     if not configpath.endswith('.yaml'):
         if not configpath.endswith('/'):
             configpath += '/'
         configpath += 'config.yaml'
-    log(f'Reading config file {configpath}')
     with open(configpath) as file:
         config = yaml.safe_load(file)
-# or check env vars
-else:
-    log(f'No config path/file specified, checking ENV')
+    log(f'Reading config file {configpath}')
+except:
+    log(f'config.yaml not found, checking ENV')
     config = {
         'mqtt': {
             'host': os.getenv('MQTT_HOST') or 'localhost',
@@ -71,6 +70,7 @@ else:
     }
 
 config['version'] = version
+config['configpath'] = os.path.dirname(configpath)
 
 # make sure we at least got the ONE required value
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:

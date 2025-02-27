@@ -28,6 +28,8 @@ class GoveeMqtt(object):
 
         self.boosted = []
 
+        self.data_file = config['configpath'] + '/govee2mqtt.dat'
+
     async def __aenter__(self):
         # Save signal handlers
         self.original_sigint_handler = signal.getsignal(signal.SIGINT)
@@ -58,11 +60,17 @@ class GoveeMqtt(object):
         self.mqttc_create()
         self.goveec = goveeapi.GoveeAPI(self.govee_config['api_key'])
         self.running = True
+
+        self.restore_state()
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        log('Exiting gracefully, telling MQTT')
+        log('Exiting gracefully, saving state and alerting MQTT server')
         self.running = False
+
+        self.save_state()
+
         if self.mqttc is not None and self.mqttc.is_connected():
             for device_id in self.devices:
                 self.publish_attributes(device_id, { 'online': False })
@@ -70,6 +78,27 @@ class GoveeMqtt(object):
             log('Disconnected from MQTT')
         else:
             log('Lost connection to MQTT')
+
+    def save_state(self):
+        try:
+            state = {
+                'api_calls': self.goveec.api_calls,
+                'last_call_date': self.goveec.last_call_date,
+            }
+            with open(self.data_file, 'w') as file:
+                json.dump(state, file, indent=4)
+        except Exception as err:
+            log(f'Failed to save state: {type(err).__name__} - {err=}')
+
+    def restore_state(self):
+        try:
+            with open(self.data_file, 'r') as file:
+                state = json.loads(file.read())
+                self.goveec.restore_state(state['api_calls'], state['last_call_date'])
+        except json.decoder.JSONDecodeError as err:
+            log(f'Unable to restore state from prior run: {err}', level='ERROR')
+        except Exception as err:
+            log(f'Unable to restore state from prior run: {type(err).__name__} - {err=}', level='ERROR')
 
     # MQTT Functions
     ################################
@@ -517,7 +546,7 @@ class GoveeMqtt(object):
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
 
     def update_broker(self):
-        if date.today() == self.goveec.last_call_date:
+        if self.goveec.last_call_date == str(date.today()):
             self.goveec.increase_api_calls()
         else:
             self.goveec.reset_api_call_count()
@@ -526,7 +555,7 @@ class GoveeMqtt(object):
             'online': True,
             'api': {
                 'calls': self.goveec.api_calls,
-                'last_call_date': str(self.goveec.last_call_date),
+                'last_call_date': self.goveec.last_call_date,
                 'rate_limited': 'yes' if self.goveec.rate_limited else 'no',
             },
             'config': {

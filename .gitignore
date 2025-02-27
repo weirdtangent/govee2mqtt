@@ -3,3 +3,4 @@ __pycache__
 venv
 lib
 pyvenv.cfg
+govee2mqtt.dat
