@@ -178,6 +178,11 @@ class GoveeMqtt(object):
                 'name': 'govee2mqtt broker',
                 'identifiers': self.broker_name,
             },
+            'origin': {
+                'name': self.broker_name,
+                'sw_version': self.version,
+                'url': 'https://github.com/weirdtangent/govee2mqtt',
+            },
         }
 
         self.mqttc.publish(self.get_homeassistant_discovery_topic('broker', 'sensor', 'broker'), json.dumps(
@@ -233,21 +238,25 @@ class GoveeMqtt(object):
                 'identifiers': self.mqtt_config["prefix"] + '-' + device_id.replace(':',''),
                 'via_device': self.broker_name,
             },
+            'origin': {
+                'name': self.broker_name,
+                'sw_version': self.version,
+                'url': 'https://github.com/weirdtangent/govee2mqtt',
+            },
             '~': self.get_state_topic(device_id),
             'availability_topic': '~/availability',
             'command_topic': '~/set',
-            'json_attributes_topic': '~',
             'unique_id': f'govee_{device_type}_' + device_id.replace(':',''),
         }
         light_base = base | {
             'name': 'Light',
             'supported_color_modes': [],
-            'state_topic': '~',
+            'state_topic': '~/state',
         }
         sensor_base = base | {
             'schema': 'json',
             'state_class': 'measurement',
-            'state_topic': '~',
+            'state_topic': '~/availability',
         }
 
         light = light_base
@@ -282,6 +291,7 @@ class GoveeMqtt(object):
                     sensor_type['temperature'] = sensor_base | {
                         'name': 'Temperature',
                         'device_class': 'temperature',
+                        'json_attributes_topic': '~',
                         'value_template': '{{ value_json.temperature }}',
                         'unit_of_measurement': '°F',
                         'unique_id': f'govee_{device_type}_' + device_id.replace(':','') + '_temperature',
@@ -290,6 +300,7 @@ class GoveeMqtt(object):
                     sensor_type['humidity'] = sensor_base | {
                         'name': 'Humidity',
                         'device_class': 'humidity',
+                        'json_attributes_topic': '~',
                         'value_template': '{{ value_json.humidity }}',
                         'unit_of_measurement': '%',
                         'unique_id': f'govee_{device_type}_' + device_id.replace(':','') + '_humidity',
@@ -305,11 +316,19 @@ class GoveeMqtt(object):
         del device['capabilities']
 
         if device_type == 'light':
-            log(f'HOME_ASSISTANT LIGHT CONFIG: {light}', level='DEBUG')
-            self.mqttc.publish(self.get_device_discovery_topic(device_id), json.dumps(light), retain=True)
+            log(f'HOME_ASSISTANT LIGHT: {light}', level='DEBUG')
+            self.mqttc.publish(
+                self.get_device_discovery_topic(device_id),
+                json.dumps(light),
+                retain=True
+            )
         for sensor in sensor_type:
-            log(f'HOME_ASSISTANT SENSOR CONFIG: {sensor}', level='DEBUG')
-            self.mqttc.publish(self.get_homeassistant_discovery_topic(device_id, 'sensor', sensor), json.dumps(sensor_type[sensor]), retain=True)
+            log(f'HOME_ASSISTANT SENSOR: {sensor}', level='DEBUG')
+            self.mqttc.publish(
+                self.get_homeassistant_discovery_topic(device_id, 'sensor', sensor),
+                json.dumps(sensor_type[sensor]),
+                retain=True
+            )
 
     # Govee Helpers
     ###########################################
@@ -478,16 +497,14 @@ class GoveeMqtt(object):
             self.boosted.append(device_id)
 
     def publish_handler(self, device_id, attribute, value):
-        response = self.mqttc.publish(self.get_pub_topic(device_id, attribute), value)
+        response = self.mqttc.publish(self.get_pub_topic(device_id, attribute), value, retain=True)
         self.devices[device_id][attribute] = value
-        # log(f'UPDATED: {self.devices[device_id]['name']} ({device_id}): {attribute} = {value}, RC: {response.rc}', level='DEBUG')
         if response.rc != 0:
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
 
 
     def publish_state_handler(self, device_id):
-        response = self.mqttc.publish(self.get_state_topic(device_id), json.dumps(self.devices[device_id]))
-        # log(f'PUBLISHED: {self.devices[device_id]['name']} ({device_id}): {self.devices[device_id]}), RC: {response.rc}', level='DEBUG')
+        response = self.mqttc.publish(self.get_state_topic(device_id), json.dumps(self.devices[device_id]), retain=True)
         if response.rc != 0:
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
 
@@ -496,6 +513,7 @@ class GoveeMqtt(object):
             self.goveec.increase_api_calls()
         else:
             self.goveec.reset_api_call_count()
+
         self.publish_attributes(self.broker_name, {
             'online': True,
             'api': {
@@ -506,6 +524,11 @@ class GoveeMqtt(object):
             'config': {
                 'device_name': 'govee2mqtt broker',
                 'sw_version': self.version,
+            },
+            'origin': {
+                'name': self.broker_name,
+                'sw_version': self.version,
+                'url': 'https://github.com/weirdtangent/govee2mqtt',
             },
         })
 
