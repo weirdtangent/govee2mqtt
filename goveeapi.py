@@ -34,7 +34,6 @@ class GoveeAPI(object):
             if r.status_code != 200:
                 log(f'BAD RESPONSE CODE ({r.status_code}) GETTING DEVICE LIST', level='ERROR')
                 return {}
-            self.rate_limited = False
             data = r.json()
         except Exception as err:
             log(f'ERROR GETTING DEVICE LIST DATA {data}', level="ERROR")
@@ -70,7 +69,6 @@ class GoveeAPI(object):
             if r.status_code != 200:
                 log(f'ERROR ({r.status_code}) GETTING DEVICE', level="ERROR")
                 return {}
-            self.rate_limited = False
             data = r.json()
         except Exception as err:
             log(f'ERROR GETTING DEVICE DATA {data}', level="ERROR")
@@ -119,7 +117,6 @@ class GoveeAPI(object):
             if r.status_code != 200:
                 log(f'ERROR SENDING DEVICE COMMAND ({r.status_code}) {type(err).__name__} - {err=}', level='ERROR')
                 return {}
-            self.rate_limited = False
         except Exception as err:
             log(f'ERROR SENDING DEVICE COMMAND {type(err).__name__} - {err=}', level='ERROR')
             log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG')

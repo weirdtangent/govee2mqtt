@@ -65,7 +65,7 @@ class GoveeMqtt(object):
         self.running = False
         if self.mqttc is not None and self.mqttc.is_connected():
             for device_id in self.devices:
-                self.publish_attributes(device_id, { 'online': False, 'status': False })
+                self.publish_attributes(device_id, { 'online': False })
             self.mqttc.disconnect()
             log('Disconnected from MQTT')
         else:
@@ -108,8 +108,8 @@ class GoveeMqtt(object):
     def get_pub_topic(self, device, attribute):
         return "{}/{}/{}".format(self.mqtt_config['prefix'], device, attribute)
 
-    def get_sensor_pub_topic(self, device, sensor, attribute):
-        return "{}/{}/{}/{}".format(self.mqtt_config['prefix'], device, sensor, attribute)
+    def get_discovery_pub_topic(self, device, discovery, attribute):
+        return "{}/{}/{}/{}".format(self.mqtt_config['prefix'], device, discovery, attribute)
 
     def get_state_topic(self, device_id):
         return "{}/{}".format(self.mqtt_config['prefix'], device_id)
@@ -117,13 +117,13 @@ class GoveeMqtt(object):
     def get_set_topic(self, device_id):
         return "{}/{}/set".format(self.mqtt_config['prefix'], device_id)
 
-    def get_homeassistant_config_topic(self, device_id):
+    def get_device_discovery_topic(self, device_id):
         formatted_device_id = self.mqtt_config["prefix"] + '-' + device_id.replace(':','')
         return "{}/light/{}/config".format(self.mqtt_config['homeassistant'], formatted_device_id)
 
-    def get_homeassistant_sensor_topic(self, device_id, device_type, sensor_name):
+    def get_homeassistant_discovery_topic(self, device_id, device_type, discovery_name):
         formatted_device_id = self.mqtt_config["prefix"] + '-' + device_id.replace(':','')
-        return "{}/{}/{}/{}/config".format(self.mqtt_config['homeassistant'], device_type, formatted_device_id, sensor_name)
+        return "{}/{}/{}/{}/config".format(self.mqtt_config['homeassistant'], device_type, formatted_device_id, discovery_name)
 
     # MQTT Helpers
     #########################################
@@ -153,7 +153,6 @@ class GoveeMqtt(object):
         self.mqttc.on_message = self.mqtt_on_message
         self.mqttc.on_subscribe = self.mqtt_on_subscribe
 
-        self.mqttc.will_set(self.get_state_topic(self.broker_name) + '/status', payload="offline", qos=0, retain=True)
         self.mqttc.will_set(self.get_state_topic(self.broker_name) + '/availability', payload="offline", qos=0, retain=True)
 
         try:
@@ -168,12 +167,12 @@ class GoveeMqtt(object):
             log(f'Could not connect to MQTT server {self.mqtt_config.get("host")}: {error}', level='ERROR')
             exit(1)
 
-    def homeassistant_broker_config(self):
+    def send_broker_discovery(self):
         if 'homeassistant' not in self.mqtt_config:
             return
         broker_base = {
-            'availability_topic': self.get_state_topic(self.broker_name) + '/availability',
-            'state_topic': self.get_state_topic(self.broker_name) + '/status',
+            '~': self.get_state_topic(self.broker_name), 
+            'availability_topic': '~/availability',
             'qos': 0,
             'device': {
                 'name': 'govee2mqtt broker',
@@ -181,43 +180,44 @@ class GoveeMqtt(object):
             },
         }
 
-        self.mqttc.publish(self.get_homeassistant_sensor_topic('broker', 'sensor', 'broker'), json.dumps(
+        self.mqttc.publish(self.get_homeassistant_discovery_topic('broker', 'sensor', 'broker'), json.dumps(
             broker_base | {
+                'state_topic': '~',
                 'icon': 'mdi:language-python',
                 'unique_id': self.broker_name,
                 'name': 'broker',
+                'json_attributes_topic': '~',
+                'value_template': '{{ value_json.availability }}',
                 }
             ),
             retain=True,
         )
-        self.mqttc.publish(self.get_homeassistant_sensor_topic('broker', 'binary_sensor', 'rate-limited'), json.dumps(
+        self.mqttc.publish(self.get_homeassistant_discovery_topic('broker', 'binary_sensor', 'rate-limited'), json.dumps(
             broker_base | {
+                'state_topic': '~/api',
                 'value_template': '{{ value_json.rate_limited }}',
                 'payload_on': 'yes',
                 'payload_off': 'no',
                 'icon': 'mdi:car-speed-limiter',
-                'unique_id': self.broker_name + '_api_rate-limited',
                 'name': 'rate limited by Govee',
-                '~': self.get_state_topic(self.broker_name),
-                'stat_t': '~/api',
+                'unique_id': self.broker_name + '_api_rate-limited',
                 }
             ),
             retain=True,
         )
-        self.mqttc.publish(self.get_homeassistant_sensor_topic('broker', 'sensor', 'api-calls'), json.dumps(
+        self.mqttc.publish(self.get_homeassistant_discovery_topic('broker', 'sensor', 'api-calls'), json.dumps(
             broker_base | {
+                'state_topic': '~/api',
                 'value_template': '{{ value_json.calls }}',
                 'icon': 'mdi:numeric',
-                'unique_id': self.broker_name + '_api_calls',
                 'name': 'api calls today',
-                '~': self.get_state_topic(self.broker_name),
-                'stat_t': '~/api',
+                'unique_id': self.broker_name + '_api_calls',
                 }
             ),
             retain=True,
         )
 
-    def homeassistant_config(self, device_id):
+    def send_device_discovery(self, device_id):
         if 'homeassistant' not in self.mqtt_config:
             return
 
@@ -233,21 +233,21 @@ class GoveeMqtt(object):
                 'identifiers': self.mqtt_config["prefix"] + '-' + device_id.replace(':',''),
                 'via_device': self.broker_name,
             },
-            'availability_topic': self.get_state_topic(device_id) + '/availability',
-            'state_topic': self.get_state_topic(device_id) + '/config',
-            'command_topic': self.get_set_topic(device_id),
-            'json_attributes_topic': self.get_state_topic(device_id),
+            '~': self.get_state_topic(device_id),
+            'availability_topic': '~/availability',
+            'command_topic': '~/set',
+            'json_attributes_topic': '~',
             'unique_id': f'govee_{device_type}_' + device_id.replace(':',''),
         }
         light_base = base | {
             'name': 'Light',
-            'schema': 'json',
             'supported_color_modes': [],
+            'state_topic': '~',
         }
         sensor_base = base | {
+            'schema': 'json',
             'state_class': 'measurement',
-            '~': self.get_state_topic(device_id),
-            'stat_t': '~/telemetry',
+            'state_topic': '~',
         }
 
         light = light_base
@@ -306,10 +306,10 @@ class GoveeMqtt(object):
 
         if device_type == 'light':
             log(f'HOME_ASSISTANT LIGHT CONFIG: {light}', level='DEBUG')
-            self.mqttc.publish(self.get_homeassistant_config_topic(device_id), json.dumps(light), retain=True)
+            self.mqttc.publish(self.get_device_discovery_topic(device_id), json.dumps(light), retain=True)
         for sensor in sensor_type:
             log(f'HOME_ASSISTANT SENSOR CONFIG: {sensor}', level='DEBUG')
-            self.mqttc.publish(self.get_homeassistant_sensor_topic(device_id, 'sensor', sensor), json.dumps(sensor_type[sensor]), retain=True)
+            self.mqttc.publish(self.get_homeassistant_discovery_topic(device_id, 'sensor', sensor), json.dumps(sensor_type[sensor]), retain=True)
 
     # Govee Helpers
     ###########################################
@@ -318,8 +318,13 @@ class GoveeMqtt(object):
         self.devices[self.broker_name] = {
             'name': f'{self.mqtt_config['prefix']} broker',
             'sku': 'broker',
+            'origin': {
+                'name': self.broker_name,
+                'sw_version': self.version,
+                'url': 'https://github.com/weirdtangent/govee2mqtt',
+            },
         }
-        self.homeassistant_broker_config()
+        self.send_broker_discovery()
 
         devices = self.goveec.get_device_list()
         self.update_broker()
@@ -332,15 +337,20 @@ class GoveeMqtt(object):
                     first = True
                     self.devices[device_id] = {}
                     self.devices[device_id]['sku'] = device['sku']
-                    self.mqttc.will_set(self.get_state_topic(device_id)+'/status', payload="offline", qos=0, retain=True)
+                    self.mqttc.will_set(self.get_state_topic(device_id)+'/availability', payload="offline", qos=0, retain=True)
 
                 self.devices[device_id]['name'] = device['deviceName']
+                self.devices[device_id]['origin'] = {
+                    'name': self.broker_name,
+                    'sw_version': self.version,
+                    'url': 'https://github.com/weirdtangent/govee2mqtt',
+                }
                 self.devices[device_id]['capabilities'] = device['capabilities']
 
                 if first:
                     log(f'Adding new device: {device['deviceName']} ({device_id}) - Govee {device["sku"]}')
                     log(f'new device config: {device}', level='DEBUG')
-                    self.homeassistant_config(device_id)
+                    self.send_device_discovery(device_id)
                 else:
                     log(f'Updated device: {self.devices[device_id]["name"]}', level='DEBUG')
             else:
@@ -370,14 +380,13 @@ class GoveeMqtt(object):
         self.publish_attributes(device_id, data)
 
     def publish_attributes(self, device_id, orig_data):
-        # if no data, we were probably rate-limited (and then paused our requests)
-        # so nothing to update, but leave in boosted (if there) so it will try again
+        # if no data, we were probably rate-limited, so nothing to update
+        # but leave device_id in boosted (if there) so it will try again
         if len(orig_data) == 0:
             return
 
         changed = False
         data = {}
-        log(f'PUBLISHING ATTRIBUTES: {orig_data}', level='DEBUG')
 
         # convert Govee key/values to MQTT
         for key in orig_data:
@@ -386,10 +395,8 @@ class GoveeMqtt(object):
                     data[key] = orig_data[key]
                 case 'online':
                     data['availability'] = 'online' if orig_data[key] == True else 'offline'
-                case 'status':
-                    data['status'] = 'online' if orig_data[key] == True else 'offline'
                 case 'powerSwitch':
-                    data['state'] = 1 if orig_data[key] == 1 else 0
+                    data['state'] = "ON" if orig_data[key] == 1 else "OFF"
                 case 'colorRgb':
                     data['color'] = number_to_rgb(orig_data[key], 16777215)
                 case 'sensorTemperature':
@@ -409,8 +416,7 @@ class GoveeMqtt(object):
                 value = json.dumps(data[attribute]) if isinstance(data[attribute], dict) else data[attribute]
                 self.publish_handler(device_id, attribute, value)
 
-        if changed:
-            self.publish_state_handler(device_id)
+        self.publish_state_handler(device_id)
 
         # we got this far, so drop device from boosted list
         if device_id in self.boosted:
@@ -474,14 +480,14 @@ class GoveeMqtt(object):
     def publish_handler(self, device_id, attribute, value):
         response = self.mqttc.publish(self.get_pub_topic(device_id, attribute), value)
         self.devices[device_id][attribute] = value
-        log(f'UPDATED: {self.devices[device_id]['name']} ({device_id}): {attribute} = {value}, RC: {response.rc}', level='DEBUG')
+        # log(f'UPDATED: {self.devices[device_id]['name']} ({device_id}): {attribute} = {value}, RC: {response.rc}', level='DEBUG')
         if response.rc != 0:
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
 
 
     def publish_state_handler(self, device_id):
         response = self.mqttc.publish(self.get_state_topic(device_id), json.dumps(self.devices[device_id]))
-        log(f'PUBLISHED: {self.devices[device_id]['name']} ({device_id}): {self.devices[device_id]}), RC: {response.rc}', level='DEBUG')
+        # log(f'PUBLISHED: {self.devices[device_id]['name']} ({device_id}): {self.devices[device_id]}), RC: {response.rc}', level='DEBUG')
         if response.rc != 0:
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
 
@@ -492,7 +498,6 @@ class GoveeMqtt(object):
             self.goveec.reset_api_call_count()
         self.publish_attributes(self.broker_name, {
             'online': True,
-            'status': True,
             'api': {
                 'calls': self.goveec.api_calls,
                 'last_call_date': str(self.goveec.last_call_date),
