@@ -444,8 +444,8 @@ class GoveeMqtt(object):
 
         self.publish_state_handler(device_id)
 
-        # we got this far, so drop device from boosted list
-        if device_id in self.boosted:
+        # if we got a change for a boosted device, we can stop boosting it
+        if changed and device_id in self.boosted:
            self.boosted.remove(device_id)
 
     def send_command(self, device_id, data):
