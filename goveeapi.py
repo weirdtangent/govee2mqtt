@@ -123,4 +123,4 @@ class GoveeAPI(object):
             log(f'RESPONSE WAS: {r.headers} {r.content}', level='DEBUG')
             return {}
 
-        log(f'SEND COMMAND: ({r.status_code}) {data}', level='DEBUG')
+        log(f'SEND COMMAND: ({r.status_code}) {body}', level='DEBUG')

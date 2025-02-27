@@ -91,9 +91,14 @@ class GoveeMqtt(object):
         topic = msg.topic
         if not msg or not msg.payload:
             return
-        payload = json.loads(msg.payload)
+        log(f'Got message: {topic} - {msg.payload}')
+        try:
+            payload = json.loads(msg.payload)
+        except:
+            bytes = msg.payload
+            payload = { 'state': bytes.decode('utf8') }
+
         device_id = topic[(len(self.mqtt_config['prefix']) + 1):-4]
-        log(f'Got MQTT message: {device_id}: {payload}')
 
         self.send_command(device_id, payload)
 
@@ -183,6 +188,7 @@ class GoveeMqtt(object):
                 'sw_version': self.version,
                 'url': 'https://github.com/weirdtangent/govee2mqtt',
             },
+            'schema': 'json',
         }
 
         self.mqttc.publish(self.get_homeassistant_discovery_topic('broker', 'sensor', 'broker'), json.dumps(
@@ -246,6 +252,7 @@ class GoveeMqtt(object):
             '~': self.get_state_topic(device_id),
             'availability_topic': '~/availability',
             'command_topic': '~/set',
+            'schema': 'json',
             'unique_id': f'govee_{device_type}_' + device_id.replace(':',''),
         }
         light_base = base | {
@@ -254,9 +261,8 @@ class GoveeMqtt(object):
             'state_topic': '~/state',
         }
         sensor_base = base | {
-            'schema': 'json',
             'state_class': 'measurement',
-            'state_topic': '~/availability',
+            'state_topic': '~/state',
         }
 
         light = light_base
@@ -364,6 +370,7 @@ class GoveeMqtt(object):
                     'sw_version': self.version,
                     'url': 'https://github.com/weirdtangent/govee2mqtt',
                 }
+                self.devices[device_id]['schema'] = 'json'
                 self.devices[device_id]['capabilities'] = device['capabilities']
 
                 if first:
@@ -446,6 +453,7 @@ class GoveeMqtt(object):
 
         # convert MQTT to Govee key/values
         for key in data:
+            log(f'GOT {key} = {data[key]} TO SEND TO GOVEE', level='DEBUG')
             match key:
                 case 'state':
                     cmd['powerSwitch'] = {
