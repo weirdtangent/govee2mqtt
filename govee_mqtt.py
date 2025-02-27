@@ -477,7 +477,6 @@ class GoveeMqtt(object):
         log(f'UPDATED: {self.devices[device_id]['name']} ({device_id}): {attribute} = {value}, RC: {response.rc}', level='DEBUG')
         if response.rc != 0:
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
-        self.update_broker()
 
 
     def publish_state_handler(self, device_id):
@@ -485,7 +484,6 @@ class GoveeMqtt(object):
         log(f'PUBLISHED: {self.devices[device_id]['name']} ({device_id}): {self.devices[device_id]}), RC: {response.rc}', level='DEBUG')
         if response.rc != 0:
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
-        self.update_broker()
 
     def update_broker(self):
         if date.today() == self.goveec.last_call_date:
