@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 import json
 import requests
 import time
@@ -13,6 +14,15 @@ class GoveeAPI(object):
     def __init__(self, api_key):
         self.api_key = api_key
         self.rate_limited = False
+        self.api_calls = 0
+        self.last_call_date = ''
+
+    def increase_api_calls(self):
+        self.api_calls += 1
+
+    def reset_api_call_count(self):
+        self.api_calls = 0
+        self.last_call_date = date.today()
 
     def get_device_list(self):
         log('GETTING DEVICE LIST FROM GOVEE', level='DEBUG')
