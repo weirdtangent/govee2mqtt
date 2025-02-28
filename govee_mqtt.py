@@ -549,7 +549,7 @@ class GoveeMqtt(object):
             log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {self.devices[device_id]} GOT RC: {response.rc}', level='ERROR')
 
     def update_broker(self):
-        if self.goveec.last_call_date == str(date.today(tz=ZoneInfo(self.timzeone))):
+        if self.goveec.last_call_date == str(date.today(tz=ZoneInfo(self.timezone))):
             self.goveec.increase_api_calls()
         else:
             self.goveec.reset_api_call_count(self.timezone)
