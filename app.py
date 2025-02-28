@@ -67,14 +67,19 @@ except:
             'device_list_interval': int(os.getenv('GOVEE_LIST_INTERVAL') or 3600),
         },
         'debug': True if os.getenv('GOVEE_DEBUG') else False,
+        'timezone': os.getenv('TZ'),
     }
 
 config['version'] = version
 config['configpath'] = os.path.dirname(configpath)
 
-# make sure we at least got the ONE required value
+# make sure we at least got the TWO required values
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
-    log('govee.api_key required in config file or in GOVEE_API_KEY env var', level='ERROR')
+    log('`govee.api_key` required in config file or in GOVEE_API_KEY env var', level='ERROR')
+    exit()
+
+if not 'timezone' in config:
+    log('`timezone` required in config file or in TZ env var', level='ERROR')
     exit()
 
 with GoveeMqtt(config) as mqtt:

@@ -6,6 +6,7 @@ from requests.exceptions import RequestException
 import time
 from util import *
 import uuid
+from zoneinfo import ZoneInfo
 
 DEVICE_URL = 'https://openapi.api.govee.com/router/api/v1/device/state'
 DEVICE_LIST_URL = 'https://openapi.api.govee.com/router/api/v1/user/devices'
@@ -26,9 +27,9 @@ class GoveeAPI(object):
     def increase_api_calls(self):
         self.api_calls += 1
 
-    def reset_api_call_count(self):
+    def reset_api_call_count(self, timezone):
         self.api_calls = 0
-        self.last_call_date = str(date.today())
+        self.last_call_date = str(date.today(tz=ZoneInfo(timezone)))
         log(f'Reset api call count for new day')
 
     def get_headers(self):

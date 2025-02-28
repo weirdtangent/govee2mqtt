@@ -6,10 +6,13 @@ import paho.mqtt.client as mqtt
 import ssl
 import time
 from util import *
+from zoneinfo import ZoneInfo
 
 class GoveeMqtt(object):
     def __init__(self, config):
         self._interrupted = False
+
+        self.timezone = config['timezone']
 
         self.mqttc = None
         self.mqtt_connect_time = None
@@ -543,13 +546,13 @@ class GoveeMqtt(object):
     def publish_state_handler(self, device_id):
         response = self.mqttc.publish(self.get_state_topic(device_id), json.dumps(self.devices[device_id]), retain=True)
         if response.rc != 0:
-            log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {attribute} = {value} GOT RC: {response.rc}', level='ERROR')
+            log(f'PUBLISH FAILED for {self.devices[device_id]['name']} ({device_id}) SENDING {self.devices[device_id]} GOT RC: {response.rc}', level='ERROR')
 
     def update_broker(self):
-        if self.goveec.last_call_date == str(date.today()):
+        if self.goveec.last_call_date == str(date.today(tz=ZoneInfo(self.timzeone))):
             self.goveec.increase_api_calls()
         else:
-            self.goveec.reset_api_call_count()
+            self.goveec.reset_api_call_count(self.timezone)
 
         self.publish_attributes(self.broker_name, {
             'online': True,
