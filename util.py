@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 import os
+from zoneinfo import ZoneInfo
 
-def log(msg, level='INFO'):
-    ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+def log(msg, level='INFO', tz='UTC'):
+    ts = datetime.now(ZoneInfo(tz)).strftime('%Y-%m-%d %H:%M:%S %Z')
     if len(msg) > 102400:
         raise ValueError('Log message exceeds max length')
     if level != 'DEBUG' or os.getenv('DEBUG'):

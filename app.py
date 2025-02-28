@@ -7,6 +7,8 @@ import time
 from util import *
 import yaml
 
+timezone = 'UTC'
+
 # Helper functions and callbacks
 def read_file(file_name):
     with open(file_name, 'r') as file:
@@ -22,7 +24,7 @@ def read_version():
 
 # Let's go!
 version = read_version()
-log(f'Starting: govee2mqtt v{version}')
+log(f'Starting: govee2mqtt v{version}', tz=timezone)
 
 # cmd-line args
 argparser = argparse.ArgumentParser()
@@ -43,9 +45,9 @@ try:
         configpath += 'config.yaml'
     with open(configpath) as file:
         config = yaml.safe_load(file)
-    log(f'Reading config file {configpath}')
+    log(f'Reading config file {configpath}', tz=timezone)
 except:
-    log(f'config.yaml not found, checking ENV')
+    log(f'config.yaml not found, checking ENV', tz=timezone)
     config = {
         'mqtt': {
             'host': os.getenv('MQTT_HOST') or 'localhost',
@@ -75,12 +77,14 @@ config['configpath'] = os.path.dirname(configpath)
 
 # make sure we at least got the TWO required values
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
-    log('`govee.api_key` required in config file or in GOVEE_API_KEY env var', level='ERROR')
+    log('`govee.api_key` required in config file or in GOVEE_API_KEY env var', level='ERROR', tz=timezone)
     exit()
 
 if not 'timezone' in config:
-    log('`timezone` required in config file or in TZ env var', level='ERROR')
+    log('`timezone` required in config file or in TZ env var', level='ERROR', tz=timezone)
     exit()
+else:
+    log(f'TIMEZONE set as {config["timezone"]}', tz=config["timezone"])
 
 with GoveeMqtt(config) as mqtt:
     asyncio.run(mqtt.main_loop())
