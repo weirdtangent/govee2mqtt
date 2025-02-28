@@ -29,7 +29,7 @@ class GoveeAPI(object):
 
     def reset_api_call_count(self, timezone):
         self.api_calls = 0
-        self.last_call_date = str(date.today(tz=ZoneInfo(timezone)))
+        self.last_call_date = str(datetime.now(tz=ZoneInfo(timezone)).date())
         log(f'Reset api call count for new day')
 
     def get_headers(self):
