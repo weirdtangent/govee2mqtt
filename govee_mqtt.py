@@ -457,6 +457,10 @@ class GoveeMqtt(object):
                 self.refresh_device(device_id)
 
     def refresh_device(self, device_id):
+        # don't refresh the device until it has been published in device discovery
+        # and we can tell because it will have a `state` once it has been
+        if 'state' not in self.devices[device_id]:
+            return
         data = self.goveec.get_device(device_id, self.devices[device_id]['device']['model'])
         self.update_service_device()
         self.update_capabilities_on_device(device_id, data)
