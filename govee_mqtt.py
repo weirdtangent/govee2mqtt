@@ -485,7 +485,7 @@ class GoveeMqtt(object):
             last_updated = self.devices[device_id]['state']['last_update'] if 'last_update' in self.devices[device_id]['state'] else 'server started'
             last_updated = last_updated[:19].replace('T',' ')
 
-            log(f'Refreshing device "{self.devices[device_id]['device']['name']}", not updated since: {last_updated}', hide_ts=self.hide_ts)
+            log(f'Refreshing device "{self.devices[device_id]['device']['name']} ({device_id})", not updated since: {last_updated}', hide_ts=self.hide_ts)
             if device_id not in self.boosted:
                self.refresh_device(device_id)
 

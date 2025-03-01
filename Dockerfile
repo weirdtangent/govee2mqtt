@@ -17,12 +17,18 @@ RUN pip3 check
 
 COPY . .
 
+RUN mkdir /config
+RUN touch /config/config.yaml
+RUN touch /config/govee2mqtt.dat
+
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
 RUN addgroup -g $GROUP_ID appuser && \
     adduser -u $USER_ID -G appuser --disabled-password --gecos "" appuser
+RUN chown appuser:appuser /config/*
+RUN chmod 0664 /config/*
 
 USER appuser
 
-CMD [ "python", "-u", "./app.py", "-c", "/config"]
+ENTRYPOINT [ "python", "-u", "./app.py", "-c", "/config"]
