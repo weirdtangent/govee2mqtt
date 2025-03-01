@@ -322,7 +322,19 @@ class GoveeMqtt(object):
         device = self.devices[device_id]
         device_type = 'sensor' if device['device']['model'].startswith('H5') else 'light'
 
-        light = { 'supported_color_modes': [] }
+        # we setup a light component to make it easy to add-to
+        # as we process capabilities, and then add it to components
+        # after the loop
+        light = {
+            'name': 'Light',
+            'platform': 'light',
+            'schema': 'json',
+            'state_topic': self.devices[device_id]['state_topic'],
+            'availability_topic': self.devices[device_id]['availability_topic'],
+            'command_topic': self.devices[device_id]['command_topic'],
+            'supported_color_modes': [],
+            'unique_id': self.get_slug(device_id, 'light'),
+        }
         components = {
             self.get_slug(device_id, 'last_update'): {
                 'name': 'Last Update',
@@ -373,25 +385,21 @@ class GoveeMqtt(object):
                         'unique_id': self.get_slug(device_id, 'humidity'),
                     }
 
-        # does this look and smell like a light?
+        # It's a pretty good guess that we have a `light` if we got `supported_color_modes`
+        # but note that:
+        #   "if `onoff` or `brightness` are used, that must be the only value in the list."
+        # so we'll remove 1 and maybe both, if we have other supported color modes
         if len(light['supported_color_modes']) > 0:
-            # Note that if `onoff` or `brightness` are used, that must be the only value in the list.
-            # so we'll remove 1 and maybe both, if we have other supported color modes
+            # first, if brightness is supported, lets add the value template
+            if 'brightness' in light['supported_color_modes']:
+                light['brightness_value_template'] = '{{ value_json.brightness }}'
+
             if len(light['supported_color_modes']) > 1:
                 light['supported_color_modes'].remove('onoff')
                 if len(light['supported_color_modes']) > 1:
                     light['supported_color_modes'].remove('brightness')
-            light['name'] = 'Light'
-            light['platform'] = 'light'
-            light['schema'] = 'json'
-            light['state_topic'] = self.devices[device_id]['state_topic']
-            light['availability_topic'] = self.devices[device_id]['availability_topic']
-            light['command_topic'] = self.devices[device_id]['command_topic']
-            light['unique_id'] = self.get_slug(device_id, 'light')
 
-            if 'brightness' in light['supported_color_modes']:
-                light['brightness_value_template'] = '{{ value_json.brightness }}'
-
+            # ok, now we can add this as a real component to our device discovery
             components[self.get_slug(device_id, 'light')] = light
         
         # since we always add `last_update` this should always be true
