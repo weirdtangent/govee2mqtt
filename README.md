@@ -30,7 +30,7 @@ It supports the following environment variables:
 -   `MQTT_USERNAME: admin`
 -   `MQTT_PASSWORD: password`
 -   `MQTT_PREFIX: govee`
--   `MQTT_HOMEASSISTANT: homeassistant`
+-   `MQTT_DISCOVERY_PREFIX: homeassistant`
 
 -   `GOVEE_API_KEY: [your_api_key]` (see https://developer.govee.com/reference/apply-you-govee-api-key)
 -   `GOVEE_DEVICE_INTERVAL: 30` (higher if 10+ Govee devices)
@@ -38,6 +38,7 @@ It supports the following environment variables:
 -   `GOVEE_LIST_INTERVAL: 300`
 
 -   `TZ: America/New_York` (see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)
+-   `HOMEASSISTANT: true`
 -   `DEBUG: True` (for much more logging)
 
 ## Out of Scope

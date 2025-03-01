@@ -1,12 +1,17 @@
 mqtt:
   host: 10.10.10.1
   port: 1883
-  username: govee
-  password: password
-  prefix: govee
-  homeassistant: homeassistant
+  username: ""
+  password: ""
+  prefix: govee2mqtt
+  discovery_prefix: homeassistant
 
 govee:
-  api_key: xxx
+  api_key: xxxxx-xxx-xxxxxx
+  device_interval: 30
+  device_boost_interval: 2
+  device_list_interval: 300
 
 debug: False
+homeassistant: True
+timezone: America/New_York
