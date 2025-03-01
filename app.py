@@ -40,10 +40,12 @@ try:
     if not configpath.endswith('.yaml'):
         if not configpath.endswith('/'):
             configpath += '/'
-        configpath += 'config.yaml'
-    with open(configpath) as file:
+        configfile = configpath + 'config.yaml'
+    with open(configfile) as file:
         config = yaml.safe_load(file)
     log(f'Reading config file {configpath}')
+    config['config_from'] = 'file'
+    config['config_path'] = configpath
 except:
     log(f'config.yaml not found, checking ENV')
     config = {
@@ -68,6 +70,7 @@ except:
             'device_list_interval': int(os.getenv('GOVEE_LIST_INTERVAL') or 3600),
         },
         'debug': True if os.getenv('GOVEE_DEBUG') else False,
+        'config_from': 'env',
         'timezone': os.getenv('TZ'),
     }
 

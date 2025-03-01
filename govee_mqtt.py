@@ -3,7 +3,9 @@ from datetime import date
 import goveeapi
 import json
 import paho.mqtt.client as mqtt
+import random
 import ssl
+import string
 import time
 from util import *
 from zoneinfo import ZoneInfo
@@ -20,6 +22,8 @@ class GoveeMqtt(object):
 
         self.mqtt_config = config['mqtt']
         self.govee_config = config['govee']
+
+        self.client_id = self.mqtt_config['prefix'] + '-' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
 
         self.version = config['version']
         self.device_update_interval = config['govee'].get('device_interval', 30)
@@ -120,7 +124,7 @@ class GoveeMqtt(object):
         if rc != 0:
             log(f'MQTT CONNECTION ISSUE ({rc})', level='ERROR', tz=self.timezone)
             exit()
-        log('MQTT CONNECTED', level='DEBUG', tz=self.timezone)
+        log(f'MQTT CONNECTED AS {self.client_id}', tz=self.timezone)
         client.subscribe(self.get_sub_topic())
 
     def mqtt_on_disconnect(self, client, userdata, flags, rc, properties):
@@ -158,7 +162,7 @@ class GoveeMqtt(object):
     def mqttc_create(self):
         self.mqttc = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-            client_id=self.service_slug,
+            client_id=self.client_id,
             clean_session=False,
         )
 
