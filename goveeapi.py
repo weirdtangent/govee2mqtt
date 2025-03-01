@@ -55,12 +55,10 @@ class GoveeAPI(object):
             time.sleep(10)
         except Exception as err:
             log(f'ERROR GETTING DEVICE LIST DATA {r.content}', level="ERROR", tz=self.timezone)
-            log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG', tz=self.timezone)
             return {}
 
-        #log(f'GOT DEVICE LIST: ({r.status_code}) {data}', level='DEBUG', tz=self.timezone)
+        return data['data'] if 'data'in data else {}
 
-        return data['data']
 
 
     def get_device(self, device_id, sku):
@@ -76,7 +74,6 @@ class GoveeAPI(object):
             }
         }
 
-        log(f'GETTING DEVICE FROM GOVEE: {json.dumps(body)}', level='DEBUG', tz=self.timezone)
         try:
             r = requests.post(DEVICE_URL, headers=headers, json=body)
             self.rate_limited = r.status_code == 429
@@ -85,24 +82,18 @@ class GoveeAPI(object):
                 return {}
             data = r.json()
         except RequestException as err:
-            log(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name} - {err=}', level='ERROR', tz=self.timezone)
+            log(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name__} - {err=}', level='ERROR', tz=self.timezone)
             time.sleep(10)
         except Exception as err:
             log(f'ERROR GETTING DEVICE DATA {r.content}', level="ERROR", tz=self.timezone)
-            log(f'REQUEST WAS: {json.dumps(body)}', level='DEBUG', tz=self.timezone)
             return {}
 
-        # log(f'GOT DEVICE: ({r.status_code}) {data}', level='DEBUG', tz=self.timezone)
-
-        device = data['payload']
-
         new_capabilities = {}
+        device = data['payload'] if 'payload' in data else {}
+
         if 'capabilities' in device:
             for capability in device['capabilities']:
                 new_capabilities[capability['instance']] = capability['state']['value']
-
-        if len(new_capabilities) == 0:
-            log(f'GOT DEVICE FROM GOVEE BUT NO ATTRIBUTES: {device=}', tz=self.timezone)
 
         return new_capabilities
 
@@ -121,7 +112,6 @@ class GoveeAPI(object):
         }
 
         headers = self.get_headers()
-        log(f'SENDING DEVICE CONTROL TO GOVEE: {json.dumps(body)}', level='DEBUG', tz=self.timezone)
         try:
             r = requests.post(COMMAND_URL, headers=headers, json=body)
             self.rate_limited = r.status_code == 429
@@ -135,5 +125,3 @@ class GoveeAPI(object):
         except Exception as err:
             log(f'ERROR SENDING DEVICE COMMAND {type(err).__name__} - {err=}', level='ERROR', tz=self.timezone)
             return {}
-
-        log(f'SENT COMMAND: ({r.status_code}) {body}', level='DEBUG', tz=self.timezone)

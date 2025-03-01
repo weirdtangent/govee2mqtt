@@ -7,8 +7,6 @@ import time
 from util import *
 import yaml
 
-timezone = 'UTC'
-
 # Helper functions and callbacks
 def read_file(file_name):
     with open(file_name, 'r') as file:
@@ -24,7 +22,7 @@ def read_version():
 
 # Let's go!
 version = read_version()
-log(f'Starting: govee2mqtt v{version}', tz=timezone)
+log(f'Starting: govee2mqtt v{version}')
 
 # cmd-line args
 argparser = argparse.ArgumentParser()
@@ -45,9 +43,9 @@ try:
         configpath += 'config.yaml'
     with open(configpath) as file:
         config = yaml.safe_load(file)
-    log(f'Reading config file {configpath}', tz=timezone)
+    log(f'Reading config file {configpath}')
 except:
-    log(f'config.yaml not found, checking ENV', tz=timezone)
+    log(f'config.yaml not found, checking ENV')
     config = {
         'mqtt': {
             'host': os.getenv('MQTT_HOST') or 'localhost',
@@ -55,12 +53,13 @@ except:
             'port': int(os.getenv('MQTT_PORT') or 1883),
             'username': os.getenv('MQTT_USERNAME'),
             'password': os.getenv('MQTT_PASSWORD'),  # can be None
-            'prefix': os.getenv('MQTT_PREFIX') or 'govee2mqtt',
-            'homeassistant': os.getenv('MQTT_HOMEASSISTANT') or 'homeassistant',
             'tls_enabled': os.getenv('MQTT_TLS_ENABLED') == 'true',
             'tls_ca_cert': os.getenv('MQTT_TLS_CA_CERT'),
             'tls_cert': os.getenv('MQTT_TLS_CERT'),
             'tls_key': os.getenv('MQTT_TLS_KEY'),
+            'prefix': os.getenv('MQTT_PREFIX') or 'govee2mqtt',
+            'homeassistant': os.getenv('MQTT_HOMEASSISTANT') == True,
+            'discovery_prefix': os.getenv('MQTT_DISCOVERY_PREFIX') or 'homeassistant',
         },
         'govee': {
             'api_key': os.getenv('GOVEE_API_KEY'),
@@ -77,12 +76,12 @@ config['configpath'] = os.path.dirname(configpath)
 
 # make sure we at least got the TWO required values
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
-    log('`govee.api_key` required in config file or in GOVEE_API_KEY env var', level='ERROR', tz=timezone)
-    exit()
+    log('`govee.api_key` required in config file or in GOVEE_API_KEY env var', level='ERROR')
+    exit(1)
 
 if not 'timezone' in config:
     log('`timezone` required in config file or in TZ env var', level='ERROR', tz=timezone)
-    exit()
+    exit(1)
 else:
     log(f'TIMEZONE set as {config["timezone"]}', tz=config["timezone"])
 
