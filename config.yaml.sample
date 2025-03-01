@@ -4,6 +4,7 @@ mqtt:
   username: ""
   password: ""
   prefix: govee2mqtt
+  homeassistant: True
   discovery_prefix: homeassistant
 
 govee:
@@ -13,5 +14,4 @@ govee:
   device_list_interval: 300
 
 debug: False
-homeassistant: True
 timezone: America/New_York

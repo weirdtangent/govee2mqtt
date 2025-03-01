@@ -77,6 +77,8 @@ class GoveeMqtt(object):
         if self.mqttc is not None and self.mqttc.is_connected():
             for device_id in self.devices:
                 self.devices[device_id]['availability'] = 'offline'
+                if 'state' not in self.devices[device_id]:
+                    self.devices[device_id]['state'] = {}
                 self.publish_device(device_id)
 
             self.mqttc.disconnect()
@@ -104,9 +106,13 @@ class GoveeMqtt(object):
 
     # MQTT Topics
     def get_sub_topic(self):
+        if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
+            return f"{self.mqtt_config['prefix']}/+/set"
         return f"{self.mqtt_config['discovery_prefix']}/device/+/set"
 
     def get_discovery_topic(self, device_id, topic):
+        if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
+            return f"{self.mqtt_config['prefix']}/govee-{device_id.replace(':','')}/{topic}"
         return f"{self.mqtt_config['discovery_prefix']}/device/govee-{device_id.replace(':','')}/{topic}"
 
     # MQTT Functions
@@ -434,9 +440,6 @@ class GoveeMqtt(object):
         return caps
 
     def send_device_discovery(self, device_id):
-        if 'homeassistant' not in self.mqtt_config:
-            return
-
         device = self.devices[device_id]
         self.mqttc.publish(self.get_discovery_topic(device_id, 'config'), json.dumps(device), retain=True)
 
