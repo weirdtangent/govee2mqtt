@@ -15,4 +15,3 @@ services:
       GOVEE_DEVICE_INTERVAL: 30
       GOVEE_DEVICE_BOOST_INTERVAL: 5
       GOVEE_LIST_INTERVAL: 300
-    command: python3 -u app.py -c /config

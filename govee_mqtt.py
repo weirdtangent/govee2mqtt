@@ -4,6 +4,7 @@ import goveeapi
 import json
 import paho.mqtt.client as mqtt
 import random
+import signal
 import ssl
 import string
 import time
@@ -12,7 +13,6 @@ from zoneinfo import ZoneInfo
 
 class GoveeMqtt(object):
     def __init__(self, config):
-        self._interrupted = False
         self.running = False
 
         self.timezone = config['timezone']
@@ -40,31 +40,18 @@ class GoveeMqtt(object):
 
         self.data_file = config['configpath'] + '/govee2mqtt.dat'
 
-    async def __aenter__(self):
-        # Save signal handlers
-        self.original_sigint_handler = signal.getsignal(signal.SIGINT)
-        self.original_sigterm_handler = signal.getsignal(signal.SIGTERM)
+    def log(self, msg, level='INFO'):
+        app_log(msg, level=level, tz=self.timezone, hide_ts=self.hide_ts)
 
-        signal.signal(signal.SIGINT, self._handle_signal)
-        signal.signal(signal.SIGTERM, self._handle_signal)
-        return self
+    async def _handle_sigterm(self, loop, tasks):
+        self.running = False
+        self.log('SIGTERM received, waiting for tasks to cancel...', level='WARN')
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        # Restore original signal handlers
-        signal.signal(signal.SIGINT, self.original_sigint_handler)
-        signal.signal(signal.SIGTERM, self.original_sigterm_handler)
+        for t in tasks:
+            t.cancel()
 
-        if self._interrupted:
-            log("Exiting due to signal interrupt", tz=self.timezone, hide_ts=self.hide_ts)
-        else:
-            log("Exiting normally", tz=self.timezone, hide_ts=self.hide_ts)
-
-    def _handle_signal(self, signum, frame):
-        self._interrupted = True
-        log(f"Signal {signum} received", tz=self.timezone, hide_ts=self.hide_ts)
-
-    def _handle_interrupt(self):
-        sys.exit()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        loop.stop()
 
     def __enter__(self):
         self.mqttc_create()
@@ -76,7 +63,7 @@ class GoveeMqtt(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.running = False
-        log('Exiting gracefully, saving state and alerting MQTT server', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log('Exiting gracefully')
 
         self.save_state()
 
@@ -88,8 +75,9 @@ class GoveeMqtt(object):
                 self.publish_device(device_id)
 
             self.mqttc.disconnect()
+            self.log('Closed connection to MQTT')
         else:
-            log('Lost connection to MQTT', tz=self.timezone, hide_ts=self.hide_ts)
+            self.log('Lost connection to MQTT')
 
     def save_state(self):
         try:
@@ -99,8 +87,9 @@ class GoveeMqtt(object):
             }
             with open(self.data_file, 'w') as file:
                 json.dump(state, file, indent=4)
+            self.log(f'Saved state to {self.data_file}')
         except Exception as err:
-            log(f'FAILED TO SAVE STATE: {type(err).__name__} - {err=}', level="ERROR", tz=self.timezone, hide_ts=self.hide_ts)
+            self.log(f'FAILED TO SAVE STATE: {type(err).__name__} - {err=}', level="ERROR")
 
     def restore_state(self):
         try:
@@ -108,7 +97,7 @@ class GoveeMqtt(object):
                 state = json.loads(file.read())
                 self.goveec.restore_state(state['api_calls'], state['last_call_date'])
         except Exception as err:
-            log(f'UNABLE TO RESTORE STATE: {type(err).__name__} - {err}', level='ERROR', tz=self.timezone, hide_ts=self.hide_ts)
+            self.log(f'UNABLE TO RESTORE STATE: {type(err).__name__} - {err}', level='ERROR')
 
     # MQTT Topics
     def get_slug(self, device_id, type):
@@ -127,13 +116,13 @@ class GoveeMqtt(object):
     # MQTT Functions
     def mqtt_on_connect(self, client, userdata, flags, rc, properties):
         if rc != 0:
-            log(f'MQTT CONNECTION ISSUE ({rc})', level='ERROR', tz=self.timezone, hide_ts=self.hide_ts)
+            self.log(f'MQTT CONNECTION ISSUE ({rc})', level='ERROR')
             exit()
-        log(f'MQTT CONNECTED AS {self.client_id}', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log(f'MQTT CONNECTED AS {self.client_id}')
         client.subscribe(self.get_sub_topic())
 
     def mqtt_on_disconnect(self, client, userdata, flags, rc, properties):
-        log('MQTT DISCONNECTED', level='DEBUG', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log('MQTT DISCONNECTED', level='DEBUG')
         if time.time() > self.mqtt_connect_time + 10:
             self.mqttc_create()
         else:
@@ -146,7 +135,7 @@ class GoveeMqtt(object):
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_WARNING:
             level = 'WARN'
         if level:
-            log(f'MQTT LOG: {msg}', level=level, tz=self.timezone, hide_ts=self.hide_ts)
+            self.log(f'MQTT LOG: {msg}', level=level)
 
     def mqtt_on_message(self, client, userdata, msg):
         if not msg or not msg.payload:
@@ -156,12 +145,12 @@ class GoveeMqtt(object):
         mac = topic[-20:-4] # strip mac address out of homeassistant/device/govee-9C3BCA3237383387/set
         device_id = ':'.join([mac[i:i+2] for i in range (0, len(mac), 2)])
 
-        log(f'Got MQTT message for {device_id} - {payload}', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log(f'Got MQTT message for {device_id} - {payload}')
         self.send_command(device_id, payload)
 
     def mqtt_on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         rc_list = map(lambda x: x.getName(), reason_code_list)
-        log(f'MQTT SUBSCRIBED: reason_codes - {'; '.join(rc_list)}', level='DEBUG', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log(f'MQTT SUBSCRIBED: reason_codes - {'; '.join(rc_list)}', level='DEBUG')
 
     # MQTT Helpers
     def mqttc_create(self):
@@ -202,7 +191,7 @@ class GoveeMqtt(object):
             self.mqtt_connect_time = time.time()
             self.mqttc.loop_start()
         except ConnectionError as error:
-            log(f'COULD NOT CONNECT TO MQTT {self.mqtt_config.get("host")}: {error}', level='ERROR', tz=self.timezone, hide_ts=self.hide_ts)
+            self.log(f'COULD NOT CONNECT TO MQTT {self.mqtt_config.get("host")}: {error}', level='ERROR')
             exit(1)
 
     # Service Device
@@ -283,7 +272,7 @@ class GoveeMqtt(object):
 
     # Govee Helpers
     def refresh_device_list(self):
-        log(f'Refreshing device list from Govee (every {self.device_list_update_interval} sec)', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log(f'Refreshing device list from Govee (every {self.device_list_update_interval} sec)')
 
         first_time_through = True if len(self.devices) == 0 else False
         if first_time_through:
@@ -320,13 +309,13 @@ class GoveeMqtt(object):
                 self.add_capabilities_to_device(device_id, device['capabilities'])
                 
                 if first:
-                    log(f'Adding new device: "{device['deviceName']}" [Govee {device["sku"]}] ({device_id})', tz=self.timezone, hide_ts=self.hide_ts)
+                    self.log(f'Adding new device: "{device['deviceName']}" [Govee {device["sku"]}] ({device_id})')
                     self.send_device_discovery(device_id)
                 else:
-                    log(f'Updated device: {self.devices[device_id]['device']['name']}', level='DEBUG', tz=self.timezone, hide_ts=self.hide_ts)
+                    self.log(f'Updated device: {self.devices[device_id]['device']['name']}', level='DEBUG')
             else:
                 if first_time_through:
-                    log(f'Saw device, but not supported yet: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})', tz=self.timezone, hide_ts=self.hide_ts)
+                    self.log(f'Saw device, but not supported yet: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
 
     # convert Govee capabilities to MQTT attributes
     def add_capabilities_to_device(self, device_id, capabilities):
@@ -475,23 +464,22 @@ class GoveeMqtt(object):
         self.publish_device(device_id)
 
     def refresh_all_devices(self):
-        log(f'Refreshing all devices from Govee (every {self.device_update_interval} sec)', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log(f'Refreshing all devices from Govee (every {self.device_update_interval} sec)')
 
         # refresh devices starting with the device updated the longest time ago
         for each in sorted(self.devices.items(), key=lambda dt: (dt is None, dt)):
+            # break loop if we are ending
+            if not self.running:
+                break
             device_id = each[0]
 
             # all just to format the log record
             last_updated = self.devices[device_id]['state']['last_update'] if 'last_update' in self.devices[device_id]['state'] else 'server started'
             last_updated = last_updated[:19].replace('T',' ')
 
-            log(f'Refreshing device "{self.devices[device_id]['device']['name']} ({device_id})", not updated since: {last_updated}', hide_ts=self.hide_ts)
+            self.log(f'Refreshing device "{self.devices[device_id]['device']['name']} ({device_id})", not updated since: {last_updated}')
             if device_id not in self.boosted:
                self.refresh_device(device_id)
-
-    def sort_by_lastupdated(self, device):
-        log(device, hide_ts=self.hide_ts)
-        return (device.state.last_update is None, device.state.last_update)
 
     def refresh_boosted_devices(self):
         if len(self.boosted) > 0:
@@ -529,13 +517,13 @@ class GoveeMqtt(object):
         if 'color' in caps and 'turn' in caps:
             del caps['turn']
 
-        log(f'COMMAND {device_id} = {caps}', level='DEBUG', tz=self.timezone, hide_ts=self.hide_ts)
+        self.log(f'COMMAND {device_id} = {caps}', level='DEBUG')
 
         first = True
         for key in caps:
             if not first:
                 time.sleep(1)
-            log(f'CMD DEVICE {self.devices[device_id]['device']['name']} ({device_id}) {key} = {caps[key]}', level='DEBUG', tz=self.timezone, hide_ts=self.hide_ts)
+            self.log(f'CMD DEVICE {self.devices[device_id]['device']['name']} ({device_id}) {key} = {caps[key]}', level='DEBUG')
             self.goveec.send_command(device_id, sku, caps[key]['type'], caps[key]['instance'], caps[key]['value'])
             self.update_service_device()
             first = False
@@ -546,27 +534,44 @@ class GoveeMqtt(object):
 
     # main loop
     async def main_loop(self):
-        try:
-            await asyncio.gather(
-                self.device_list_loop(),
-                self.device_loop(),
-                self.device_boosted_loop(),
+        loop = asyncio.get_running_loop()
+        tasks = [
+                asyncio.create_task(self.device_list_loop()),
+                asyncio.create_task(self.device_loop()),
+                asyncio.create_task(self.device_boosted_loop()),
+        ]
+
+        for signame in {'SIGINT','SIGTERM'}:
+            loop.add_signal_handler(
+                getattr(signal, signame),
+                lambda: asyncio.create_task(self._handle_sigterm(loop, tasks))
             )
-        except asyncio.exceptions.CancelledError:
-            self.running = False
+
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception:
+            pass
 
     async def device_list_loop(self):
         while self.running == True:
-            self.refresh_device_list()
-            await asyncio.sleep(self.device_list_update_interval)
-
+            try:
+                self.refresh_device_list()
+                await asyncio.sleep(self.device_list_update_interval)
+            except Exception:
+                pass
 
     async def device_loop(self):
         while self.running == True:
-            self.refresh_all_devices()
-            await asyncio.sleep(self.device_update_interval)
+            try:
+                self.refresh_all_devices()
+                await asyncio.sleep(self.device_update_interval)
+            except Exception:
+                pass
 
     async def device_boosted_loop(self):
         while self.running == True:
-            self.refresh_boosted_devices()
-            await asyncio.sleep(self.device_update_boosted_interval)
+            try:
+                self.refresh_boosted_devices()
+                await asyncio.sleep(self.device_update_boosted_interval)
+            except Exception:
+                pass

@@ -31,4 +31,5 @@ RUN chmod 0664 /config/*
 
 USER appuser
 
-ENTRYPOINT [ "python", "-u", "./app.py", "-c", "/config"]
+ENTRYPOINT [ "python", "-u", "./app.py" ]
+CMD [ "-c", "/config" ]
