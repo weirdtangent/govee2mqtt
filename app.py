@@ -70,12 +70,15 @@ except:
             'device_list_interval': int(os.getenv('GOVEE_LIST_INTERVAL') or 3600),
         },
         'debug': True if os.getenv('GOVEE_DEBUG') else False,
+        'hide_ts': True if os.getenv('HIDE_TS') else False,
         'config_from': 'env',
         'timezone': os.getenv('TZ'),
     }
 
 config['version'] = version
 config['configpath'] = os.path.dirname(configpath)
+if not 'hide_ts' in config:
+    config['hide_ts'] = False
 
 # make sure we at least got the TWO required values
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
