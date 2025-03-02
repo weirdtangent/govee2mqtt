@@ -1,6 +1,18 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+.Python
+build/
+dist/
+lib/
+include/
+
+# Environments
+venv/
+
+# Local testing
 config.yaml
-__pycache__
-venv
-lib
-pyvenv.cfg
 govee2mqtt.dat
+

@@ -1,10 +1,13 @@
 # weirdtangent/govee2mqtt
 
+Expose multiple Govee devices and events to an MQTT broker, primarily
+designed to work with Home Assistant. A WIP, since I'm new to Python.
+
 Forked from [dlashua/govee2mqtt](https://github.com/dlashua/govee2mqtt)
 
 A few notes:
 * Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip.
-* If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests (currently 10,000/day)
+* If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests (currently 10,000/day).
 * Support is there for power on/off, brightness, and rgb_color.
 
 # Getting Started
@@ -30,11 +33,11 @@ It supports the following environment variables:
 -   `MQTT_USERNAME: admin`
 -   `MQTT_PASSWORD: password`
 -   `MQTT_PREFIX: govee`
--   `MQTT_HOMEASSISTANT: true` (or it won't publish discovery devices)
+-   `MQTT_HOMEASSISTANT: true` (with False, it won't publish HA discovery devices)
 -   `MQTT_DISCOVERY_PREFIX: homeassistant`
 
 -   `GOVEE_API_KEY: [your_api_key]` (see https://developer.govee.com/reference/apply-you-govee-api-key)
--   `GOVEE_DEVICE_INTERVAL: 30` (higher if 10+ Govee devices)
+-   `GOVEE_DEVICE_INTERVAL: 30` (estimate 30 sec per 10 Govee devices, so set to 60 if you have 10-20 devices, etc)
 -   `GOVEE_DEVICE_BOOST_INTERVAL: 5`
 -   `GOVEE_LIST_INTERVAL: 300`
 

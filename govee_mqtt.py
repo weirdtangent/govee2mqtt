@@ -99,27 +99,14 @@ class GoveeMqtt(object):
         except Exception as err:
             self.log(f'UNABLE TO RESTORE STATE: {type(err).__name__} - {err}', level='ERROR')
 
-    # MQTT Topics
-    def get_slug(self, device_id, type):
-        return f"govee_{device_id.replace(':','')}_{type}"
-
-    def get_sub_topic(self):
-        if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
-            return f"{self.mqtt_config['prefix']}/+/set"
-        return f"{self.mqtt_config['discovery_prefix']}/device/+/set"
-
-    def get_discovery_topic(self, device_id, topic):
-        if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
-            return f"{self.mqtt_config['prefix']}/govee-{device_id.replace(':','')}/{topic}"
-        return f"{self.mqtt_config['discovery_prefix']}/device/govee-{device_id.replace(':','')}/{topic}"
-
     # MQTT Functions
     def mqtt_on_connect(self, client, userdata, flags, rc, properties):
         if rc != 0:
             self.log(f'MQTT CONNECTION ISSUE ({rc})', level='ERROR')
             exit()
         self.log(f'MQTT CONNECTED AS {self.client_id}')
-        client.subscribe(self.get_sub_topic())
+        client.subscribe(self.get_device_sub_topic())
+        client.subscribe(self.get_attribute_sub_topic())
 
     def mqtt_on_disconnect(self, client, userdata, flags, rc, properties):
         self.log('MQTT DISCONNECTED', level='DEBUG')
@@ -142,11 +129,32 @@ class GoveeMqtt(object):
             return
         topic = msg.topic
         payload = json.loads(msg.payload)
-        mac = topic[-20:-4] # strip mac address out of homeassistant/device/govee-9C3BCA3237383387/set
-        device_id = ':'.join([mac[i:i+2] for i in range (0, len(mac), 2)])
 
-        self.log(f'Got MQTT message for {device_id} - {payload}')
-        self.send_command(device_id, payload)
+        self.log(f'Got MQTT message for {topic} - {payload}')
+
+        # we might get:
+        # device/component/set
+        # device/component/set/attribute
+        # homeassistant/device/component/set
+        # homeassistant/device/component/set/attribute
+        components = topic.split('/')
+
+        # handle this message if it's for us, otherwise pass along to govee API
+        if components[-2] == self.get_component_slug('service'):
+            self.handle_service_message(None, payload)
+        elif components[-3] == self.get_component_slug('service'):
+            self.handle_service_message(components[-1], payload)
+        else:
+            if components[-1] == 'set':
+                mac = components[-2][-16:]
+            elif components[-2] == 'set':
+                mac = components[-3][-16:]
+            else:
+                self.log(f'UNKNOWN MQTT MESSAGE STRUCTURE: {topic}', level='ERROR')
+                return
+            # ok, lets format the device_id and send to govee
+            device_id = ':'.join([mac[i:i+2] for i in range (0, len(mac), 2)])
+            self.send_command(device_id, payload)
 
     def mqtt_on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         rc_list = map(lambda x: x.getName(), reason_code_list)
@@ -194,17 +202,56 @@ class GoveeMqtt(object):
             self.log(f'COULD NOT CONNECT TO MQTT {self.mqtt_config.get("host")}: {error}', level='ERROR')
             exit(1)
 
+    # MQTT Topics
+    def get_slug(self, device_id, type):
+        return f"govee_{device_id.replace(':','')}_{type}"
+
+    def get_device_sub_topic(self):
+        if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
+            return f"{self.mqtt_config['prefix']}/+/set"
+        return f"{self.mqtt_config['discovery_prefix']}/device/+/set"
+
+    def get_attribute_sub_topic(self):
+        if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
+            return f"{self.mqtt_config['prefix']}/+/set"
+        return f"{self.mqtt_config['discovery_prefix']}/device/+/set/+"
+
+    def get_component_slug(self, device_id):
+        return f"govee-{device_id.replace(':','')}"
+
+    def get_command_topic(self, device_id, attribute_name):
+        if attribute_name:
+            if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
+                return f"{self.mqtt_config['prefix']}/{self.get_component_slug(device_id)}/set/{attribute_name}"
+            return f"{self.mqtt_config['discovery_prefix']}/device/{self.get_component_slug(device_id)}/set/{attribute_name}"
+        else:
+            if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
+                return f"{self.mqtt_config['prefix']}/{self.get_component_slug(device_id)}/set"
+            return f"{self.mqtt_config['discovery_prefix']}/device/{self.get_component_slug(device_id)}/set"
+
+    def get_discovery_topic(self, device_id, topic):
+        if 'homeassistant' not in self.mqtt_config or self.mqtt_config['homeassistant'] == False:
+            return f"{self.mqtt_config['prefix']}/{self.get_component_slug(device_id)}/{topic}"
+        return f"{self.mqtt_config['discovery_prefix']}/device/{self.get_component_slug(device_id)}/{topic}"
+
     # Service Device
     def publish_service_device(self):
+        state_topic = self.get_discovery_topic('service', 'state')
+        command_topic = self.get_discovery_topic('service', 'set')
+        availability_topic = self.get_discovery_topic('service', 'availability')
+
         self.mqttc.publish(
             self.get_discovery_topic('service','config'),
             json.dumps({
                 'qos': 0,
-                'state_topic': self.get_discovery_topic('service', 'state'),
-                'availability_topic': self.get_discovery_topic('service', 'availability'),
+                'state_topic': state_topic,
+                'availability_topic': availability_topic,
                 'device': {
                     'name': self.service_name,
                     'ids': self.service_slug,
+                    'suggested_area': 'House',
+                    'manufacturer': 'weirdTangent',
+                    'model': self.version,
                 },
                 'origin': {
                     'name': self.service_name,
@@ -219,8 +266,8 @@ class GoveeMqtt(object):
                         'payload_on': 'online',
                         'payload_off': 'offline',
                         'icon': 'mdi:language-python',
-                        'state_topic': self.get_discovery_topic('service', 'state'), 
-                        'availability_topic': self.get_discovery_topic('service', 'availability'),
+                        'state_topic': state_topic,
+                        'availability_topic': availability_topic,
                         'value_template': '{{ value_json.status }}',
                         'unique_id': 'govee_service_status',
                     },
@@ -229,8 +276,8 @@ class GoveeMqtt(object):
                         'platform': 'sensor',
                         'schema': 'json',
                         'icon': 'mdi:numeric',
-                        'state_topic': self.get_discovery_topic('service', 'state'), 
-                        'availability_topic': self.get_discovery_topic('service', 'availability'),
+                        'state_topic': state_topic,
+                        'availability_topic': availability_topic,
                         'value_template': '{{ value_json.api_calls }}',
                         'unique_id': 'govee_service_api_calls',
                     },
@@ -241,15 +288,55 @@ class GoveeMqtt(object):
                         'payload_on': 'yes',
                         'payload_off': 'no',
                         'icon': 'mdi:car-speed-limiter',
-                        'state_topic': self.get_discovery_topic('service', 'state'),
-                        'availability_topic': self.get_discovery_topic('service', 'availability'),
+                        'state_topic': state_topic,
+                        'availability_topic': availability_topic,
                         'value_template': '{{ value_json.rate_limited }}',
                         'unique_id': 'govee_service_rate_limited',
+                    },
+                    self.service_slug + '_device_refresh': {
+                        'name': 'Device Refresh Interval',
+                        'platform': 'number',
+                        'schema': 'json',
+                        'icon': 'mdi:numeric',
+                        'min': 10,
+                        'max': 3600,
+                        'state_topic': state_topic,
+                        'command_topic': self.get_command_topic('service', 'device_refresh'),
+                        'availability_topic': availability_topic,
+                        'value_template': '{{ value_json.device_refresh }}',
+                        'unique_id': 'govee_service_device_refresh',
+                    },
+                    self.service_slug + '_device_list_refresh': {
+                        'name': 'Device List Refresh Interval',
+                        'platform': 'number',
+                        'schema': 'json',
+                        'icon': 'mdi:numeric',
+                        'min': 10,
+                        'max': 3600,
+                        'state_topic': state_topic,
+                        'command_topic': self.get_command_topic('service', 'device_list_refresh'),
+                        'availability_topic': availability_topic,
+                        'value_template': '{{ value_json.device_list_refresh }}',
+                        'unique_id': 'govee_service_device_list_refresh',
+                    },
+                    self.service_slug + '_device_boost_refresh': {
+                        'name': 'Device Boost Refresh Interval',
+                        'platform': 'number',
+                        'schema': 'json',
+                        'icon': 'mdi:numeric',
+                        'min': 1,
+                        'max': 30,
+                        'state_topic': state_topic,
+                        'command_topic': self.get_command_topic('service', 'device_boost_refresh'),
+                        'availability_topic': availability_topic,
+                        'value_template': '{{ value_json.device_boost_refresh }}',
+                        'unique_id': 'govee_service_device_boost_refresh',
                     },
                 },
             }),
             retain=True
         )
+        self.update_service_device()
 
     def update_service_device(self):
         if self.goveec.last_call_date == str(datetime.now(tz=ZoneInfo(self.timezone)).date()):
@@ -265,6 +352,9 @@ class GoveeMqtt(object):
                 'api_calls': self.goveec.api_calls,
                 'last_call_date': self.goveec.last_call_date,
                 'rate_limited': 'yes' if self.goveec.rate_limited == True else 'no',
+                'device_refresh': self.device_update_interval,
+                'device_list_refresh': self.device_list_update_interval,
+                'device_boost_refresh': self.device_update_boosted_interval,
             }),
             retain=True
         )
@@ -501,8 +591,10 @@ class GoveeMqtt(object):
             return
         data = self.goveec.get_device(device_id, self.devices[device_id]['device']['model'])
         self.update_service_device()
-        self.update_capabilities_on_device(device_id, data)
-        self.publish_device(device_id)
+        # no need to update MQTT if nothing changed
+        if len(data) > 0:
+            self.update_capabilities_on_device(device_id, data)
+            self.publish_device(device_id)
 
     def publish_device(self, device_id):
         self.mqttc.publish(
@@ -515,6 +607,23 @@ class GoveeMqtt(object):
             self.devices[device_id]['availability'],
             retain=True
         )
+
+    def handle_service_message(self, attribute, message):
+        match attribute:
+            case 'device_refresh':
+                self.device_update_interval = message
+                self.log(f'Updated UPDATE_INTERVAL to be {message}')
+            case 'device_list_refresh':
+                self.device_list_update_interval = message
+                self.log(f'Updated LIST_UPDATE_INTERVAL to be {message}')
+            case 'device_boost_refresh':
+                self.device_update_boosted_interval = message
+                self.log(f'Updated UPDATE_BOOSTED_INTERVAL to be {message}')
+            case _:
+                self.log(f'IGNORED UNRECOGNIZED govee-service MESSAGE for {attribute}: {message}')
+                return
+
+        self.update_service_device()
 
     def send_command(self, device_id, data):
         caps = self.convert_attributes_to_capabilities(data)
