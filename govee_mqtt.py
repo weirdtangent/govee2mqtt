@@ -75,7 +75,6 @@ class GoveeMqtt(object):
                 self.publish_device(device_id)
 
             self.mqttc.disconnect()
-            self.log('Closed connection to MQTT')
         else:
             self.log('Lost connection to MQTT')
 
@@ -104,12 +103,12 @@ class GoveeMqtt(object):
         if rc != 0:
             self.log(f'MQTT CONNECTION ISSUE ({rc})', level='ERROR')
             exit()
-        self.log(f'MQTT CONNECTED AS {self.client_id}')
+        self.log(f'MQTT connected as {self.client_id}')
         client.subscribe(self.get_device_sub_topic())
         client.subscribe(self.get_attribute_sub_topic())
 
     def mqtt_on_disconnect(self, client, userdata, flags, rc, properties):
-        self.log('MQTT DISCONNECTED', level='DEBUG')
+        self.log('MQTT connection closed')
         if time.time() > self.mqtt_connect_time + 10:
             self.mqttc_create()
         else:
