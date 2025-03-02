@@ -1,5 +1,9 @@
 FROM python:3.14.0a5-alpine3.21
 
+RUN python -m venv /usr/src/app
+# Enable venv
+ENV PATH="/usr/src/app/venv/bin:$PATH"
+
 RUN python3 -m ensurepip
 
 # Upgrade pip and setuptools
@@ -12,9 +16,9 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt ./
 
-RUN python -m venv /usr/src/app
 # Enable venv
 ENV PATH="/usr/src/app/venv/bin:$PATH"
+
 RUN pip3 install --no-cache-dir --upgrade -r requirements.txt
 
 COPY . .

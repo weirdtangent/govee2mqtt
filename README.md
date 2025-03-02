@@ -58,3 +58,5 @@ page where you can donate a small sum. Please do not feel obligated to donate in
 useful to myself and others, not for any financial gain - but any token of appreciation is much appreciated 🙂
 
 <a href="https://buymeacoffee.com/weirdtangent">Buy Me A Coffee</a>
+
+<img src="https://github.com/weirdtangent/govee2mqtt/actions/workflows/deploy.yaml/badge.svg" />
