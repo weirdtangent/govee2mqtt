@@ -29,5 +29,5 @@ jobs:
         provenance: true
         sbom: true
         platforms: linux/arm64,linux/amd64
-        tags: user/app:latest
+        tags: weirdtangent/govee2mqtt:latest
         push: true

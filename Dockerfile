@@ -11,9 +11,11 @@ RUN apk add --no-cache gcc libffi-dev musl-dev
 WORKDIR /usr/src/app
 
 COPY requirements.txt ./
-RUN pip3 install --no-cache-dir --upgrade -r requirements.txt
 
-RUN pip3 check
+RUN python -m venv /usr/src/app
+# Enable venv
+ENV PATH="/usr/src/app/venv/bin:$PATH"
+RUN pip3 install --no-cache-dir --upgrade -r requirements.txt
 
 COPY . .
 
