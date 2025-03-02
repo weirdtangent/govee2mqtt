@@ -28,9 +28,7 @@ jobs:
       with:
         provenance: true
         sbom: true
-        platforms:
-          - linux/arm64
-            linux/amd64
+        platforms: linux/arm64,linux/amd64
         tags: user/app:latest
         push: true
         context: .
