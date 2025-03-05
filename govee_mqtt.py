@@ -569,6 +569,7 @@ class GoveeMqtt(object):
     def refresh_boosted_devices(self):
         if len(self.boosted) > 0:
             for device_id in self.boosted:
+                self.logger.info(f'Refreshing boosted device from Govee ({device_id})')
                 self.refresh_device(device_id)
 
     def refresh_device(self, device_id):
@@ -576,14 +577,14 @@ class GoveeMqtt(object):
         self.update_service_device()
 
         # no need to update MQTT if nothing changed
-        # and only remove from boosted list once we DO get an update
         if len(data) > 0:
             self.update_capabilities_on_device(device_id, data)
             self.publish_device(device_id)
+            # only now remove from boosted list (if there), since we got a change
             if device_id in self.boosted:
                 del self.boosted[device_id]
         else:
-            self.logger.debug(f'No updates this time for ({device_id})')
+            self.logger.debug(f'No updates yet for ({device_id})')
 
     def publish_device(self, device_id):
         self.mqttc.publish(
