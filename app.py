@@ -8,23 +8,10 @@ import time
 from util import *
 import yaml
 
-# Helper functions and callbacks
-def read_file(file_name):
-    with open(file_name, 'r') as file:
-        data = file.read().replace('\n', '')
-
-    return data
-
-def read_version():
-    if os.path.isfile('./VERSION'):
-        return read_file('./VERSION')
-
-    return read_file('../VERSION')
-
 # Let's go!
 version = read_version()
 
-# cmd-line args
+# Cmd-line args
 argparser = argparse.ArgumentParser()
 argparser.add_argument(
     '-c',
@@ -34,7 +21,7 @@ argparser.add_argument(
 )
 args = argparser.parse_args()
 
-# load config file
+# Setup config from yaml file or env
 configpath = args.config or '/config'
 try:
     if not configpath.endswith('.yaml'):
@@ -43,8 +30,8 @@ try:
         configfile = configpath + 'config.yaml'
     with open(configfile) as file:
         config = yaml.safe_load(file)
-    config['config_from'] = 'file'
     config['config_path'] = configpath
+    config['config_from'] = 'file'
 except:
     config = {
         'mqtt': {
@@ -69,37 +56,29 @@ except:
         },
         'debug': True if os.getenv('GOVEE_DEBUG') else False,
         'hide_ts': True if os.getenv('HIDE_TS') else False,
-        'config_from': 'env',
         'timezone': os.getenv('TZ'),
+        'config_from': 'env',
     }
+config['version'] = version
+config['configpath'] = os.path.dirname(configpath)
+if 'timezone' not in config: config['timezone'] = 'UTC'
+if 'debug' not in config: config['debug'] = False
 
+# Setup logging
 logging.basicConfig(
     format = '%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s' if config['hide_ts'] == False else '[%(levelname)s] %(name)s: %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    level=logging.INFO
+    level=logging.INFO if config['debug'] == False else logging.DEBUG
 )
 logger = logging.getLogger(__name__)
 logger.info(f'Starting: govee2mqtt v{version}')
 logger.info(f'Config loaded from {config["config_from"]}')
 
-config['version'] = version
-config['configpath'] = os.path.dirname(configpath)
-if not 'hide_ts' in config:
-    config['hide_ts'] = False
-
-# make sure we at least got the TWO required values
+# Check for required config properties
 if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
     logger.error('`govee.api_key` required in config file or in GOVEE_API_KEY env var')
     exit(1)
 
-if not 'timezone' in config:
-    logger.error('`timezone` required in config file or in TZ env var')
-    exit(1)
-else:
-    logger.info(f'TIMEZONE set as {config["timezone"]}')
-
-if config['debug']:
-    logger.setLevel(logging.DEBUG)
-
+# Go!
 with GoveeMqtt(config) as mqtt:
     asyncio.run(mqtt.main_loop())

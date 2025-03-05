@@ -17,40 +17,26 @@ class GoveeMqtt(object):
         self.running = False
         self.logger = logging.getLogger(__name__)
 
-        self.timezone = config['timezone']
-
         self.mqttc = None
         self.mqtt_connect_time = None
 
         self.config = config
         self.mqtt_config = config['mqtt']
         self.govee_config = config['govee']
+        self.timezone = config['timezone']
+        self.version = config['version']
+        self.data_file = config['configpath'] + 'govee2mqtt.dat'
+
+        self.device_interval = config['govee'].get('device_interval', 30)
+        self.device_boost_interval = config['govee'].get('device_boost_interval', 5)
+        self.device_list_interval = config['govee'].get('device_list_interval', 300)
 
         self.client_id = self.mqtt_config['prefix'] + '-' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-
-        self.version = config['version']
-        self.hide_ts = config['hide_ts'] or False
-        self.device_update_interval = config['govee'].get('device_interval', 30)
-        self.device_update_boosted_interval = config['govee'].get('device_boost_interval', 5)
-        self.device_list_update_interval = config['govee'].get('device_list_interval', 300)
-
         self.service_name = self.mqtt_config['prefix'] + ' service'
         self.service_slug = self.mqtt_config['prefix'] + '-service'
 
         self.devices = {}
         self.boosted = []
-
-        self.data_file = config['configpath'] + '/govee2mqtt.dat'
-
-    async def _handle_sigterm(self, loop, tasks):
-        self.running = False
-        self.logger.warn('SIGTERM received, waiting for tasks to cancel...')
-
-        for t in tasks:
-            t.cancel()
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-        loop.stop()
 
     def __enter__(self):
         self.mqttc_create()
@@ -93,7 +79,7 @@ class GoveeMqtt(object):
         try:
             with open(self.data_file, 'r') as file:
                 state = json.loads(file.read())
-                self.goveec.restore_state(state['api_calls'], state['last_call_date'])
+                self.goveec.restore_state_values(state['api_calls'], state['last_call_date'])
         except Exception as err:
             self.logger.error(f'UNABLE TO RESTORE STATE: {type(err).__name__} - {err}')
 
@@ -333,17 +319,18 @@ class GoveeMqtt(object):
                     },
                 },
             }),
+            qos=self.mqtt_config['qos'],
             retain=True
         )
         self.update_service_device()
 
     def update_service_device(self):
-        if self.goveec.last_call_date == str(datetime.now(tz=ZoneInfo(self.timezone)).date()):
-            self.goveec.increase_api_calls()
-        else:
-            self.goveec.reset_api_call_count()
-
-        self.mqttc.publish(self.get_discovery_topic('service','availability'), 'online', retain=True)
+        self.mqttc.publish(
+            self.get_discovery_topic('service','availability'),
+            'online',
+            qos=self.mqtt_config['qos'],
+            retain=True
+        )
         self.mqttc.publish(
             self.get_discovery_topic('service','state'),
             json.dumps({
@@ -351,17 +338,18 @@ class GoveeMqtt(object):
                 'api_calls': self.goveec.api_calls,
                 'last_call_date': self.goveec.last_call_date,
                 'rate_limited': 'yes' if self.goveec.rate_limited == True else 'no',
-                'device_refresh': self.device_update_interval,
-                'device_list_refresh': self.device_list_update_interval,
-                'device_boost_refresh': self.device_update_boosted_interval,
+                'device_refresh': self.device_interval,
+                'device_list_refresh': self.device_list_interval,
+                'device_boost_refresh': self.device_boost_interval,
             }),
+            qos=self.mqtt_config['qos'],
             retain=True
         )
 
 
     # Govee Helpers
     def refresh_device_list(self):
-        self.logger.info(f'Refreshing device list from Govee (every {self.device_list_update_interval} sec)')
+        self.logger.info(f'Refreshing device list from Govee (every {self.device_list_interval} sec)')
 
         first_time_through = True if len(self.devices) == 0 else False
         if first_time_through:
@@ -551,7 +539,12 @@ class GoveeMqtt(object):
 
     def send_device_discovery(self, device_id):
         device = self.devices[device_id]
-        self.mqttc.publish(self.get_discovery_topic(device_id, 'config'), json.dumps(device), retain=True)
+        self.mqttc.publish(
+            self.get_discovery_topic(device_id, 'config'),
+            json.dumps(device),
+            qos=self.mqtt_config['qos'],
+            retain=True
+        )
 
         self.devices[device_id]['state'] = {}
         self.devices[device_id]['availability'] = 'online'
@@ -559,14 +552,15 @@ class GoveeMqtt(object):
         self.publish_device(device_id)
 
     def refresh_all_devices(self):
-        self.logger.info(f'Refreshing all devices from Govee (every {self.device_update_interval} sec)')
+        self.logger.info(f'Refreshing all devices from Govee (every {self.device_interval} sec)')
 
         # refresh devices starting with the device updated the longest time ago
-        for each in sorted(self.devices.items(), key=lambda dt: (dt is None, dt)):
+        #sorted_devices = sorted(self.devices.items(), key=lambda dt: (dt is None, dt))
+        for device_id in self.devices:
             # break loop if we are ending
             if not self.running:
                 break
-            device_id = each[0]
+            # device_id = each[0]
 
             if device_id not in self.boosted:
                self.refresh_device(device_id)
@@ -577,39 +571,40 @@ class GoveeMqtt(object):
                 self.refresh_device(device_id)
 
     def refresh_device(self, device_id):
-        # don't refresh the device until it has been published in device discovery
-        # and we can tell because it will have a `state` once it has been
-        if 'state' not in self.devices[device_id]:
-            return
         data = self.goveec.get_device(device_id, self.devices[device_id]['device']['model'])
         self.update_service_device()
+
         # no need to update MQTT if nothing changed
         if len(data) > 0:
             self.update_capabilities_on_device(device_id, data)
             self.publish_device(device_id)
+        else:
+            self.logger.debug(f'No updates this time for ({device_id})')
 
     def publish_device(self, device_id):
         self.mqttc.publish(
             self.get_discovery_topic(device_id,'state'),
             json.dumps(self.devices[device_id]['state']),
+            qos=self.mqtt_config['qos'],
             retain=True
         )
         self.mqttc.publish(
             self.get_discovery_topic(device_id,'availability'),
             self.devices[device_id]['availability'],
+            qos=self.mqtt_config['qos'],
             retain=True
         )
 
     def handle_service_message(self, attribute, message):
         match attribute:
             case 'device_refresh':
-                self.device_update_interval = message
+                self.device_interval = message
                 self.logger.info(f'Updated UPDATE_INTERVAL to be {message}')
             case 'device_list_refresh':
-                self.device_list_update_interval = message
+                self.device_list_interval = message
                 self.logger.info(f'Updated LIST_UPDATE_INTERVAL to be {message}')
             case 'device_boost_refresh':
-                self.device_update_boosted_interval = message
+                self.device_boost_interval = message
                 self.logger.info(f'Updated UPDATE_BOOSTED_INTERVAL to be {message}')
             case _:
                 self.logger.info(f'IGNORED UNRECOGNIZED govee-service MESSAGE for {attribute}: {message}')
@@ -640,6 +635,31 @@ class GoveeMqtt(object):
         if device_id not in self.boosted:
             self.boosted.append(device_id)
 
+    async def _handle_signals(self, signame, loop, tasks):
+        self.running = False
+        self.logger.warn(f'{signame} received, waiting for tasks to cancel...')
+
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+        loop.stop()
+
+    async def device_list_loop(self):
+        while self.running == True:
+            self.refresh_device_list()
+            await asyncio.sleep(self.device_list_interval)
+
+    async def device_loop(self):
+        while self.running == True:
+            self.refresh_all_devices()
+            await asyncio.sleep(self.device_interval)
+
+    async def device_boosted_loop(self):
+        while self.running == True:
+            self.refresh_boosted_devices()
+            await asyncio.sleep(self.device_boost_interval)
 
     # main loop
     async def main_loop(self):
@@ -650,37 +670,15 @@ class GoveeMqtt(object):
                 asyncio.create_task(self.device_boosted_loop()),
         ]
 
+        # setup signal handling for tasks
         for signame in {'SIGINT','SIGTERM'}:
             loop.add_signal_handler(
                 getattr(signal, signame),
-                lambda: asyncio.create_task(self._handle_sigterm(loop, tasks))
+                lambda: asyncio.create_task(self._handle_signals(signame, loop, tasks))
             )
 
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception:
-            pass
-
-    async def device_list_loop(self):
-        while self.running == True:
-            try:
-                self.refresh_device_list()
-                await asyncio.sleep(self.device_list_update_interval)
-            except Exception:
-                pass
-
-    async def device_loop(self):
-        while self.running == True:
-            try:
-                self.refresh_all_devices()
-                await asyncio.sleep(self.device_update_interval)
-            except Exception:
-                pass
-
-    async def device_boosted_loop(self):
-        while self.running == True:
-            try:
-                self.refresh_boosted_devices()
-                await asyncio.sleep(self.device_update_boosted_interval)
-            except Exception:
-                pass
+        except Exception as err:
+            self.running = False
+            self.logger.error(f'Caught exception: {err}')
