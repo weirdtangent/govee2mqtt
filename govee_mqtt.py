@@ -1,7 +1,8 @@
 import asyncio
 from datetime import date
-import goveeapi
+import govee_api
 import json
+import logging
 import paho.mqtt.client as mqtt
 import random
 import signal
@@ -14,6 +15,7 @@ from zoneinfo import ZoneInfo
 class GoveeMqtt(object):
     def __init__(self, config):
         self.running = False
+        self.logger = logging.getLogger(__name__)
 
         self.timezone = config['timezone']
 
@@ -40,12 +42,9 @@ class GoveeMqtt(object):
 
         self.data_file = config['configpath'] + '/govee2mqtt.dat'
 
-    def log(self, msg, level='INFO'):
-        app_log(msg, level=level, tz=self.timezone, hide_ts=self.hide_ts)
-
     async def _handle_sigterm(self, loop, tasks):
         self.running = False
-        self.log('SIGTERM received, waiting for tasks to cancel...', level='WARN')
+        self.logger.warn('SIGTERM received, waiting for tasks to cancel...')
 
         for t in tasks:
             t.cancel()
@@ -55,7 +54,7 @@ class GoveeMqtt(object):
 
     def __enter__(self):
         self.mqttc_create()
-        self.goveec = goveeapi.GoveeAPI(self.config)
+        self.goveec = govee_api.GoveeAPI(self.config)
         self.restore_state()
         self.running = True
 
@@ -63,7 +62,7 @@ class GoveeMqtt(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.running = False
-        self.log('Exiting gracefully')
+        self.logger.info('Exiting gracefully')
 
         self.save_state()
 
@@ -76,7 +75,7 @@ class GoveeMqtt(object):
 
             self.mqttc.disconnect()
         else:
-            self.log('Lost connection to MQTT')
+            self.logger.error('Lost connection to MQTT')
 
     def save_state(self):
         try:
@@ -86,9 +85,9 @@ class GoveeMqtt(object):
             }
             with open(self.data_file, 'w') as file:
                 json.dump(state, file, indent=4)
-            self.log(f'Saved state to {self.data_file}')
+            self.logger.info(f'Saved state to {self.data_file}')
         except Exception as err:
-            self.log(f'FAILED TO SAVE STATE: {type(err).__name__} - {err=}', level="ERROR")
+            self.logger.error(f'FAILED TO SAVE STATE: {type(err).__name__} - {err=}')
 
     def restore_state(self):
         try:
@@ -96,40 +95,41 @@ class GoveeMqtt(object):
                 state = json.loads(file.read())
                 self.goveec.restore_state(state['api_calls'], state['last_call_date'])
         except Exception as err:
-            self.log(f'UNABLE TO RESTORE STATE: {type(err).__name__} - {err}', level='ERROR')
+            self.logger.error(f'UNABLE TO RESTORE STATE: {type(err).__name__} - {err}')
 
     # MQTT Functions
     def mqtt_on_connect(self, client, userdata, flags, rc, properties):
         if rc != 0:
-            self.log(f'MQTT CONNECTION ISSUE ({rc})', level='ERROR')
+            self.logger.error(f'MQTT CONNECTION ISSUE ({rc})')
             exit()
-        self.log(f'MQTT connected as {self.client_id}')
+        self.logger.info(f'MQTT connected as {self.client_id}')
         client.subscribe(self.get_device_sub_topic())
         client.subscribe(self.get_attribute_sub_topic())
 
     def mqtt_on_disconnect(self, client, userdata, flags, rc, properties):
-        self.log('MQTT connection closed')
+        self.logger.info('MQTT connection closed')
         if time.time() > self.mqtt_connect_time + 10:
             self.mqttc_create()
         else:
             exit()
 
     def mqtt_on_log(self, client, userdata, paho_log_level, msg):
-        level = None
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_ERR:
-            level = 'ERROR'
+            self.logger.error(f'MQTT LOG: {msg}')
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_WARNING:
-            level = 'WARN'
-        if level:
-            self.log(f'MQTT LOG: {msg}', level=level)
+            self.logger.warn(f'MQTT LOG: {msg}')
 
     def mqtt_on_message(self, client, userdata, msg):
-        if not msg or not msg.payload:
+        try:
+            topic = msg.topic
+            payload = json.loads(msg.payload)
+        except json.JSONDecodeError:
+            payload = msg.payload.decode('utf-8')
+        except:
+            self.logger.error('Failed to understand MQTT message, ignoring')
             return
-        topic = msg.topic
-        payload = json.loads(msg.payload)
 
-        self.log(f'Got MQTT message for {topic} - {payload}')
+        self.logger.info(f'Got MQTT message for {topic} - {payload}')
 
         # we might get:
         # device/component/set
@@ -139,25 +139,31 @@ class GoveeMqtt(object):
         components = topic.split('/')
 
         # handle this message if it's for us, otherwise pass along to govee API
-        if components[-2] == self.get_component_slug('service'):
-            self.handle_service_message(None, payload)
-        elif components[-3] == self.get_component_slug('service'):
-            self.handle_service_message(components[-1], payload)
-        else:
-            if components[-1] == 'set':
-                mac = components[-2][-16:]
-            elif components[-2] == 'set':
-                mac = components[-3][-16:]
+        try:
+            if components[-2] == self.get_component_slug('service'):
+                self.handle_service_message(None, payload)
+            elif components[-3] == self.get_component_slug('service'):
+                self.handle_service_message(components[-1], payload)
             else:
-                self.log(f'UNKNOWN MQTT MESSAGE STRUCTURE: {topic}', level='ERROR')
-                return
-            # ok, lets format the device_id and send to govee
-            device_id = ':'.join([mac[i:i+2] for i in range (0, len(mac), 2)])
-            self.send_command(device_id, payload)
+                if components[-1] == 'set':
+                    device_id = components[-2].split('-')[1]
+                elif components[-2] == 'set':
+                    device_id = components[-3].split('-')[1]
+                else:
+                    self.logger.error(f'UNKNOWN MQTT MESSAGE STRUCTURE: {topic}')
+                    return
+                # ok, lets format the device_id and send the command to govee
+                # for Govee devices, we use the formatted MAC address,
+                # so lets convert from the compressed version in the slug
+                device_id = ':'.join([device_id[i:i+2] for i in range (0, len(device_id), 2)])
+                self.send_command(device_id, payload)
+        except Exception as err:
+            self.logger.error(f'Failed to understand MQTT message slug ({topic}): {err}, ignoring')
+            return
 
     def mqtt_on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         rc_list = map(lambda x: x.getName(), reason_code_list)
-        self.log(f'MQTT SUBSCRIBED: reason_codes - {'; '.join(rc_list)}', level='DEBUG')
+        self.logger.debug(f'MQTT SUBSCRIBED: reason_codes - {'; '.join(rc_list)}')
 
     # MQTT Helpers
     def mqttc_create(self):
@@ -187,7 +193,7 @@ class GoveeMqtt(object):
         self.mqttc.on_subscribe = self.mqtt_on_subscribe
         self.mqttc.on_log = self.mqtt_on_log
 
-        # self.mqttc.will_set(self.get_state_topic(self.service_slug) + '/availability', payload="offline", qos=0, retain=True)
+        self.mqttc.will_set(self.get_discovery_topic('service', 'availability'), payload="offline", qos=self.mqtt_config['qos'], retain=True)
 
         try:
             self.mqttc.connect(
@@ -198,7 +204,7 @@ class GoveeMqtt(object):
             self.mqtt_connect_time = time.time()
             self.mqttc.loop_start()
         except ConnectionError as error:
-            self.log(f'COULD NOT CONNECT TO MQTT {self.mqtt_config.get("host")}: {error}', level='ERROR')
+            self.logger.info(f'COULD NOT CONNECT TO MQTT {self.mqtt_config.get("host")}: {error}', level='ERROR')
             exit(1)
 
     # MQTT Topics
@@ -355,7 +361,7 @@ class GoveeMqtt(object):
 
     # Govee Helpers
     def refresh_device_list(self):
-        self.log(f'Refreshing device list from Govee (every {self.device_list_update_interval} sec)')
+        self.logger.info(f'Refreshing device list from Govee (every {self.device_list_update_interval} sec)')
 
         first_time_through = True if len(self.devices) == 0 else False
         if first_time_through:
@@ -375,7 +381,9 @@ class GoveeMqtt(object):
                     self.devices[device_id]['state_topic'] = self.get_discovery_topic(device_id, 'state')
                     self.devices[device_id]['availability_topic'] = self.get_discovery_topic(device_id, 'availability')
                     self.devices[device_id]['command_topic'] = self.get_discovery_topic(device_id, 'set')
-                    # self.mqttc.will_set(self.get_state_topic(device_id)+'/availability', payload="offline", qos=0, retain=True)
+                    self.mqttc.will_set(self.get_discovery_topic(device_id,'state'), payload=json.dumps({'status': 'offline'}), qos=self.mqtt_config['qos'], retain=True)
+                    self.mqttc.will_set(self.get_discovery_topic(device_id,'motion'), payload=None, qos=self.mqtt_config['qos'], retain=True)
+                    self.mqttc.will_set(self.get_discovery_topic(device_id,'availability'), payload='offline', qos=self.mqtt_config['qos'], retain=True)
 
                 self.devices[device_id]['device'] = {
                     'name': device['deviceName'],
@@ -392,13 +400,13 @@ class GoveeMqtt(object):
                 self.add_capabilities_to_device(device_id, device['capabilities'])
                 
                 if first:
-                    self.log(f'Adding new device: "{device['deviceName']}" [Govee {device["sku"]}] ({device_id})')
+                    self.logger.info(f'Adding new device: "{device['deviceName']}" [Govee {device["sku"]}] ({device_id})')
                     self.send_device_discovery(device_id)
                 else:
-                    self.log(f'Updated device: {self.devices[device_id]['device']['name']}', level='DEBUG')
+                    self.logger.debug(f'Updated device: {self.devices[device_id]['device']['name']}')
             else:
                 if first_time_through:
-                    self.log(f'Saw device, but not supported yet: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
+                    self.logger.info(f'Saw device, but not supported yet: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
 
     # convert Govee capabilities to MQTT attributes
     def add_capabilities_to_device(self, device_id, capabilities):
@@ -551,7 +559,7 @@ class GoveeMqtt(object):
         self.publish_device(device_id)
 
     def refresh_all_devices(self):
-        self.log(f'Refreshing all devices from Govee (every {self.device_update_interval} sec)')
+        self.logger.info(f'Refreshing all devices from Govee (every {self.device_update_interval} sec)')
 
         # refresh devices starting with the device updated the longest time ago
         for each in sorted(self.devices.items(), key=lambda dt: (dt is None, dt)):
@@ -560,11 +568,6 @@ class GoveeMqtt(object):
                 break
             device_id = each[0]
 
-            # all just to format the log record
-            last_updated = self.devices[device_id]['state']['last_update'] if 'last_update' in self.devices[device_id]['state'] else 'server started'
-            last_updated = last_updated[:19].replace('T',' ')
-
-            self.log(f'Refreshing device "{self.devices[device_id]['device']['name']} ({device_id})", not updated since: {last_updated}')
             if device_id not in self.boosted:
                self.refresh_device(device_id)
 
@@ -601,15 +604,15 @@ class GoveeMqtt(object):
         match attribute:
             case 'device_refresh':
                 self.device_update_interval = message
-                self.log(f'Updated UPDATE_INTERVAL to be {message}')
+                self.logger.info(f'Updated UPDATE_INTERVAL to be {message}')
             case 'device_list_refresh':
                 self.device_list_update_interval = message
-                self.log(f'Updated LIST_UPDATE_INTERVAL to be {message}')
+                self.logger.info(f'Updated LIST_UPDATE_INTERVAL to be {message}')
             case 'device_boost_refresh':
                 self.device_update_boosted_interval = message
-                self.log(f'Updated UPDATE_BOOSTED_INTERVAL to be {message}')
+                self.logger.info(f'Updated UPDATE_BOOSTED_INTERVAL to be {message}')
             case _:
-                self.log(f'IGNORED UNRECOGNIZED govee-service MESSAGE for {attribute}: {message}')
+                self.logger.info(f'IGNORED UNRECOGNIZED govee-service MESSAGE for {attribute}: {message}')
                 return
 
         self.update_service_device()
@@ -623,13 +626,13 @@ class GoveeMqtt(object):
         if 'color' in caps and 'turn' in caps:
             del caps['turn']
 
-        self.log(f'COMMAND {device_id} = {caps}', level='DEBUG')
+        self.logger.debug(f'COMMAND {device_id} = {caps}')
 
         first = True
         for key in caps:
             if not first:
                 time.sleep(1)
-            self.log(f'CMD DEVICE {self.devices[device_id]['device']['name']} ({device_id}) {key} = {caps[key]}', level='DEBUG')
+            self.logger.debug(f'CMD DEVICE {self.devices[device_id]['device']['name']} ({device_id}) {key} = {caps[key]}')
             self.goveec.send_command(device_id, sku, caps[key]['type'], caps[key]['instance'], caps[key]['value'])
             self.update_service_device()
             first = False

@@ -1,6 +1,7 @@
 mqtt:
   host: 10.10.10.1
   port: 1883
+  qos: 0
   username: ""
   password: ""
   prefix: govee2mqtt
