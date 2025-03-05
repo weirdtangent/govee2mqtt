@@ -16,7 +16,7 @@ services:
       GOVEE_DEVICE_BOOST_INTERVAL: 5
       GOVEE_LIST_INTERVAL: 300
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "[P]ython -u app.py"]
+      test: ["CMD", "pgrep", "-f", "[p]ython -u app.py"]
       interval: 30s
       timeout: 10s
       retries: 3
