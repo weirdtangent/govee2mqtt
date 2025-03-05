@@ -115,7 +115,7 @@ class GoveeMqtt(object):
             self.logger.error('Failed to understand MQTT message, ignoring')
             return
 
-        self.logger.info(f'Got MQTT message for {topic} - {payload}')
+        self.logger.debug(f'Incoming MQTT message for {topic} - {payload}')
 
         # we might get:
         # device/component/set
@@ -142,6 +142,7 @@ class GoveeMqtt(object):
                 # for Govee devices, we use the formatted MAC address,
                 # so lets convert from the compressed version in the slug
                 device_id = ':'.join([device_id[i:i+2] for i in range (0, len(device_id), 2)])
+                self.logger.info(f'Got MQTT message for {device_id} - {payload}')
                 self.send_command(device_id, payload)
         except Exception as err:
             self.logger.error(f'Failed to understand MQTT message slug ({topic}): {err}, ignoring')
@@ -575,9 +576,12 @@ class GoveeMqtt(object):
         self.update_service_device()
 
         # no need to update MQTT if nothing changed
+        # and only remove from boosted list once we DO get an update
         if len(data) > 0:
             self.update_capabilities_on_device(device_id, data)
             self.publish_device(device_id)
+            if device_id in self.boosted:
+                del self.boosted[device_id]
         else:
             self.logger.debug(f'No updates this time for ({device_id})')
 
