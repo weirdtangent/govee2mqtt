@@ -22,15 +22,7 @@ def read_version():
     return read_file('../VERSION')
 
 # Let's go!
-logging.basicConfig(
-    format = '%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
 version = read_version()
-logger.info(f'Starting: govee2mqtt v{version}')
 
 # cmd-line args
 argparser = argparse.ArgumentParser()
@@ -51,11 +43,9 @@ try:
         configfile = configpath + 'config.yaml'
     with open(configfile) as file:
         config = yaml.safe_load(file)
-    logger.info(f'Reading config file {configpath}')
     config['config_from'] = 'file'
     config['config_path'] = configpath
 except:
-    logger.info(f'config.yaml not found, checking ENV')
     config = {
         'mqtt': {
             'host': os.getenv('MQTT_HOST') or 'localhost',
@@ -82,6 +72,15 @@ except:
         'config_from': 'env',
         'timezone': os.getenv('TZ'),
     }
+
+logging.basicConfig(
+    format = '%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s' if config['hide_ts'] == False else '[%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+logger.info(f'Starting: govee2mqtt v{version}')
+logger.info(f'Config loaded from {config["config_from"]}')
 
 config['version'] = version
 config['configpath'] = os.path.dirname(configpath)

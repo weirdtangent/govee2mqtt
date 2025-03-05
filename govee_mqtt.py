@@ -248,7 +248,7 @@ class GoveeMqtt(object):
         self.mqttc.publish(
             self.get_discovery_topic('service','config'),
             json.dumps({
-                'qos': 0,
+                'qos': self.mqtt_config['qos'],
                 'state_topic': state_topic,
                 'availability_topic': availability_topic,
                 'device': {
@@ -377,7 +377,7 @@ class GoveeMqtt(object):
                 if device_id not in self.devices:
                     first = True
                     self.devices[device_id] = {}
-                    self.devices[device_id]['qos'] = 0
+                    self.devices[device_id]['qos'] = self.mqtt_config['qos'],
                     self.devices[device_id]['state_topic'] = self.get_discovery_topic(device_id, 'state')
                     self.devices[device_id]['availability_topic'] = self.get_discovery_topic(device_id, 'availability')
                     self.devices[device_id]['command_topic'] = self.get_discovery_topic(device_id, 'set')

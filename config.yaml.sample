@@ -15,4 +15,5 @@ govee:
   device_list_interval: 300
 
 debug: False
+hide_ts: False
 timezone: America/New_York
