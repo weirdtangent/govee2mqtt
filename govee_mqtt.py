@@ -25,7 +25,7 @@ class GoveeMqtt(object):
         self.govee_config = config['govee']
         self.timezone = config['timezone']
         self.version = config['version']
-        self.data_file = config['configpath'] + 'govee2mqtt.dat'
+        self.data_file = config['configpath'] + '/govee2mqtt.dat'
 
         self.device_interval = config['govee'].get('device_interval', 30)
         self.device_boost_interval = config['govee'].get('device_boost_interval', 5)
@@ -546,8 +546,8 @@ class GoveeMqtt(object):
             retain=True
         )
 
-        self.devices[device_id]['state'] = {}
-        self.devices[device_id]['availability'] = 'online'
+        device['state'] = {}
+        device['availability'] = 'online'
 
         self.publish_device(device_id)
 
@@ -678,7 +678,7 @@ class GoveeMqtt(object):
             )
 
         try:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as err:
             self.running = False
             self.logger.error(f'Caught exception: {err}')
