@@ -35,7 +35,8 @@ class GoveeMqtt(object):
         self.service_name = self.mqtt_config['prefix'] + ' service'
         self.service_slug = self.mqtt_config['prefix'] + '-service'
 
-        self.devices = {}
+        self.devices = {} # for storing the device data we send via MQTT
+        self.configs = {} # for storing device config that we need to remember: options, scenes, enums, etc
         self.boosted = []
 
     def __enter__(self):
@@ -135,6 +136,7 @@ class GoveeMqtt(object):
                     vendor, device_id = components[-2].split('-')
                 elif components[-2] == 'set':
                     vendor, device_id = components[-3].split('-')
+                    attribute = components[-1]
                 else:
                     self.logger.error(f'UNKNOWN MQTT MESSAGE STRUCTURE: {topic}')
                     return
@@ -145,10 +147,16 @@ class GoveeMqtt(object):
                 # for Govee devices, we use the formatted MAC address,
                 # so lets convert from the compressed version in the slug
                 device_id = ':'.join([device_id[i:i+2] for i in range (0, len(device_id), 2)])
+
+                # if we only got back a scalar value, lets turn it into a dict with
+                # the attribute name after `/set/`
+                if not isinstance(payload, dict) and attribute:
+                    payload = { attribute: payload }
+
                 self.logger.info(f'Got MQTT message for {device_id} - {payload}')
                 self.send_command(device_id, payload)
         except Exception as err:
-            self.logger.error(f'Failed to understand MQTT message slug ({topic}): {err}, ignoring')
+            self.logger.error(f'Failed to understand MQTT message slug ({topic}): {err}, ignoring', exc_info=True)
             return
 
     def mqtt_on_subscribe(self, client, userdata, mid, reason_code_list, properties):
@@ -361,48 +369,54 @@ class GoveeMqtt(object):
 
         devices = self.goveec.get_device_list()
         self.update_service_device()
-        for device in devices:
-            device_id = device['device']
+        try:
+            for device in devices:
+                device_id = device['device']
 
-            if 'type' in device:
-                first = False
-                if device_id not in self.devices:
-                    first = True
-                    self.devices[device_id] = {}
-                    self.devices[device_id]['qos'] = self.mqtt_config['qos']
-                    self.devices[device_id]['state_topic'] = self.get_discovery_topic(device_id, 'state')
-                    self.devices[device_id]['availability_topic'] = self.get_discovery_topic(device_id, 'availability')
-                    self.devices[device_id]['command_topic'] = self.get_discovery_topic(device_id, 'set')
-                    self.mqttc.will_set(self.get_discovery_topic(device_id,'state'), payload=json.dumps({'status': 'offline'}), qos=self.mqtt_config['qos'], retain=True)
-                    self.mqttc.will_set(self.get_discovery_topic(device_id,'motion'), payload=None, qos=self.mqtt_config['qos'], retain=True)
-                    self.mqttc.will_set(self.get_discovery_topic(device_id,'availability'), payload='offline', qos=self.mqtt_config['qos'], retain=True)
+                if 'type' in device:
+                    first = False
+                    if device_id not in self.devices:
+                        first = True
+                        self.devices[device_id] = {}
+                        self.configs[device_id] = {}
+                        self.devices[device_id]['qos'] = self.mqtt_config['qos']
+                        self.devices[device_id]['state_topic'] = self.get_discovery_topic(device_id, 'state')
+                        self.devices[device_id]['availability_topic'] = self.get_discovery_topic(device_id, 'availability')
+                        self.devices[device_id]['command_topic'] = self.get_discovery_topic(device_id, 'set')
+                        self.mqttc.will_set(self.get_discovery_topic(device_id,'state'), payload=json.dumps({'status': 'offline'}), qos=self.mqtt_config['qos'], retain=True)
+                        self.mqttc.will_set(self.get_discovery_topic(device_id,'motion'), payload=None, qos=self.mqtt_config['qos'], retain=True)
+                        self.mqttc.will_set(self.get_discovery_topic(device_id,'availability'), payload='offline', qos=self.mqtt_config['qos'], retain=True)
 
-                self.devices[device_id]['device'] = {
-                    'name': device['deviceName'],
-                    'manufacturer': 'Govee',
-                    'model': device['sku'],
-                    'ids': device['device'],
-                    'via_device': self.service_slug,
-                }
-                self.devices[device_id]['origin'] = {
-                    'name': self.service_name,
-                    'sw_version': self.version,
-                    'support_url': 'https://github.com/weirdtangent/govee2mqtt',
-                }
-                self.add_capabilities_to_device(device_id, device['capabilities'])
-                
-                if first:
-                    self.logger.info(f'Adding new device: "{device['deviceName']}" [Govee {device["sku"]}] ({device_id})')
-                    self.send_device_discovery(device_id)
+                    self.devices[device_id]['device'] = {
+                        'name': device['deviceName'],
+                        'manufacturer': 'Govee',
+                        'model': device['sku'],
+                        'ids': device['device'],
+                        'via_device': self.service_slug,
+                    }
+                    self.devices[device_id]['origin'] = {
+                        'name': self.service_name,
+                        'sw_version': self.version,
+                        'support_url': 'https://github.com/weirdtangent/govee2mqtt',
+                    }
+                    self.add_capabilities_to_device(device_id, device['capabilities'])
+
+                    if first:
+                        self.logger.info(f'Adding new device: "{device['deviceName']}" [Govee {device["sku"]}] ({device_id})')
+                        self.send_device_discovery(device_id)
+                    else:
+                        self.logger.debug(f'Updated device: {self.devices[device_id]['device']['name']}')
                 else:
-                    self.logger.debug(f'Updated device: {self.devices[device_id]['device']['name']}')
-            else:
-                if first_time_through:
-                    self.logger.info(f'Saw device, but not supported yet: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
+                    if first_time_through:
+                        self.logger.info(f'Saw device, but not supported yet: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
+        except Exception as err:
+            self.logger.error(f'Failed to process device list from Govee: {err}', exc_info=True)
 
     # convert Govee capabilities to MQTT attributes
     def add_capabilities_to_device(self, device_id, capabilities):
         device = self.devices[device_id]
+        config = self.configs[device_id]
+
         device_type = 'sensor' if device['device']['model'].startswith('H5') else 'light'
 
         # we setup a light component to make it easy to add-to
@@ -428,41 +442,81 @@ class GoveeMqtt(object):
             }
         }
 
-        for cap in capabilities:
-            match cap['instance']:
-                case 'brightness':
-                    light['supported_color_modes'].append('brightness')
-                    light['brightness_scale'] = cap['parameters']['range']['max']
-                case 'powerSwitch':
-                    light['supported_color_modes'].append('onoff')
-                case 'colorRgb':
-                    light['supported_color_modes'].append('rgb')
-                case 'colorTemperatureK':
-                    light['supported_color_modes'].append('color_temp')
-                    light['color_temp_kelvin'] = True
-                    light['min_kelvin'] = cap['parameters']['range']['min'] or 2000
-                    light['max_kelvin'] = cap['parameters']['range']['max'] or 6535
-                case 'sensorTemperature':
-                    components[self.get_slug(device_id, 'temperature')] = {
-                        'name': 'Temperature',
-                        'platform': 'sensor',
-                        'device_class': 'temperature',
-                        'unit_of_measurement': '°F',
-                        'state_topic': device['state_topic'],
-                        'value_template': '{{ value_json.temperature }}',
-                        'unique_id': self.get_slug(device_id, 'temperature')
-                    }
-                case 'sensorHumidity':
-                    components[self.get_slug(device_id, 'humidity')] = {
-                        'name': 'Humidity',
-                        'platform': 'sensor',
-                        'state_class': 'measurement',
-                        'device_class': 'humidity',
-                        'unit_of_measurement': '%',
-                        'state_topic': device['state_topic'],
-                        'value_template': '{{ value_json.humidity }}',
-                        'unique_id': self.get_slug(device_id, 'humidity'),
-                    }
+        try:
+            for cap in capabilities:
+                match cap['instance']:
+                    case 'brightness':
+                        light['supported_color_modes'].append('brightness')
+                        light['brightness_scale'] = cap['parameters']['range']['max']
+                    case 'powerSwitch':
+                        light['supported_color_modes'].append('onoff')
+                    case 'colorRgb':
+                        light['supported_color_modes'].append('rgb')
+                    case 'colorTemperatureK':
+                        light['supported_color_modes'].append('color_temp')
+                        light['color_temp_kelvin'] = True
+                        light['min_kelvin'] = cap['parameters']['range']['min'] or 2000
+                        light['max_kelvin'] = cap['parameters']['range']['max'] or 6535
+                    case 'sensorTemperature':
+                        components[self.get_slug(device_id, 'temperature')] = {
+                            'name': 'Temperature',
+                            'platform': 'sensor',
+                            'device_class': 'temperature',
+                            'unit_of_measurement': '°F',
+                            'state_topic': device['state_topic'],
+                            'value_template': '{{ value_json.temperature }}',
+                            'unique_id': self.get_slug(device_id, 'temperature')
+                        }
+                    case 'sensorHumidity':
+                        components[self.get_slug(device_id, 'humidity')] = {
+                            'name': 'Humidity',
+                            'platform': 'sensor',
+                            'state_class': 'measurement',
+                            'device_class': 'humidity',
+                            'unit_of_measurement': '%',
+                            'state_topic': device['state_topic'],
+                            'value_template': '{{ value_json.humidity }}',
+                            'unique_id': self.get_slug(device_id, 'humidity'),
+                        }
+                    case 'musicMode':
+                        music_options = []
+                        for field in cap['parameters']['fields']:
+                            match field['fieldName']:
+                                case 'musicMode':
+                                    config['music_options'] = { 'Unknown': 0 }
+                                    for option in field['options']:
+                                        music_options.append(option['name'])
+                                        config['music_options'][option['name']] = option['value']
+                                case 'sensitivity':
+                                    music_min = field['range']['min']
+                                    music_max = field['range']['max']
+                                    music_step = field['range']['precision']
+                                    config['music_sensitivity'] = 100
+                        components[self.get_slug(device_id, 'music_mode')] = {
+                            'name': 'Music Mode',
+                            'platform': 'sensor',
+                            'device_class': 'enum',
+                            'options': music_options,
+                            'state_topic': self.get_discovery_topic(device_id, 'music'),
+                            'command_topic': self.get_command_topic(device_id, 'music_mode'),
+                            'value_template': '{{ value_json.mode }}',
+                            'unique_id': self.get_slug(device_id, 'music_mode'),
+                        }
+                        components[self.get_slug(device_id, 'music_sensitivity')] = {
+                            'name': 'Music Sensitivity',
+                            'platform': 'number',
+                            'schema': 'json',
+                            'icon': 'mdi:numeric',
+                            'min': music_min,
+                            'max': music_max,
+                            'step': music_step,
+                            'state_topic': self.get_discovery_topic(device_id, 'music'),
+                            'command_topic': self.get_command_topic(device_id, 'music_sensitivity'),
+                            'value_template': '{{ value_json.sensitivity }}',
+                            'unique_id': self.get_slug(device_id, 'music_sensitivity'),
+                        }
+        except Exception as err:
+            self.logger.error(f'Failed to understand Govee device capabilities: {err}', exc_info=True)
 
         # It's a pretty good guess that we have a `light` if we got `supported_color_modes`
         # but note that:
@@ -487,28 +541,50 @@ class GoveeMqtt(object):
 
     def update_capabilities_on_device(self, device_id, capabilities):
         device = self.devices[device_id]
+        config = self.configs[device_id]
+        if 'state' not in device:
+            device['state'] = {}
 
-        for key in capabilities:
-            match key:
-                case 'online':
-                    device['availability'] = 'online' if capabilities[key] == True else 'offline'
-                case 'powerSwitch':
-                    device['state']['state'] = 'ON' if capabilities[key] == 1 else 'OFF'
-                case 'brightness':
-                    device['state']['brightness'] = capabilities[key]
-                case 'colorRgb':
-                    device['state']['color'] = number_to_rgb(capabilities[key], 16777215)
-                case 'colorTemperatureK':
-                    device['state']['color_temp'] = capabilities[key]
-                case 'sensorTemperature':
-                    device['state']['temperature'] = capabilities[key]
-                case 'sensorHumidity':
-                    device['state']['humidity'] = capabilities[key]
-                case 'lastUpdate' if isinstance(capabilities[key], datetime):
-                    device['state']['last_update'] = capabilities[key].isoformat()
+        try:
+            for key in capabilities:
+                match key:
+                    case 'online':
+                        device['availability'] = 'online' if capabilities[key] == True else 'offline'
+                    case 'powerSwitch':
+                        device['state']['state'] = 'ON' if capabilities[key] == 1 else 'OFF'
+                    case 'brightness':
+                        device['state']['brightness'] = capabilities[key]
+                    case 'colorRgb':
+                        device['state']['color'] = number_to_rgb(capabilities[key], 16777215)
+                    case 'colorTemperatureK':
+                        device['state']['color_temp'] = capabilities[key]
+                    case 'sensorTemperature':
+                        device['state']['temperature'] = capabilities[key]
+                    case 'sensorHumidity':
+                        device['state']['humidity'] = capabilities[key]
+                    case 'musicMode':
+                        if 'music' not in device: device['music'] = {}
+                        if isinstance(capabilities[key], dict):
+                            device['music'] = {
+                                'mode': capabilities['musicMode'],
+                                'sensitivity': capabilities['sensitivity'],
+                                'state': 'ON',
+                            }
+                        elif capabilities[key] != '':
+                            device['music']['mode'] = find_key_by_value(config['music_options'], capabilities[key])
+                    case 'sensitivity':
+                        if 'music' not in device: device['music'] = {}
+                        device['music']['sensitivity'] = capabilities[key]
+
+                    case 'lastUpdate' if isinstance(capabilities[key], datetime):
+                        device['state']['last_update'] = capabilities[key].isoformat()
+        except Exception as err:
+            self.logger.error(f'Failed to understand device state: {capabilities} - {err}', exc_info=True)
 
     # convert MQTT attributes to Govee capabilities
-    def convert_attributes_to_capabilities(self, attr):
+    def convert_attributes_to_capabilities(self, device_id, attr):
+        device = self.devices[device_id]
+        config = self.configs[device_id]
         caps = {}
 
         for key in attr:
@@ -537,8 +613,25 @@ class GoveeMqtt(object):
                         'instance': 'colorTemperatureK',
                         'value': attr[key],
                     }
-                case _:
-                    continue
+                case 'music_sensitivity':
+                    mode = device['music']['mode'] if 'mode' in device['music'] else 'Unknown'
+                    caps['musicMode'] = {
+                        'type': 'devices.capabilities.music_setting',
+                        'instance': 'musicMode',
+                        'value': {
+                            'musicMode': config['music_options'][mode],                            'sensitivity': attr[key],
+                        }
+                    }
+                case 'music_mode':
+                    mode = attr[key]
+                    caps['musicMode'] = {
+                        'type': 'devices.capabilities.music_setting',
+                        'instance': 'musicMode',
+                        'value': {
+                            'musicMode': config['music_options'][mode],
+                            'sensitivity': config['music_sensitivity'],
+                        }
+                    }
         return caps
 
     def send_device_discovery(self, device_id):
@@ -550,8 +643,11 @@ class GoveeMqtt(object):
             retain=True
         )
 
-        device['state'] = {}
+        if 'state' not in device:
+            device['state'] = {}
         device['availability'] = 'online'
+        if self.get_slug(device_id, 'music_mode') in device['components']:
+            device['music'] = {}
 
         self.publish_device(device_id)
 
@@ -569,7 +665,6 @@ class GoveeMqtt(object):
     def refresh_boosted_devices(self):
         if len(self.boosted) > 0:
             for device_id in self.boosted:
-                self.logger.info(f'Refreshing boosted device from Govee ({device_id})')
                 self.refresh_device(device_id)
 
     def refresh_device(self, device_id):
@@ -580,25 +675,23 @@ class GoveeMqtt(object):
         if len(data) > 0:
             self.update_capabilities_on_device(device_id, data)
             self.publish_device(device_id)
-            # only now remove from boosted list (if there), since we got a change
-            if device_id in self.boosted:
-                del self.boosted[device_id]
-        else:
-            self.logger.debug(f'No updates yet for ({device_id})')
+
+        # we don't want to boost forever, so remove it whether we got an update back or not
+        if device_id in self.boosted:
+            self.boosted.remove(device_id)
+            self.logger.info(f'Refreshed boosted device from Govee ({device_id})')
 
     def publish_device(self, device_id):
-        self.mqttc.publish(
-            self.get_discovery_topic(device_id,'state'),
-            json.dumps(self.devices[device_id]['state']),
-            qos=self.mqtt_config['qos'],
-            retain=True
-        )
-        self.mqttc.publish(
-            self.get_discovery_topic(device_id,'availability'),
-            self.devices[device_id]['availability'],
-            qos=self.mqtt_config['qos'],
-            retain=True
-        )
+        device = self.devices[device_id]
+
+        for topic in ['state','availability','music']:
+            if topic in device:
+                self.mqttc.publish(
+                    self.get_discovery_topic(device_id, topic),
+                    json.dumps(device[topic]) if isinstance(device[topic], dict) else device[topic],
+                    qos=self.mqtt_config['qos'],
+                    retain=True
+                )
 
     def handle_service_message(self, attribute, message):
         match attribute:
@@ -618,7 +711,7 @@ class GoveeMqtt(object):
         self.update_service_device()
 
     def send_command(self, device_id, data):
-        caps = self.convert_attributes_to_capabilities(data)
+        caps = self.convert_attributes_to_capabilities(device_id, data)
         sku = self.devices[device_id]['device']['model']
 
         if 'brightness' in caps and 'turn' in caps:
@@ -628,17 +721,36 @@ class GoveeMqtt(object):
 
         self.logger.debug(f'COMMAND {device_id} = {caps}')
 
-        first = True
-        for key in caps:
-            if not first:
-                time.sleep(1)
-            self.logger.debug(f'CMD DEVICE {self.devices[device_id]['device']['name']} ({device_id}) {key} = {caps[key]}')
-            self.goveec.send_command(device_id, sku, caps[key]['type'], caps[key]['instance'], caps[key]['value'])
-            self.update_service_device()
-            first = False
+        try:
+            first = True
+            need_boost = False
+            for key in caps:
+                if not first:
+                    time.sleep(1)
+                self.logger.debug(f'CMD DEVICE {self.devices[device_id]['device']['name']} ({device_id}) {key} = {caps[key]}')
+                data = self.goveec.send_command(device_id, sku, caps[key]['type'], caps[key]['instance'], caps[key]['value'])
+                self.update_service_device()
+                first = False
 
-        if device_id not in self.boosted:
-            self.boosted.append(device_id)
+                # no need to refresh if we get the state back on the successful command response
+                if len(data) > 0:
+                    self.logger.info(f'Got response from command: {data}')
+                    self.update_capabilities_on_device(device_id, data)
+                    self.publish_device(device_id)
+                    # only now remove from boosted list (if there), since we got a change
+                    if device_id in self.boosted:
+                        self.boosted.remove(device_id)
+                        self.logger.info(f'Refreshed boosted device from Govee ({device_id})')
+                else:
+                    self.logger.info(f'Failed to understand response from command: {data}')
+                    need_boost = True
+
+            # if we send a command and did not get state back on the response
+            # lets boost this device to refresh it, just in case
+            if need_boost and device_id not in self.boosted:
+                self.boosted.append(device_id)
+        except Exception as err:
+            self.logger.error(f'Error sending command or reading response: {err}')
 
     async def _handle_signals(self, signame, loop, tasks):
         self.running = False

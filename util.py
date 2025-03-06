@@ -23,3 +23,9 @@ def number_to_rgb(number, max_value):
 
 def rgb_to_number(rgb):
     return int(((rgb['r'] & 0xFF) << 16) + ((rgb['g'] & 0xFF) << 8) + (rgb['b'] & 0xFF))        
+
+def find_key_by_value(my_dict, target_value):
+    for key, value in my_dict.items():
+        if value == target_value:
+            return key
+    return None

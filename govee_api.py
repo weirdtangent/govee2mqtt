@@ -70,6 +70,7 @@ class GoveeAPI(object):
             self.logger.error(f'ERROR GETTING DEVICE LIST DATA {type(err).__name__} - {err}')
             return {}
 
+        self.logger.info(f'Govee returned {len(data['data'])} device, groups, etc')
         return data['data'] if 'data'in data else {}
 
 
@@ -141,6 +142,8 @@ class GoveeAPI(object):
             if r.status_code != 200:
                 self.logger.error(f'ERROR SENDING DEVICE COMMAND TO ({device_id}): ({r.status_code}) {type(err).__name__} - {err=}')
                 return {}
+            data = r.json()
+            self.logger.debug(f'GOT RESPONSE FROM COMMAND SENT TO ({device_id})')
         except RequestException as err:
             self.logger.error(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name__} - {err=}')
             time.sleep(10)
@@ -148,3 +151,21 @@ class GoveeAPI(object):
         except Exception as err:
             self.logger.error(f'ERROR SENDING DEVICE COMMAND {type(err).__name__} - {err=}')
             return {}
+
+        new_capabilities = {}
+
+        try:
+            if 'capability' in data and 'state' in data['capability'] and data['capability']['state']['status'] == 'success':
+                capability = data['capability']
+                if isinstance(capability['value'], dict):
+                    for key in capability['value']:
+                        new_capabilities[key] = capability['value'][key]
+                else:
+                    new_capabilities[capability['instance']] = capability['value']
+
+                # only if we got any `capabilties` back from Govee will we update the `last_update`
+                new_capabilities['lastUpdate'] = datetime.now(ZoneInfo(self.timezone))
+        except Exception as err:
+            self.logger.error(f'Failed to understand response from command: {data}')
+
+        return new_capabilities
