@@ -132,11 +132,14 @@ class GoveeMqtt(object):
                 self.handle_service_message(components[-1], payload)
             else:
                 if components[-1] == 'set':
-                    device_id = components[-2].split('-')[1]
+                    vendor, device_id = components[-2].split('-')
                 elif components[-2] == 'set':
-                    device_id = components[-3].split('-')[1]
+                    vendor, device_id = components[-3].split('-')
                 else:
                     self.logger.error(f'UNKNOWN MQTT MESSAGE STRUCTURE: {topic}')
+                    return
+                # of course, we only care about our 'govee-<mac>' messages
+                if vendor != 'govee':
                     return
                 # ok, lets format the device_id and send the command to govee
                 # for Govee devices, we use the formatted MAC address,
