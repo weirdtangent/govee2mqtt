@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date
+from datetime import datetime
 import govee_api
 import json
 import logging
@@ -558,13 +558,10 @@ class GoveeMqtt(object):
     def refresh_all_devices(self):
         self.logger.info(f'Refreshing all devices from Govee (every {self.device_interval} sec)')
 
-        # refresh devices starting with the device updated the longest time ago
-        #sorted_devices = sorted(self.devices.items(), key=lambda dt: (dt is None, dt))
         for device_id in self.devices:
             # break loop if we are ending
             if not self.running:
                 break
-            # device_id = each[0]
 
             if device_id not in self.boosted:
                self.refresh_device(device_id)

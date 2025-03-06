@@ -62,7 +62,7 @@ except:
 config['version'] = version
 config['configpath'] = os.path.dirname(configpath)
 if 'timezone' not in config: config['timezone'] = 'UTC'
-if 'debug' not in config: config['debug'] = False
+if 'debug' not in config: config['debug'] = os.getenv('DEBUG') or False
 
 # Setup logging
 logging.basicConfig(

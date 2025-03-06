@@ -99,7 +99,7 @@ class GoveeAPI(object):
                     self.logger.error(f'ERROR ({r.status_code}) GETTING DEVICE ({device_id})')
                 return {}
             data = r.json()
-            self.logger.debug(f'GOT REFRESH FOR ON ({device_id})')
+            self.logger.debug(f'GOT REFRESH FOR ({device_id})')
         except RequestException as err:
             self.logger.error(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name__} - {err=}')
             time.sleep(10)
