@@ -14,6 +14,5 @@ govee:
   device_boost_interval: 2
   device_list_interval: 300
 
-debug: False
 hide_ts: False
 timezone: America/New_York
