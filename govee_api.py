@@ -40,6 +40,15 @@ class GoveeAPI(object):
         self.last_call_date = str(datetime.now(tz=ZoneInfo(self.timezone)).date())
         self.logger.info('Reset api call count for new day')
 
+    def get_api_calls(self):
+        return self.api_calls
+
+    def get_last_call_date(self):
+        return self.last_call_date
+
+    def is_rate_limited(self):
+        return self.rate_limited == True
+
     def get_headers(self):
         return {
             'Content-Type': "application/json",
@@ -70,8 +79,7 @@ class GoveeAPI(object):
             self.logger.error(f'ERROR GETTING DEVICE LIST DATA {type(err).__name__} - {err}')
             return {}
 
-        self.logger.info(f'Govee returned {len(data['data'])} device, groups, etc')
-        return data['data'] if 'data'in data else {}
+        return data['data'] if 'data' in data else {}
 
 
 
