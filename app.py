@@ -61,6 +61,8 @@ except:
     }
 config['version'] = version
 config['configpath'] = os.path.dirname(configpath)
+if 'username' not in config['mqtt']: config['mqtt']['username'] = ''
+if 'password' not in config['mqtt']: config['mqtt']['password'] = ''
 if 'timezone' not in config: config['timezone'] = 'UTC'
 if 'debug' not in config: config['debug'] = os.getenv('DEBUG') or False
 

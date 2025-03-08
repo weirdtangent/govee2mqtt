@@ -13,6 +13,8 @@ include/
 venv/
 
 # Local testing
+config
+config/
 config.yaml
 govee2mqtt.dat
 
