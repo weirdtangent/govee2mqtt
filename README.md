@@ -45,6 +45,72 @@ It supports the following environment variables:
 -   `HIDE_TS: False` (hide timestamps in logs, in case your log-viewer adds one already)
 -   `DEBUG: True` (for much more logging)
 
+# Unsupported so far by Govee, but...
+
+A few fancy options are only half-supported by Govee:
+
+## MusicMode
+
+I am trying to figure out if there's any way to make this more automatic or easier.
+
+In HomeAssistant, if you create a `Helper` like:
+
+```yaml
+input_select:
+  office_light_music_mode:
+    options:
+      - Unknown
+      - Energic
+      - Dynamic
+      - Calm
+      - Bounce
+      - Hopping
+      - Strike
+      - Vibrate
+      - Skittles
+      - Torch
+      - CandyCrush
+      - Fusion
+      - Luminous
+      - Separation
+    editable: true
+    icon: mdi:dance-ballroom
+    friendly_name: Set Office Light MusicMode
+```
+
+and then an `Automation` like:
+
+```yaml
+alias: Set Office Light MusicMode
+description: ""
+triggers:
+  - trigger: state
+    entity_id:
+      - input_select.office_light_music_mode
+conditions:
+  - condition: template
+    value_template: >-
+      {% if states.input_select.office_light_music_mode.state !=
+      states.sensor.office_light_music_mode.state %} true {% else %} False {%
+      endif %}
+actions:
+  - action: mqtt.publish
+    metadata: {}
+    data:
+      evaluate_payload: false
+      qos: "0"
+      retain: true
+      topic: homeassistant/device/govee-XXXXXXXXXXXXXXXX/set/music_mode
+      payload: "{{ states('input_select.office_light_music_mode') }}"
+mode: single
+```
+
+You can add that pulldown input to a dashboard, and select a MusicMode and have
+the command sent to MQTT which will send it to Govee.
+
+## Others to come...
+
+
 ## Out of Scope
 
 ### Non-Docker Environments
@@ -59,4 +125,7 @@ useful to myself and others, not for any financial gain - but any token of appre
 
 <a href="https://buymeacoffee.com/weirdtangent">Buy Me A Coffee</a>
 
+### How Happy am I?
+
 <img src="https://github.com/weirdtangent/govee2mqtt/actions/workflows/deploy.yaml/badge.svg" />
+

@@ -12,9 +12,10 @@ include/
 # Environments
 venv/
 
-# Local testing
+# Local testing and notes
 config
 config/
 config.yaml
 govee2mqtt.dat
+NOTES
 
