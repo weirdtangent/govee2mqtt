@@ -1,7 +1,6 @@
 # weirdtangent/govee2mqtt
 
-Expose multiple Govee devices and events to an MQTT broker, primarily
-designed to work with Home Assistant. A WIP, since I'm new to Python.
+Expose multiple Govee devices and events to an MQTT broker, primarily designed to work with Home Assistant. A WIP, since I'm new to Python.
 
 Forked from [dlashua/govee2mqtt](https://github.com/dlashua/govee2mqtt)
 
@@ -24,8 +23,7 @@ python3 ./app.py -c ./
 ## Docker
 For `docker-compose`, use the [configuration included](https://github.com/weirdtangent/govee2mqtt/blob/master/docker-compose.yaml) in this repository.
 
-An docker image is available at `weirdtangent/govee2mqtt:latest`. You can mount your configuration volume at `/config` (and see the
-included `config.yaml.sample` file) or use the ENV variables:
+An docker image is available at `weirdtangent/govee2mqtt:latest`. You can mount your configuration volume at `/config` (and see the included `config.yaml.sample` file) or use the ENV variables:
 
 It supports the following environment variables:
 
@@ -53,7 +51,9 @@ A few fancy options are only half-supported by Govee:
 
 I am trying to figure out if there's any way to make this more automatic or easier.
 
-In HomeAssistant, if you create a `Helper` like:
+In HomeAssistant, if you create a `Helper` like this:
+
+> Note: you can see what MusicMode options your particular light supports by looking at the `MusicMode` property on the MQTT device and click on `Attributes` to see the `Possible States` - and you can skip any modes you don't like or never use
 
 ```yaml
 input_select:
@@ -63,16 +63,7 @@ input_select:
       - Energic
       - Dynamic
       - Calm
-      - Bounce
-      - Hopping
-      - Strike
-      - Vibrate
-      - Skittles
-      - Torch
-      - CandyCrush
-      - Fusion
-      - Luminous
-      - Separation
+      - ...
     editable: true
     icon: mdi:dance-ballroom
     friendly_name: Set Office Light MusicMode
@@ -105,8 +96,7 @@ actions:
 mode: single
 ```
 
-You can add that pulldown input to a dashboard, and select a MusicMode and have
-the command sent to MQTT which will send it to Govee.
+You can add that pulldown input to a dashboard, and select a MusicMode and have the command sent to MQTT which will send it to Govee.
 
 ## Others to come...
 
@@ -119,13 +109,10 @@ Docker is the only supported way of deploying the application. The app should ru
 
 ### Buy Me A Coffee
 
-A few people have kindly requested a way to donate a small amount of money. If you feel so inclined I've set up a "Buy Me A Coffee"
-page where you can donate a small sum. Please do not feel obligated to donate in any way - I work on the app because it's
-useful to myself and others, not for any financial gain - but any token of appreciation is much appreciated 🙂
+A few people have kindly requested a way to donate a small amount of money. If you feel so inclined I've set up a "Buy Me A Coffee" page where you can donate a small sum. Please do not feel obligated to donate in any way - I work on the app because it's useful to myself and others, not for any financial gain - but any token of appreciation is much appreciated 🙂
 
 <a href="https://buymeacoffee.com/weirdtangent">Buy Me A Coffee</a>
 
 ### How Happy am I?
 
 <img src="https://github.com/weirdtangent/govee2mqtt/actions/workflows/deploy.yaml/badge.svg" />
-
