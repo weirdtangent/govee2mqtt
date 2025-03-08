@@ -92,13 +92,12 @@ class GoveeMqtt(object):
     def mqtt_on_disconnect(self, client, userdata, flags, rc, properties):
         self.logger.info('MQTT connection closed')
 
-        # if we try to reconnect, lets use a new client_id
-        self.client_id = self.get_new_client_id()
-
-        if time.time() > self.mqtt_connect_time + 20:
+        if self.running and time.time() > self.mqtt_connect_time + 10:
+            # lets use a new client_id for a reconnect
+            self.client_id = self.get_new_client_id()
             self.mqttc_create()
         else:
-            exit(1)
+            exit()
 
     def mqtt_on_log(self, client, userdata, paho_log_level, msg):
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_ERR:
@@ -274,7 +273,7 @@ class GoveeMqtt(object):
                     self.mqttc.publish(self.get_discovery_topic('service', topic), payload, qos=self.mqtt_config['qos'], retain=True)
         except Exception as err:
             self.logger.error(f'Failed to publish service states: {err}', exc_info=True)
-            os._exit(1)
+            exit(1)
 
     def publish_service_discovery(self):
         state_topic = self.get_discovery_topic('service', 'state')
@@ -441,7 +440,7 @@ class GoveeMqtt(object):
                         self.logger.info(f'Saw device, but not supported yet: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
         except Exception as err:
             self.logger.error(f'Failed to process device list from Govee: {err}', exc_info=True)
-            os._exit(1)
+            exit(1)
 
         # lets log our first time through and then release the hounds
         if not self.discovery_complete:
@@ -593,7 +592,7 @@ class GoveeMqtt(object):
                         }
         except Exception as err:
             self.logger.error(f'Failed to build Govee device components: {err}', exc_info=True)
-            os._exit(1)
+            exit(1)
 
         # It's a pretty good guess that we have a `light` if we
         # got `supported_color_modes` but note that the docs say:
@@ -629,7 +628,7 @@ class GoveeMqtt(object):
                     self.mqttc.publish(self.get_discovery_topic(device_id, topic), payload, qos=self.mqtt_config['qos'], retain=True)
         except Exception as err:
             self.logger.error(f'Failed to publish device states for {device_id}: {err}', exc_info=True)
-            os._exit(1)
+            exit(1)
 
     def publish_device_discovery(self, device_id):
         device_config = self.configs[device_id]
@@ -838,16 +837,12 @@ class GoveeMqtt(object):
 
     # async functions -----------------------------------------------------------------------------
 
-    async def _handle_signals(self, signame, loop, tasks):
+    async def _handle_signals(self, signame, loop):
         self.running = False
         self.logger.warn(f'{signame} received, waiting for tasks to cancel...')
 
-        for t in tasks:
-            if not t.done():
-                t.cancel()
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-        loop.stop()
+        for task in asyncio.all_tasks():
+            if not task.done(): task.cancel(f'{signame} received') 
 
     async def device_list_loop(self):
         while self.running == True:
@@ -874,14 +869,15 @@ class GoveeMqtt(object):
         ]
 
         # setup signal handling for tasks
-        for signame in {'SIGINT','SIGTERM'}:
+        for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(
-                getattr(signal, signame),
-                lambda: asyncio.create_task(self._handle_signals(signame, loop, tasks))
+                sig, lambda: asyncio.create_task(self._handle_signals(sig.name, loop))
             )
 
         try:
             await asyncio.gather(*tasks, return_exceptions=True)
+        except asyncio.CancelledError:
+            exit(1)
         except Exception as err:
             self.running = False
             self.logger.error(f'Caught exception: {err}')
