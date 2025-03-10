@@ -1,3 +1,10 @@
+# This software is licensed under the MIT License, which allows you to use,
+# copy, modify, merge, publish, distribute, and sell copies of the software,
+# with the requirement to include the original copyright notice and this
+# permission notice in all copies or substantial portions of the software.
+#
+# The software is provided 'as is', without any warranty.
+
 import asyncio
 from datetime import datetime
 import govee_api
@@ -278,7 +285,7 @@ class GoveeMqtt(object):
 
         for topic in ['state','availability','intervals']:
             if topic in service_states:
-                payload = json.dumps(service_states[topic]) if isinstance(service_states[topic], dict) else service_states[topic] 
+                payload = json.dumps(service_states[topic]) if isinstance(service_states[topic], dict) else service_states[topic]
                 self.mqttc.publish(self.get_discovery_topic('service', topic), payload, qos=self.mqtt_config['qos'], retain=True)
 
     def publish_service_discovery(self):
@@ -432,8 +439,6 @@ class GoveeMqtt(object):
                     'support_url': 'https://github.com/weirdtangent/govee2mqtt',
                 }
 
-                # quick set some defaults for state, availability, music if they don't exist yet
-
                 self.add_components_to_device(device_id, device['capabilities'])
 
                 if new_device:
@@ -515,7 +520,7 @@ class GoveeMqtt(object):
                     light['supported_color_modes'].append('color_temp')
                     light['color_temp_kelvin'] = True
                     light['color_temp_topic'] = light_topic,
-                    light['color_temp_command'] = self.get_command_topic(device_id, 'color_temp'), 
+                    light['color_temp_command'] = self.get_command_topic(device_id, 'color_temp'),
                     light['color_temp_value_template'] = '{{ value_json.rgb }}'
                     light['min_kelvin'] = cap['parameters']['range']['min'] or 2000
                     light['max_kelvin'] = cap['parameters']['range']['max'] or 9000
@@ -613,7 +618,7 @@ class GoveeMqtt(object):
 
             # ok, now we can add this as a real component to our array
             components[self.get_slug(device_id, 'light')] = light
-        
+
         # pull all components into our device
         device_config['components'] = components
 
@@ -622,7 +627,7 @@ class GoveeMqtt(object):
 
         for topic in ['state','light','music','telemetry']:
             if topic in device_states:
-                payload = json.dumps(device_states[topic]) if isinstance(device_states[topic], dict) else device_states[topic] 
+                payload = json.dumps(device_states[topic]) if isinstance(device_states[topic], dict) else device_states[topic]
                 self.mqttc.publish(self.get_discovery_topic(device_id, topic), payload, qos=self.mqtt_config['qos'], retain=True)
 
     def publish_device_discovery(self, device_id):
@@ -657,7 +662,7 @@ class GoveeMqtt(object):
             for device_id in self.boosted:
                 if not self.running: break
                 self.refresh_device(device_id)
- 
+
    # other helpers -------------------------------------------------------------------------------
 
     def refresh_device(self, device_id):
@@ -836,7 +841,7 @@ class GoveeMqtt(object):
         self.logger.warn(f'{signame} received, waiting for tasks to cancel...')
 
         for task in asyncio.all_tasks():
-            if not task.done(): task.cancel(f'{signame} received') 
+            if not task.done(): task.cancel(f'{signame} received')
 
     async def device_list_loop(self):
         while self.running == True:
