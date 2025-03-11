@@ -43,7 +43,7 @@ It supports the following environment variables:
 -   `HIDE_TS: False` (hide timestamps in logs, in case your log-viewer adds one already)
 -   `DEBUG: True` (for much more logging)
 
-# Unsupported so far by Govee, but...
+# Unsupported so far by Govee, or just plain wrong
 
 A few fancy options are only half-supported by Govee:
 
@@ -59,7 +59,7 @@ In HomeAssistant, if you create a `Helper` like this:
 input_select:
   office_light_music_mode:
     options:
-      - Unknown
+      - Off
       - Energic
       - Dynamic
       - Calm
@@ -90,7 +90,7 @@ actions:
     data:
       evaluate_payload: false
       qos: "0"
-      retain: true
+      retain: false
       topic: homeassistant/device/govee-XXXXXXXXXXXXXXXX/set/music_mode
       payload: "{{ states('input_select.office_light_music_mode') }}"
 mode: single
@@ -98,10 +98,30 @@ mode: single
 
 You can add that pulldown input to a dashboard, and select a MusicMode and have the command sent to MQTT which will send it to Govee.
 
-## Others to come...
+HOWEVER: Govee does not report back the state of this or NightLight mode or Gradient Mode or others. Also, they are sometimes just plain wrong. For example, they claim my `H6042 Smart TV Light Bar` does MusicModes of:
 
+```json
+"options":[
+  {"name": "Energic", "value": 5},
+  {"name": "Rhythm", "value": 3},
+  {"name": "Spectrum", "value": 6},
+  {"name": "Rolling", "value": 4}
+]
+````
+
+But sending those values back Govee makes no change to the Light Bar. Sending other values just fails with a `Parameter value out of range` error. Yet, in my app, it lets me set `Vivid`, `Rhythm`, `Bouncing Ball`, `Luminous`, `Beat`, `Torch`, `Rainbow Circle`, and `Shiny`.
+
+Also, when turning one mode OFF, Govee will respond that the mode was supposedly turned ON, but does not update that others are now OFF. For example, if `Dreamview` mode is ON, and you turn ON `Gradient` mode, they don't update you that `Dreamview` mode is now OFF. In fact, there doesn't seem to be a documented way of turning `MusicMode` OFF. You can force a solid color. Turning the light OFF and back ON doesn't do it.
+
+Another example, turning the light OFF and then turning on `Dreamview` mode will turn the light ON automatically. But turning on `Gradient` mode will not - the light stays OFF. If you then turn the light ON, it will be in `Gradient` mode.
+
+All of this makes it almost worthless to do much with this Govee API - the very basic functions work, but everything fancy is a toss-up :(
 
 ## Out of Scope
+
+### Working around Govee API Problems
+
+There just isn't much hope. I don't want to even want to attempt the multi-cast LAN option for fear that it works just as poorly and will be as big of a waste of time. I really hope they come out with a v2 of their API and fix all of this. I had high hopes because their Android app is so feature-full. The docs I am going by are <a href="https://developer.govee.com/">here</a> as of March 2025.
 
 ### Non-Docker Environments
 

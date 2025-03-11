@@ -67,24 +67,18 @@ class GoveeMqtt(object):
             self.logger.error('Lost connection to MQTT')
 
     def save_state(self):
-        try:
-            state = {
-                'api_calls': self.goveec.api_calls,
-                'last_call_date': self.goveec.last_call_date,
-            }
-            with open(self.data_file, 'w') as file:
-                json.dump(state, file, indent=4)
-            self.logger.info(f'Saved state to {self.data_file}')
-        except Exception as err:
-            self.logger.error(f'FAILED TO SAVE STATE: {type(err).__name__} - {err=}')
+        state = {
+            'api_calls': self.goveec.api_calls,
+            'last_call_date': self.goveec.last_call_date,
+        }
+        with open(self.data_file, 'w') as file:
+            json.dump(state, file, indent=4)
+        self.logger.info(f'Saved state to {self.data_file}')
 
     def restore_state(self):
-        try:
-            with open(self.data_file, 'r') as file:
-                state = json.loads(file.read())
-                self.goveec.restore_state_values(state['api_calls'], state['last_call_date'])
-        except Exception as err:
-            self.logger.error(f'UNABLE TO RESTORE STATE: {type(err).__name__} - {err}')
+        with open(self.data_file, 'r') as file:
+            state = json.loads(file.read())
+            self.goveec.restore_state_values(state['api_calls'], state['last_call_date'])
 
     # MQTT Functions ------------------------------------------------------------------------------
 
@@ -108,9 +102,9 @@ class GoveeMqtt(object):
 
     def mqtt_on_log(self, client, userdata, paho_log_level, msg):
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_ERR:
-            self.logger.error(f'MQTT LOG: {msg}')
+            self.logger.error(f'MQTT logged: {msg}')
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_WARNING:
-            self.logger.warn(f'MQTT LOG: {msg}')
+            self.logger.warn(f'MQTT logged: {msg}')
 
     def mqtt_on_message(self, client, userdata, msg):
         try:
@@ -139,11 +133,9 @@ class GoveeMqtt(object):
             elif components[-2] == 'set':
                 vendor, device_id = components[-3].split('-')
                 attribute = components[-1]
-            else:
-                return
 
             # of course, we only care about our 'govee-<mac>' component messages
-            if vendor != 'govee':
+            if not vendor or vendor != 'govee':
                 return
 
             # ok, lets format the device_id and send the command to govee
@@ -218,7 +210,7 @@ class GoveeMqtt(object):
             self.mqtt_connect_time = time.time()
             self.mqttc.loop_start()
         except ConnectionError as error:
-            self.logger.error(f'COULD NOT CONNECT TO MQTT {self.mqtt_config.get("host")}: {error}')
+            self.logger.error(f'Failed to conect to MQTT host {self.mqtt_config.get("host")}: {error}')
             exit(1)
 
     # MQTT Topics ---------------------------------------------------------------------------------
@@ -264,7 +256,7 @@ class GoveeMqtt(object):
         if 'service' not in self.configs:
             self.configs['service'] = {
                 'availability': 'online',
-                'state': { 'state': 'ON' },
+                'state': { 'state': 'on' },
                 'intervals': {},
             }
 
@@ -272,7 +264,7 @@ class GoveeMqtt(object):
 
         # update states
         service_states['state'] = {
-            'state': 'ON',
+            'state': 'on',
             'api_calls': self.goveec.get_api_calls(),
             'last_call_date': self.goveec.get_last_call_date(),
             'rate_limited': 'yes' if self.goveec.is_rate_limited() else 'no',
@@ -315,8 +307,8 @@ class GoveeMqtt(object):
                         'name': 'Service',
                         'platform': 'binary_sensor',
                         'schema': 'json',
-                        'payload_on': 'ON',
-                        'payload_off': 'OFF',
+                        'payload_on': 'on',
+                        'payload_off': 'off',
                         'icon': 'mdi:language-python',
                         'state_topic': state_topic,
                         'value_template': '{{ value_json.state }}',
@@ -423,7 +415,7 @@ class GoveeMqtt(object):
                     self.states[device_id] = {}
 
                     # publish state and availability before device
-                    self.mqttc.publish(self.get_discovery_topic('service','state'), json.dumps({'state' : 'OFF', 'api_calls': self.goveec.get_api_calls() ,'last_update': None, 'rate_limited': None}), qos=self.mqtt_config['qos'], retain=True)
+                    self.mqttc.publish(self.get_discovery_topic('service','state'), json.dumps({'state' : 'off', 'api_calls': self.goveec.get_api_calls() ,'last_update': None, 'rate_limited': None}), qos=self.mqtt_config['qos'], retain=True)
                     self.mqttc.publish(self.get_discovery_topic('service','availability'), 'online', qos=self.mqtt_config['qos'], retain=True)
 
                 self.configs[device_id]['device'] = {
@@ -457,170 +449,211 @@ class GoveeMqtt(object):
 
     # convert Govee device capabilities into MQTT components
     def add_components_to_device(self, device_id, capabilities):
-        device_config = self.configs[device_id]
-        device_states = self.states[device_id]
+        try:
+            device_config = self.configs[device_id]
+            device_states = self.states[device_id]
 
-        state_topic = self.get_discovery_topic(device_id, 'state')
-        availability_topic = self.get_discovery_topic('service', 'availability')
-        light_topic = self.get_discovery_topic(device_id, 'light')
-        music_topic = self.get_discovery_topic(device_id, 'music')
-        telemetry_topic = self.get_discovery_topic(device_id, 'telemetry')
-        command_topic = self.get_discovery_topic(device_id, 'set')
+            state_topic = self.get_discovery_topic(device_id, 'state')
+            availability_topic = self.get_discovery_topic('service', 'availability')
+            light_topic = self.get_discovery_topic(device_id, 'light')
+            music_topic = self.get_discovery_topic(device_id, 'music')
+            telemetry_topic = self.get_discovery_topic(device_id, 'telemetry')
+            command_topic = self.get_discovery_topic(device_id, 'set')
 
-        device_type = 'sensor' if device_config['device']['model'].startswith('H5') else 'light'
+            device_type = 'sensor' if device_config['device']['model'].startswith('H5') else 'light'
 
-        # setup to store states
-        device_states['state'] = { 'last_update': None }
-        device_states['light'] = { 'state': None }
+            # setup to store states
+            device_states['state'] = { 'last_update': None }
+            device_states['light'] = { 'state': None }
 
-        # we setup a light component to make it easy to add-to
-        # as we process capabilities, and then add it to components
-        # after the loop
-        light = {
-            'name': 'Light',
-            'platform': 'light',
-            'schema': 'json',
-            'state_topic': light_topic,
-            'state_template': '{{ value_json.state }}',
-            'availability_topic': availability_topic,
-            'command_topic': self.get_command_topic(device_id, 'light'),
-            'supported_color_modes': [],
-            'optimistic': False,
-            'unique_id': self.get_slug(device_id, 'light'),
-        }
-
-        components = {
-            self.get_slug(device_id, 'last_update'): {
-                'name': 'Last Update',
-                'platform': 'sensor',
-                'device_class': 'timestamp',
-                'state_topic': state_topic,
-                'value_template': '{{ value_json.last_update }}',
-                'unique_id': self.get_slug(device_id, 'last_update'),
+            # we setup a light component to make it easy to add-to
+            # as we process capabilities, and then add it to components
+            # after the loop
+            light = {
+                'name': 'Light',
+                'platform': 'light',
+                'state_topic': light_topic,
+                'payload_on': 'on',
+                'payload_off': 'off',
+                'availability_topic': availability_topic,
+                'state_value_template': '{{ value_json.state }}',
+                'command_topic': self.get_command_topic(device_id, 'light'),
+                'supported_color_modes': [],
+                'unique_id': self.get_slug(device_id, 'light'),
             }
-        }
 
-        for cap in capabilities:
-            match cap['instance']:
-                case 'brightness':
-                    light['supported_color_modes'].append('brightness')
-                    light['brightness_scale'] = cap['parameters']['range']['max']
-                    light['brightness_state'] = light_topic,
-                    light['brightness_command'] = self.get_command_topic(device_id, 'brightness'),
-                    light['brightness_value_template'] = '{{ value_json.brightness }}'
-                case 'powerSwitch':
-                    light['supported_color_modes'].append('onoff')
-                case 'colorRgb':
-                    light['supported_color_modes'].append('rgb')
-                    light['rgb_state'] = light_topic,
-                    light['rgb_command'] = self.get_command_topic(device_id, 'rgb'),
-                    light['rgb_value_template'] = '{{ value_json.rgb }}'
-                    device_states['light']['rgb_max'] = cap['parameters']['range']['max'] or 16777215
-                case 'colorTemperatureK':
-                    light['supported_color_modes'].append('color_temp')
-                    light['color_temp_kelvin'] = True
-                    light['color_temp_topic'] = light_topic,
-                    light['color_temp_command'] = self.get_command_topic(device_id, 'color_temp'),
-                    light['color_temp_value_template'] = '{{ value_json.rgb }}'
-                    light['min_kelvin'] = cap['parameters']['range']['min'] or 2000
-                    light['max_kelvin'] = cap['parameters']['range']['max'] or 9000
-                case 'sensorTemperature':
-                    # setup to store state
-                    if 'telemetry' not in device_states: device_states['telemetry'] = { 'temperature': None, 'humidity': None }
+            components = {
+                self.get_slug(device_id, 'last_update'): {
+                    'name': 'Last Update',
+                    'platform': 'sensor',
+                    'device_class': 'timestamp',
+                    'entity_category': 'diagnostic',
+                    'state_topic': state_topic,
+                    'value_template': '{{ value_json.last_update }}',
+                    'unique_id': self.get_slug(device_id, 'last_update'),
+                }
+            }
 
-                    components[self.get_slug(device_id, 'temperature')] = {
-                        'name': 'Temperature',
-                        'platform': 'sensor',
-                        'device_class': 'temperature',
-                        'unit_of_measurement': '°F',
-                        'state_topic': telemetry_topic,
-                        'availability_topic': availability_topic,
-                        'value_template': '{{ value_json.temperature }}',
-                        'unique_id': self.get_slug(device_id, 'temperature')
-                    }
-                case 'sensorHumidity':
-                    # setup to store state
-                    if 'telemetry' not in device_states: device_states['telemetry'] = { 'temperature': None, 'humidity': None }
+            for cap in capabilities:
+                match cap['instance']:
+                    case 'brightness':
+                        light['supported_color_modes'].append('brightness')
+                        light['brightness_scale'] = cap['parameters']['range']['max']
+                        light['brightness_state'] = light_topic,
+                        light['brightness_command'] = self.get_command_topic(device_id, 'brightness'),
+                        light['brightness_value_template'] = '{{ value_json.brightness }}'
+                    case 'powerSwitch':
+                        light['supported_color_modes'].append('onoff')
+                    case 'colorRgb':
+                        light['supported_color_modes'].append('rgb')
+                        light['rgb_state'] = light_topic,
+                        light['rgb_command'] = self.get_command_topic(device_id, 'rgb'),
+                        light['rgb_value_template'] = '{{ value_json.rgb }}'
+                        device_states['light']['rgb_max'] = cap['parameters']['range']['max'] or 16777215
+                    case 'colorTemperatureK':
+                        light['supported_color_modes'].append('color_temp')
+                        light['color_temp_kelvin'] = True
+                        light['color_temp_topic'] = light_topic,
+                        light['color_temp_command'] = self.get_command_topic(device_id, 'color_temp'),
+                        light['color_temp_value_template'] = '{{ value_json.rgb }}'
+                        light['min_kelvin'] = cap['parameters']['range']['min'] or 2000
+                        light['max_kelvin'] = cap['parameters']['range']['max'] or 9000
+                    case 'gradientToggle':
+                        device_states['light']['gradient'] = 'off'
+                        components[self.get_slug(device_id, 'gradient')] = {
+                            'name': 'Gradient',
+                            'platform': 'switch',
+                            'device_class': 'switch',
+                            'icon': 'mdi:gradient-horizontal' if device_config['device']['model'] == 'H6042' else 'mdi:gradient-vertical',
+                            'payload_on': 'on',
+                            'payload_off': 'off',
+                            'state_topic': light_topic,
+                            'value_template': '{{ value_json.gradient }}',
+                            'command_topic': self.get_command_topic(device_id, 'gradient'),
+                            'unique_id': self.get_slug(device_id, 'gradient')
+                        }
+                    case 'nightlightToggle':
+                        device_states['light']['nightlight'] = 'off'
+                        components[self.get_slug(device_id, 'nightlight')] = {
+                            'name': 'Nightlight',
+                            'platform': 'switch',
+                            'device_class': 'switch',
+                            'icon': 'mdi:led-off',
+                            'payload_on': 'on',
+                            'payload_off': 'off',
+                            'state_topic': light_topic,
+                            'value_template': '{{ value_json.nightlight }}',
+                            'command_topic': self.get_command_topic(device_id, 'nightlight'),
+                            'unique_id': self.get_slug(device_id, 'nightlight')
+                        }
+                    case 'dreamViewToggle':
+                        device_states['light']['dreamview'] = 'off'
+                        components[self.get_slug(device_id, 'dreamview')] = {
+                            'name': 'Dreamview',
+                            'platform': 'switch',
+                            'device_class': 'switch',
+                            'icon': 'mdi:creation',
+                            'payload_on': 'on',
+                            'payload_off': 'off',
+                            'state_topic': light_topic,
+                            'value_template': '{{ value_json.dreamview }}',
+                            'command_topic': self.get_command_topic(device_id, 'dreamview'),
+                            'unique_id': self.get_slug(device_id, 'dreamview')
+                        }
+                    case 'sensorTemperature':
+                        # setup to store state
+                        if 'telemetry' not in device_states: device_states['telemetry'] = { 'temperature': None, 'humidity': None }
 
-                    components[self.get_slug(device_id, 'humidity')] = {
-                        'name': 'Humidity',
-                        'platform': 'sensor',
-                        'state_class': 'measurement',
-                        'device_class': 'humidity',
-                        'unit_of_measurement': '%',
-                        'state_topic': telemetry_topic,
-                        'availability_topic': availability_topic,
-                        'value_template': '{{ value_json.humidity }}',
-                        'unique_id': self.get_slug(device_id, 'humidity'),
-                    }
-                case 'musicMode':
-                    # setup to store state
-                    device_states['music'] = { 'mode': 'Unknown', 'sensitivity': 100 }
+                        components[self.get_slug(device_id, 'temperature')] = {
+                            'name': 'Temperature',
+                            'platform': 'sensor',
+                            'device_class': 'temperature',
+                            'unit_of_measurement': '°F',
+                            'state_topic': telemetry_topic,
+                            'availability_topic': availability_topic,
+                            'value_template': '{{ value_json.temperature }}',
+                            'unique_id': self.get_slug(device_id, 'temperature')
+                        }
+                    case 'sensorHumidity':
+                        # setup to store state
+                        if 'telemetry' not in device_states: device_states['telemetry'] = { 'temperature': None, 'humidity': None }
 
-                    music_options = [ 'Unknown' ]
-                    device_states['music']['options'] = { 'Unknown': 0 }
+                        components[self.get_slug(device_id, 'humidity')] = {
+                            'name': 'Humidity',
+                            'platform': 'sensor',
+                            'state_class': 'measurement',
+                            'device_class': 'humidity',
+                            'unit_of_measurement': '%',
+                            'state_topic': telemetry_topic,
+                            'availability_topic': availability_topic,
+                            'value_template': '{{ value_json.humidity }}',
+                            'unique_id': self.get_slug(device_id, 'humidity'),
+                        }
+                    case 'musicMode':
+                        # setup to store state
+                        device_states['music'] = { 'mode': 'Off', 'sensitivity': 100 }
 
-                    for field in cap['parameters']['fields']:
-                        match field['fieldName']:
-                            case 'musicMode':
-                                for option in field['options']:
-                                    music_options.append(option['name'])
-                                    device_states['music']['options'][option['name']] = option['value']
-                            case 'sensitivity':
-                                music_min = field['range']['min']
-                                music_max = field['range']['max']
-                                music_step = field['range']['precision']
-                                device_states['music']['sensitivity'] = 100
+                        music_options = [ 'Off' ]
+                        device_states['music']['options'] = { 'Off': 0 }
 
-                    components[self.get_slug(device_id, 'music_mode')] = {
-                        'name': 'Music Mode',
-                        'platform': 'sensor',
-                        'device_class': 'enum',
-                        'options': music_options,
-                        'state_topic': music_topic,
-                        'availability_topic': availability_topic,
-                        'command_topic': self.get_command_topic(device_id, 'music_mode'),
-                        'value_template': '{{ value_json.mode }}',
-                        'unique_id': self.get_slug(device_id, 'music_mode'),
-                    }
-                    components[self.get_slug(device_id, 'music_sensitivity')] = {
-                        'name': 'Music Sensitivity',
-                        'platform': 'number',
-                        'schema': 'json',
-                        'icon': 'mdi:numeric',
-                        'min': music_min,
-                        'max': music_max,
-                        'step': music_step,
-                        'state_topic': music_topic,
-                        'availability_topic': availability_topic,
-                        'command_topic': self.get_command_topic(device_id, 'music_sensitivity'),
-                        'value_template': '{{ value_json.sensitivity }}',
-                        'unique_id': self.get_slug(device_id, 'music_sensitivity'),
-                    }
+                        for field in cap['parameters']['fields']:
+                            match field['fieldName']:
+                                case 'musicMode':
+                                    for option in field['options']:
+                                        music_options.append(option['name'])
+                                        device_states['music']['options'][option['name']] = option['value']
+                                case 'sensitivity':
+                                    music_min = field['range']['min']
+                                    music_max = field['range']['max']
+                                    music_step = field['range']['precision']
+                                    device_states['music']['sensitivity'] = 100
 
-        # It's a pretty good guess that we have a `light` if we
-        # got `supported_color_modes` but note that the docs say:
-        #   "if `onoff` or `brightness` are used, that must be the only value in the list."
-        # so we'll remove 1 and maybe both when we have other supported color modes
-        if len(light['supported_color_modes']) > 0:
-            # first, if brightness is supported, lets add the value template
-            if 'brightness' in light['supported_color_modes']:
-                light['brightness_value_template'] = '{{ value_json.brightness }}'
-            # now we can clean up the supported_color_modes
-            if len(light['supported_color_modes']) > 1:
-                light['supported_color_modes'].remove('onoff')
-                if len(light['supported_color_modes']) > 1:
-                    light['supported_color_modes'].remove('brightness')
-                    del light['brightness_scale']
-                    del light['brightness_state']
-                    del light['brightness_command']
-                    del light['brightness_value_template']
+                        components[self.get_slug(device_id, 'music_mode')] = {
+                            'name': 'Music Mode',
+                            'platform': 'sensor',
+                            'device_class': 'enum',
+                            'options': music_options,
+                            'state_topic': music_topic,
+                            'availability_topic': availability_topic,
+                            'command_topic': self.get_command_topic(device_id, 'music_mode'),
+                            'value_template': '{{ value_json.mode }}',
+                            'unique_id': self.get_slug(device_id, 'music_mode'),
+                        }
+                        components[self.get_slug(device_id, 'music_sensitivity')] = {
+                            'name': 'Music Sensitivity',
+                            'platform': 'number',
+                            'schema': 'json',
+                            'icon': 'mdi:numeric',
+                            'min': music_min,
+                            'max': music_max,
+                            'step': music_step,
+                            'state_topic': music_topic,
+                            'availability_topic': availability_topic,
+                            'command_topic': self.get_command_topic(device_id, 'music_sensitivity'),
+                            'value_template': '{{ value_json.sensitivity }}',
+                            'unique_id': self.get_slug(device_id, 'music_sensitivity'),
+                        }
+
+            # The docs say:
+            #   "if `onoff` or `brightness` are used, that must be the only value in the list."
+            # so we'll remove 1 and maybe both when we have other supported color modes
+            # if len(light['supported_color_modes']) > 1:
+            #     light['supported_color_modes'].remove('onoff')
+            #     if len(light['supported_color_modes']) > 1:
+            #         light['supported_color_modes'].remove('brightness')
+            #         del light['brightness_scale']
+            #         del light['brightness_state']
+            #         del light['brightness_command']
+            #         del light['brightness_value_template']
 
             # ok, now we can add this as a real component to our array
             components[self.get_slug(device_id, 'light')] = light
 
-        # pull all components into our device
-        device_config['components'] = components
+            # pull all components into our device
+            device_config['components'] = components
+        except Exception as err:
+            self.logger.error(err, exc_info=True)
+            exit(1)
 
     def publish_device_state(self, device_id):
         device_states = self.states[device_id]
@@ -683,17 +716,24 @@ class GoveeMqtt(object):
         device_states = self.states[device_id]
 
         for key in data:
+            if data[key] == "": continue
             match key:
                 case 'online':
                     device_states['availability'] = 'online' if data[key] == True else 'offline'
                 case 'powerSwitch':
-                    device_states['light']['state'] = 'ON' if data[key] == 1 else 'OFF'
+                    device_states['light']['state'] = 'on' if data[key] == 1 else 'off'
                 case 'brightness':
                     device_states['light']['brightness'] = data[key]
                 case 'colorRgb':
                     device_states['light']['rgb'] = number_to_rgb(data[key], device_states['light']['rgb_max'])
                 case 'colorTemperatureK':
                     device_states['light']['color_temp'] = data[key]
+                case 'gradientToggle':
+                    device_states['light']['gradient'] = 'on' if data[key] == 1 else 'off'
+                case 'nightlightToggle':
+                    device_states['light']['nightlight'] = 'on' if data[key] == 1 else 'off'
+                case 'dreamViewToggle':
+                    device_states['light']['dreamview'] = 'on' if data[key] == 1 else 'off'
                 case 'sensorTemperature':
                     device_states['telemetry']['temperature'] = data[key]
                 case 'sensorHumidity':
@@ -714,15 +754,16 @@ class GoveeMqtt(object):
     def build_govee_capabilities(self, device_id, attributes):
         device_config = self.configs[device_id]
         device_states = self.states[device_id]
+        light = device_states['light']
 
         capabilities = {}
         for key in attributes:
             match key:
-                case 'state':
+                case 'light':
                     capabilities['powerSwitch'] = {
                         'type': 'devices.capabilities.on_off',
                         'instance': 'powerSwitch',
-                        'value': 1 if attributes[key] == 'ON' else 0,
+                        'value': 1 if attributes[key] == 'on' else 0,
                     }
                 case 'brightness':
                     capabilities['brightness'] = {
@@ -742,6 +783,35 @@ class GoveeMqtt(object):
                         'instance': 'colorTemperatureK',
                         'value': attributes[key],
                     }
+                case 'gradient':
+                    if attributes[key] == 'on':
+                        for mode in ['dreamview','nightlight']:
+                            if mode in light: light[mode] = 'off'
+                    capabilities['gradientToggle'] = {
+                        'type': 'devices.capabilities.toggle',
+                        'instance': 'gradientToggle',
+                        'value': 1 if attributes[key] == 'on' else 0,
+                    }
+                case 'nightlight':
+                    if attributes[key] == 'on':
+                        light['state'] = 'on'
+                        for mode in ['dreamview','gradient']:
+                            if mode in light: light[mode] = 'off'
+                    capabilities['nightlightToggle'] = {
+                        'type': 'devices.capabilities.toggle',
+                        'instance': 'nightlightToggle',
+                        'value': 1 if attributes[key] == 'on' else 0,
+                    }
+                case 'dreamview':
+                    if attributes[key] == 'on':
+                        light['state'] = 'on'
+                        for mode in ['gradient','nightlight']:
+                            if mode in light: light[mode] = 'off'
+                    capabilities['dreamviewToggle'] = {
+                        'type': 'devices.capabilities.toggle',
+                        'instance': 'dreamViewToggle',
+                        'value': 1 if attributes[key] == 'on' else 0,
+                    }
                 case 'music_sensitivity':
                     # first grab what setting we aleady know
                     mode = device_states['music']['options'][device_states['music']['mode']]
@@ -757,12 +827,13 @@ class GoveeMqtt(object):
                         }
                     }
                 case 'music_mode':
+                    mode = device_states['music']['options'][attributes[key]]
                     sensitivity = attributes['music_sensitivity'] if 'music_sensitivity' in attributes else device_states['music']['sensitivity']
                     capabilities['musicMode'] = {
                         'type': 'devices.capabilities.music_setting',
                         'instance': 'musicMode',
                         'value': {
-                            'musicMode': device_states['music']['options'][attributes[key]],
+                            'musicMode': mode,
                             'sensitivity': sensitivity,
                         }
                     }
@@ -846,25 +917,25 @@ class GoveeMqtt(object):
     async def device_list_loop(self):
         while self.running == True:
             self.refresh_device_list()
-            await asyncio.sleep(self.device_list_interval)
+            if self.running: await asyncio.sleep(self.device_list_interval)
 
     async def device_loop(self):
         while self.running == True:
             self.refresh_all_devices()
-            await asyncio.sleep(self.device_interval)
+            if self.running: await asyncio.sleep(self.device_interval)
 
     async def device_boosted_loop(self):
         while self.running == True:
             self.refresh_boosted_devices()
-            await asyncio.sleep(self.device_boost_interval)
+            if self.running: await asyncio.sleep(self.device_boost_interval)
 
     # main loop
     async def main_loop(self):
         loop = asyncio.get_running_loop()
         tasks = [
-                asyncio.create_task(self.device_list_loop()),
-                asyncio.create_task(self.device_loop()),
-                asyncio.create_task(self.device_boosted_loop()),
+            asyncio.create_task(self.device_list_loop()),
+            asyncio.create_task(self.device_loop()),
+            asyncio.create_task(self.device_boosted_loop()),
         ]
 
         # setup signal handling for tasks
@@ -874,7 +945,11 @@ class GoveeMqtt(object):
             )
 
         try:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    self.running = False
+                    self.logger.error(f'Caught exception: {err}', exc_info=True)
         except asyncio.CancelledError:
             exit(1)
         except Exception as err:

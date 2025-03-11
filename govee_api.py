@@ -35,7 +35,7 @@ class GoveeAPI(object):
     def restore_state_values(self, api_calls, last_call_date):
         self.api_calls = api_calls
         self.last_call_date = last_call_date
-        self.logger.info(f'Restored state to {self.api_calls} for {self.last_call_date}')
+        self.logger.info(f'Restored state to {self.api_calls} api_calls so far for {self.last_call_date}')
 
     def increase_api_calls(self):
         if not self.last_call_date or self.last_call_date != str(datetime.now(tz=ZoneInfo(self.timezone)).date()):
@@ -63,7 +63,6 @@ class GoveeAPI(object):
         }
 
     def get_device_list(self):
-        self.logger.debug('GETTING DEVICE LIST FROM GOVEE')
         headers = self.get_headers()
 
         try:
@@ -73,27 +72,22 @@ class GoveeAPI(object):
             self.rate_limited = r.status_code == 429
             if r.status_code != 200:
                 if r.status_code == 429:
-                    self.logger.error(f'RATE-LIMITED GETTING DEVICE LIST')
+                    self.logger.error('Rate-limited by Govee getting device list')
                 else:
-                    self.logger.error(f'ERROR ({r.status_code}) GETTING DEVICE LIST')
+                    self.logger.error(f'Error ({r.status_code}) getting device list')
                 return {}
             data = r.json()
-            self.logger.debug(f'GOT DEVICE LIST FOR {len(data['data'])} ITEMS')
+
         except RequestException as err:
-            self.logger.error(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name__} - {err=}')
-            time.sleep(10)
+            self.logger.error('Request error communicating with Govee for device list')
+            return {}
         except Exception as err:
-            self.logger.error(f'ERROR GETTING DEVICE LIST DATA {type(err).__name__} - {err}')
+            self.logger.error('Error communicating with Govee for device list')
             return {}
 
         return data['data'] if 'data' in data else {}
 
-
-
     def get_device(self, device_id, sku):
-        if not sku:
-            return {}
-
         headers = self.get_headers()
         body = {
             'requestId': str(uuid.uuid4()),
@@ -110,17 +104,16 @@ class GoveeAPI(object):
             self.rate_limited = r.status_code == 429
             if r.status_code != 200:
                 if r.status_code == 429:
-                    self.logger.error(f'RATE-LIMITED GETTING DEVICE {(device_id)}')
+                    self.logger.error(f'Rate-limited by Govee getting device ({device_id})')
                 else:
-                    self.logger.error(f'ERROR ({r.status_code}) GETTING DEVICE ({device_id})')
+                    self.logger.error(f'Error ({r.status_code}) getting device ({device_id})')
                 return {}
             data = r.json()
-            self.logger.debug(f'GOT REFRESH FOR ({device_id})')
         except RequestException as err:
-            self.logger.error(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name__} - {err=}')
-            time.sleep(10)
+            self.logger.error(f'Request error communicating with Govee for device ({device_id})')
+            return {}
         except Exception as err:
-            self.logger.error(f'ERROR GETTING DEVICE DATA {type(err).__name__} - {err=}')
+            self.logger.error(f'Error communicating with Govee for device ({device_id})')
             return {}
 
         new_capabilities = {}
@@ -135,6 +128,7 @@ class GoveeAPI(object):
         return new_capabilities
 
     def send_command(self, device_id, sku, capability, instance, value):
+        headers = self.get_headers()
         body = {
             'requestId': str(uuid.uuid4()),
             'payload': {
@@ -148,27 +142,27 @@ class GoveeAPI(object):
             }
         }
 
-        headers = self.get_headers()
         try:
             r = requests.post(COMMAND_URL, headers=headers, json=body)
             self.increase_api_calls()
 
             self.rate_limited = r.status_code == 429
             if r.status_code != 200:
-                self.logger.error(f'ERROR SENDING DEVICE COMMAND TO ({device_id}): ({r.status_code}) {type(err).__name__} - {err=}')
+                if r.status_code == 429:
+                    self.logger.error(f'Rate-limited by Govee sending command to device ({device_id})')
+                else:
+                    self.logger.error(f'Error ({r.status_code}) sending command to device ({device_id})')
                 return {}
             data = r.json()
-            self.logger.debug(f'GOT RESPONSE FROM COMMAND SENT TO ({device_id})')
+            self.logger.info(f'Raw response from Govee: {data}')
         except RequestException as err:
-            self.logger.error(f'REQUEST PROBLEM, RESTING FOR 10 SEC: {type(err).__name__} - {err=}')
-            time.sleep(10)
+            self.logger.error(f'Request error communicating with Govee sending command to device ({device_id})')
             return {}
         except Exception as err:
-            self.logger.error(f'ERROR SENDING DEVICE COMMAND {type(err).__name__} - {err=}')
+            self.logger.error(f'Error communicating with Govee sending command to device ({device_id})')
             return {}
 
         new_capabilities = {}
-
         try:
             if 'capability' in data and 'state' in data['capability'] and data['capability']['state']['status'] == 'success':
                 capability = data['capability']
@@ -181,6 +175,7 @@ class GoveeAPI(object):
                 # only if we got any `capabilties` back from Govee will we update the `last_update`
                 new_capabilities['lastUpdate'] = datetime.now(ZoneInfo(self.timezone))
         except Exception as err:
-            self.logger.error(f'Failed to understand response from command: {data}')
+            self.logger.error(f'Failed to process response sending command to device ({device_id})')
+            return {}
 
         return new_capabilities
