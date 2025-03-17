@@ -1,27 +1,36 @@
-FROM python:3-alpine
 
-RUN python -m venv /usr/src/app
-# Enable venv
-ENV PATH="/usr/src/app/venv/bin:$PATH"
+# builder stage -----------------------------------------------------------------------------------
+FROM python:3-slim AS builder
+
+RUN apt-get update && \
+    apt-get -y upgrade && \
+    apt-get install --no-install-recommends -y build-essential gcc libffi-dev musl-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m ensurepip
-
-# Upgrade pip and setuptools
 RUN pip3 install --upgrade pip setuptools
 
 # Install dependencies
-RUN apk add --no-cache gcc libffi-dev musl-dev
 
 WORKDIR /usr/src/app
 
-COPY requirements.txt ./
+COPY requirements.txt .
+RUN python3 -m venv .venv
+RUN .venv/bin/pip3 install --no-cache-dir --upgrade -r requirements.txt
 
-# Enable venv
-ENV PATH="/usr/src/app/venv/bin:$PATH"
+# production stage --------------------------------------------------------------------------------
+FROM python:3-slim AS production
 
-RUN pip3 install --no-cache-dir --upgrade -r requirements.txt
+RUN apt-get update && \
+    apt-get -y upgrade && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/app
 
 COPY . .
+COPY --from=builder /usr/src/app/.venv .venv
 
 RUN mkdir /config
 RUN touch /config/config.yaml
@@ -30,12 +39,17 @@ RUN touch /config/govee2mqtt.dat
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-RUN addgroup -g $GROUP_ID appuser && \
-    adduser -u $USER_ID -G appuser --disabled-password --gecos "" appuser
+RUN addgroup --gid $GROUP_ID appuser && \
+    adduser --uid $USER_ID --gid $GROUP_ID --disabled-password --gecos "" appuser
+
+RUN chown -R appuser:appuser .
 RUN chown appuser:appuser /config/*
-RUN chmod 0664 /config/*
+RUN chmod 0664 /config/*    
 
 USER appuser
 
-ENTRYPOINT [ "python", "-u", "./app.py" ]
+ENV PATH="/usr/src/app/.venv/bin:$PATH"
+
+ENTRYPOINT [ "python3", "./app.py" ]
 CMD [ "-c", "/config" ]
+

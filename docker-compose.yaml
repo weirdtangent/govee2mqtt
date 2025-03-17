@@ -1,6 +1,8 @@
 services:
   govee2mqtt:
     image: weirdtangent/govee2mqtt:latest
+    context: .
+    target: production
     container_name: govee2mqtt
     restart: unless-stopped
     volumes:
