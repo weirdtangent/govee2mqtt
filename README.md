@@ -107,7 +107,7 @@ HOWEVER: Govee does not report back the state of this or NightLight mode or Grad
   {"name": "Spectrum", "value": 6},
   {"name": "Rolling", "value": 4}
 ]
-````
+```
 
 But sending those values back Govee makes no change to the Light Bar. Sending other values just fails with a `Parameter value out of range` error. Yet, in my app, it lets me set `Vivid`, `Rhythm`, `Bouncing Ball`, `Luminous`, `Beat`, `Torch`, `Rainbow Circle`, and `Shiny`.
 
@@ -128,8 +128,8 @@ There just isn't much hope. I don't want to even want to attempt the multi-cast 
 Docker is the only supported way of deploying the application. The app should run directly via Python but this is not supported.
 
 ## See also
-[amcrest2mqtt](https://github.com/weirdtangent/amcrest2mqtt)
-[blink2mqtt](https://github.com/weirdtangent/blink2mqtt)
+* [amcrest2mqtt](https://github.com/weirdtangent/amcrest2mqtt)
+* [blink2mqtt](https://github.com/weirdtangent/blink2mqtt)
 
 ### Buy Me A Coffee
 
