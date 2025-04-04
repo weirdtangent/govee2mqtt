@@ -1,12 +1,8 @@
 services:
   govee2mqtt:
     image: weirdtangent/govee2mqtt:latest
-    context: .
-    target: production
     container_name: govee2mqtt
     restart: unless-stopped
-    volumes:
-      - ~/.docker-conf/govee2mqtt/config/:/config/
     environment:
       MQTT_HOST: 10.10.10.1
       MQTT_USERNAME: admin
