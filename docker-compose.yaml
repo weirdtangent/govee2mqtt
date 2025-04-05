@@ -1,18 +1,11 @@
 services:
   govee2mqtt:
-    image: weirdtangent/govee2mqtt:latest
+    image: graystorm/govee2mqtt:latest
+    network_mode: host
     container_name: govee2mqtt
     restart: unless-stopped
-    environment:
-      MQTT_HOST: 10.10.10.1
-      MQTT_USERNAME: admin
-      MQTT_PASSWORD: password
-      MQTT_PREFIX: "govee"
-      MQTT_HOMEASSISTANT: "homeassistant"
-      GOVEE_API_KEY: "xxxxx"
-      GOVEE_DEVICE_INTERVAL: 30
-      GOVEE_DEVICE_BOOST_INTERVAL: 5
-      GOVEE_LIST_INTERVAL: 300
+    volumes:
+      - /volume1/docker/govee2mqtt/config:/config
     healthcheck:
       test: ["CMD", "pgrep", "-f", "[p]ython -u app.py"]
       interval: 30s
