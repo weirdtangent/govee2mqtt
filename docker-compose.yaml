@@ -6,8 +6,3 @@ services:
     restart: unless-stopped
     volumes:
       - /volume1/docker/govee2mqtt/config:/config
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "[p]ython -u app.py"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
