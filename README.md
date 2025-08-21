@@ -1,7 +1,6 @@
 # weirdtangent/govee2mqtt
 
-Expose multiple Govee devices and events to an MQTT broker, primarily designed to work with Home Assistant. A WIP, since I'm new to Python.
-
+Expose multiple Govee devices and events to an MQTT broker, primarily designed to work with Home Assistant.
 Forked from [dlashua/govee2mqtt](https://github.com/dlashua/govee2mqtt)
 
 A few notes:
