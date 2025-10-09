@@ -87,6 +87,7 @@ class GoveeMqtt(object):
             self.logger.error(f'MQTT CONNECTION ISSUE ({rc})')
             exit(1)
         self.logger.info(f'MQTT connected as {self.client_id}')
+        client.subscribe("homeassistant/status")
         client.subscribe(self.get_device_sub_topic())
         client.subscribe(self.get_attribute_sub_topic())
 
@@ -117,11 +118,19 @@ class GoveeMqtt(object):
             return
 
         # we might get:
+        #   homeassistant/status
+        # or one of ours:
         #   */service/set
         #   */service/set/attribute
         #   */device/component/set
         #   */device/component/set/attribute
         components = topic.split('/')
+
+        if topic == "homeassistant/status":
+            if payload == "online":
+                self.rediscover_all()
+                self.logger.info('HomeAssistant just came online, so resent all discovery messages')
+            return
 
         if components[-2] == self.get_component_slug('service'):
             self.handle_service_message(None, payload)
@@ -282,8 +291,6 @@ class GoveeMqtt(object):
 
     def publish_service_discovery(self):
         state_topic = self.get_discovery_topic('service', 'state')
-        command_topic = self.get_discovery_topic('service', 'set')
-        availability_topic = self.get_discovery_topic('service', 'availability')
 
         self.mqttc.publish(
             self.get_discovery_topic('service','config'),
@@ -370,6 +377,14 @@ class GoveeMqtt(object):
                         'value_template': '{{ value_json.device_boost_refresh }}',
                         'unique_id': 'govee_service_device_boost_refresh',
                     },
+                    self.service_slug + '_rediscover': {
+                        'name': 'Rediscover Devices',
+                        'platform': 'button',
+                        'icon': 'mdi:refresh',
+                        'command_topic': self.get_command_topic('service', 'rediscover'),
+                        'payload_press': 'PRESS',
+                        'unique_id': f'{self.service_slug}_rediscover_button',
+                    },
                 },
             }),
             qos=self.mqtt_config['qos'],
@@ -398,7 +413,6 @@ class GoveeMqtt(object):
                 continue
             state_topic = self.get_discovery_topic(device_id, 'state')
             availability_topic = self.get_discovery_topic('service', 'availability')
-            light_topic = self.get_discovery_topic(device_id, 'light')
             command_topic = self.get_discovery_topic(device_id, 'set')
 
             if 'type' in device:
@@ -458,9 +472,6 @@ class GoveeMqtt(object):
             light_topic = self.get_discovery_topic(device_id, 'light')
             music_topic = self.get_discovery_topic(device_id, 'music')
             telemetry_topic = self.get_discovery_topic(device_id, 'telemetry')
-            command_topic = self.get_discovery_topic(device_id, 'set')
-
-            device_type = 'sensor' if device_config['device']['model'].startswith('H5') else 'light'
 
             # setup to store states
             device_states['state'] = { 'last_update': None }
@@ -752,7 +763,6 @@ class GoveeMqtt(object):
 
     # convert MQTT attributes to Govee capabilities
     def build_govee_capabilities(self, device_id, attributes):
-        device_config = self.configs[device_id]
         device_states = self.states[device_id]
         light = device_states['light']
 
@@ -900,10 +910,21 @@ class GoveeMqtt(object):
             case 'device_boost_refresh':
                 self.device_boost_interval = message
                 self.logger.info(f'Updated UPDATE_BOOSTED_INTERVAL to be {message}')
+            case 'rediscover':
+                self.rediscover_all()
+                self.logger.info('REDISCOVER button pressed - resent all discovery messages')
             case _:
                 self.logger.info(f'IGNORED UNRECOGNIZED govee-service MESSAGE for {attribute}: {message}')
                 return
         self.publish_service_state()
+
+    def rediscover_all(self):
+        self.publish_service_state()
+        self.publish_service_discovery()
+        for device_id in self.configs:
+            if device_id == 'service': continue
+            self.publish_device_state(device_id)
+            self.publish_device_discovery(device_id)
 
     # async functions -----------------------------------------------------------------------------
 

@@ -7,6 +7,7 @@ A few notes:
 * Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip.
 * If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests (currently 10,000/day).
 * Support is there for power on/off, brightness, and rgb_color.
+* "Rediscover" button added to service - when pressed, device discovery is re-run so HA will rediscover deleted devices
 
 # Getting Started
 ## Direct Install
