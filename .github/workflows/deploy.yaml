@@ -25,7 +25,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # semantic-release needs full history
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -45,6 +45,7 @@ jobs:
         id: get_release
         run: |
           TAG=$(git describe --tags --abbrev=0)
+          echo "$TAG" > VERSION
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
           echo "Found release tag: $TAG"
 
