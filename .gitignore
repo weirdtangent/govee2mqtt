@@ -12,6 +12,7 @@ node_modules/
 
 # Environments
 .env
+.venv
 venv/
 
 # Local testing and notes
