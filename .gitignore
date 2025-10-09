@@ -8,8 +8,10 @@ build/
 dist/
 lib/
 include/
+node_modules/
 
 # Environments
+.env
 venv/
 
 # Local testing and notes
@@ -17,5 +19,10 @@ config
 config/
 config.yaml
 govee2mqtt.dat
+npm-debug.log
 NOTES
+coverage/
+dist/
 
+# Apple
+.DS_Store
