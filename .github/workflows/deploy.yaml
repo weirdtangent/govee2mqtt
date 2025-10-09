@@ -5,6 +5,8 @@ on:
     branches:
       - "main"
   workflow_dispatch:
+  schedule:
+    - cron: "0 3 1 * *"  # Optional: monthly rebuild on the 1st at 03:00 UTC
 
 permissions:
   contents: write
@@ -16,6 +18,9 @@ jobs:
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    outputs:
+      release_tag: ${{ steps.get_release.outputs.release_tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,16 +36,25 @@ jobs:
         run: npm ci
 
       - name: Run semantic-release
+        id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
+      - name: Get latest release tag
+        id: get_release
+        run: |
+          TAG=$(git describe --tags --abbrev=0)
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Found release tag: $TAG"
+
   docker:
     name: Build and Push Docker Image
     needs: [release]
-    if: |
-      github.event_name == 'schedule' || needs.release.result == 'success'
+    if: github.event_name == 'schedule' || needs.release.result == 'success'
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
 
     steps:
       - name: Checkout code
@@ -73,7 +87,5 @@ jobs:
           cache-to: type=gha,mode=max
           labels: |
             org.opencontainers.image.version=${{ env.RELEASE_TAG }}
-            org.opencontainers.image.title=<your-repo-name>
-            org.opencontainers.image.description=${{ env.RELEASE_NOTES }}
+            org.opencontainers.image.title=govee2mqtt
             org.opencontainers.image.source=${{ github.repository }}
-
