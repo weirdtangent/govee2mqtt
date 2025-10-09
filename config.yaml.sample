@@ -7,6 +7,10 @@ mqtt:
   prefix: govee2mqtt
   homeassistant: True
   discovery_prefix: homeassistant
+  tls_enabled: False
+  tls_ca_cert: filename
+  tls_cert: filename
+  tls_key: filename
 
 govee:
   api_key: xxxxx-xxx-xxxxxx
