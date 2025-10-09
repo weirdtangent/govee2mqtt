@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/weirdtangent/govee2mqtt/compare/v1.0.0...v1.0.1) (2025-10-09)
+
+
+### Bug Fixes
+
+* one more .gitignore ([6fd55c3](https://github.com/weirdtangent/govee2mqtt/commit/6fd55c3ff4c58de95473b02ef2298356c20e6085))
+
 # 1.0.0 (2025-10-09)
 
 
