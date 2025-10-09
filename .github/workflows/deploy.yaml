@@ -67,7 +67,13 @@ jobs:
           platforms: linux/arm64,linux/amd64
           tags: |
             graystorm/govee2mqtt:latest
-            graystorm/govee2mqtt:${{ github.ref_name }}
+            graystorm/govee2mqtt:${{ env.RELEASE_TAG }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.version=${{ env.RELEASE_TAG }}
+            org.opencontainers.image.title=<your-repo-name>
+            org.opencontainers.image.description=${{ env.RELEASE_NOTES }}
+            org.opencontainers.image.source=${{ github.repository }}
+
