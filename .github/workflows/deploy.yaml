@@ -16,14 +16,11 @@ jobs:
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
-    outputs:
-      release_tag: ${{ steps.get_release.outputs.release_tag }}
-      release_notes: ${{ steps.semantic.outputs.release_notes }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # semantic-release needs full history
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -34,40 +31,16 @@ jobs:
         run: npm ci
 
       - name: Run semantic-release
-        id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npx semantic-release
-          # semantic-release prints JSON summary to stdout, so we parse it:
-          RELEASE_NOTES=$(npx semantic-release --dry-run | grep -A100 "Next release version" || true)
-          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Get latest release tag
-        id: get_release
-        run: |
-          TAG=$(git describe --tags --abbrev=0)
-          echo "$TAG" > VERSION
-          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Commit VERSION file
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git commit -m "chore: update VERSION to ${{ steps.get_release.outputs.release_tag }}" || echo "No changes to commit"
-          git push
+        run: npx semantic-release
 
   docker:
     name: Build and Push Docker Image
-    needs: release
-    if: ${{ needs.release.result == 'success' }}
+    needs: [release]
+    if: |
+      github.event_name == 'schedule' || needs.release.result == 'success'
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
-      RELEASE_NOTES: ${{ needs.release.outputs.release_notes }}
 
     steps:
       - name: Checkout code
@@ -94,11 +67,7 @@ jobs:
           platforms: linux/arm64,linux/amd64
           tags: |
             graystorm/govee2mqtt:latest
-            graystorm/govee2mqtt:${{ env.RELEASE_TAG }}
+            graystorm/govee2mqtt:${{ github.ref_name }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.version=${{ env.RELEASE_TAG }}
-            org.opencontainers.image.title=govee2mqtt
-            org.opencontainers.image.description=${{ env.RELEASE_NOTES }}
