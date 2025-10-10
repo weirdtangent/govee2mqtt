@@ -18,5 +18,4 @@ services:
       org.opencontainers.image.authors: "weirdTangent <jeff@weirdtangent.com>"
       org.opencontainers.image.url: "https://www.graystorm.com"
       org.opencontainers.image.documentation: "https://github.com/weirdtangent/govee2mqtt#readme"
-      org.opencontainers.image.description: "Publishes Govee device data to MQTT for Home Assistant auto-discovery"
       org.opencontainers.image.licenses: "GPL-3.0-or-later"
