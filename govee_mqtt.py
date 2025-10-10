@@ -32,7 +32,7 @@ class GoveeMqtt(object):
         self.govee_config = config['govee']
         self.timezone = config['timezone']
         self.version = config['version']
-        self.data_file = config['configpath'] + '/govee2mqtt.dat'
+        self.data_file = config["config_path"] + "/govee2mqtt.dat"
 
         self.device_interval = config['govee'].get('device_interval', 30)
         self.device_boost_interval = config['govee'].get('device_boost_interval', 5)
@@ -507,12 +507,16 @@ class GoveeMqtt(object):
 
             for cap in capabilities:
                 match cap['instance']:
-                    case 'brightness':
-                        light['supported_color_modes'].append('brightness')
-                        light['brightness_scale'] = cap['parameters']['range']['max']
-                        light['brightness_state'] = light_topic,
-                        light['brightness_command'] = self.get_command_topic(device_id, 'brightness'),
-                        light['brightness_value_template'] = '{{ value_json.brightness }}'
+                    case "brightness":
+                        light["supported_color_modes"].append("brightness")
+                        light["brightness_scale"] = cap["parameters"]["range"]["max"]
+                        light["brightness_state"] = (light_topic,)
+                        light["brightness_command"] = (
+                            self.get_command_topic(device_id, "brightness"),
+                        )
+                        light["brightness_value_template"] = (
+                            "{{ value_json.brightness }}"
+                        )
                     case 'powerSwitch':
                         light['supported_color_modes'].append('onoff')
                     case 'colorRgb':
@@ -609,10 +613,12 @@ class GoveeMqtt(object):
 
                         for field in cap['parameters']['fields']:
                             match field['fieldName']:
-                                case 'musicMode':
-                                    for option in field['options']:
-                                        music_options.append(option['name'])
-                                        device_states['music']['options'][option['name']] = option['value']
+                                case "musicMode":
+                                    for option in field["options"]:
+                                        music_options.append(option["name"])
+                                        device_states["music"]["options"][
+                                            option["name"]
+                                        ] = option["value"]
                                 case 'sensitivity':
                                     music_min = field['range']['min']
                                     music_max = field['range']['max']
@@ -693,7 +699,7 @@ class GoveeMqtt(object):
             if not self.running: break
 
             if device_id not in self.boosted:
-               self.refresh_device(device_id)
+                self.refresh_device(device_id)
 
     # refresh boosted devices ---------------------------------------------------------------------
 
@@ -707,7 +713,7 @@ class GoveeMqtt(object):
                 if not self.running: break
                 self.refresh_device(device_id)
 
-   # other helpers -------------------------------------------------------------------------------
+    # other helpers -------------------------------------------------------------------------------
 
     def refresh_device(self, device_id):
         device_config = self.configs[device_id]
@@ -729,8 +735,10 @@ class GoveeMqtt(object):
         for key in data:
             if data[key] == "": continue
             match key:
-                case 'online':
-                    device_states['availability'] = 'online' if data[key] == True else 'offline'
+                case "online":
+                    device_states["availability"] = (
+                        "online" if data[key] == True else "offline"
+                    )
                 case 'powerSwitch':
                     device_states['light']['state'] = 'on' if data[key] == 1 else 'off'
                 case 'brightness':
@@ -769,11 +777,11 @@ class GoveeMqtt(object):
         capabilities = {}
         for key in attributes:
             match key:
-                case 'light':
-                    capabilities['powerSwitch'] = {
-                        'type': 'devices.capabilities.on_off',
-                        'instance': 'powerSwitch',
-                        'value': 1 if attributes[key] == 'on' else 0,
+                case "light":
+                    capabilities["powerSwitch"] = {
+                        "type": "devices.capabilities.on_off",
+                        "instance": "powerSwitch",
+                        "value": 1 if attributes[key] == "on" else 0,
                     }
                 case 'brightness':
                     capabilities['brightness'] = {
@@ -901,9 +909,9 @@ class GoveeMqtt(object):
 
     def handle_service_message(self, attribute, message):
         match attribute:
-            case 'device_refresh':
+            case "device_refresh":
                 self.device_interval = message
-                self.logger.info(f'Updated UPDATE_INTERVAL to be {message}')
+                self.logger.info(f"Updated UPDATE_INTERVAL to be {message}")
             case 'device_list_refresh':
                 self.device_list_interval = message
                 self.logger.info(f'Updated LIST_UPDATE_INTERVAL to be {message}')
@@ -953,26 +961,42 @@ class GoveeMqtt(object):
     # main loop
     async def main_loop(self):
         loop = asyncio.get_running_loop()
+
+        # create async tasks
         tasks = [
-            asyncio.create_task(self.device_list_loop()),
-            asyncio.create_task(self.device_loop()),
-            asyncio.create_task(self.device_boosted_loop()),
+            asyncio.create_task(self.device_list_loop(), name="device_list_loop"),
+            asyncio.create_task(self.device_loop(), name="device_loop"),
+            asyncio.create_task(self.device_boosted_loop(), name="device_boosted_loop"),
         ]
 
-        # setup signal handling for tasks
+        # graceful shutdown handler
+        def _signal_handler(signame):
+            self.logger.warning(f"{signame} received — initiating shutdown...")
+            self.running = False
+            for t in tasks:
+                if not t.done():
+                    t.cancel(f"{signame} received")
+
         for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(
-                sig, lambda: asyncio.create_task(self._handle_signals(sig.name, loop))
-            )
+            loop.add_signal_handler(sig, _signal_handler, sig.name)
 
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, Exception):
+                    self.logger.error(f"Task raised exception: {result}", exc_info=True)
                     self.running = False
-                    self.logger.error(f'Caught exception: {err}', exc_info=True)
         except asyncio.CancelledError:
-            exit(1)
+            self.logger.info("Main loop cancelled; shutting down...")
         except Exception as err:
+            self.logger.exception(f"Unhandled exception in main loop: {err}")
             self.running = False
-            self.logger.error(f'Caught exception: {err}')
+        finally:
+            self.logger.info("All loops terminated, performing final cleanup...")
+            self.save_state()
+            if self.mqttc and self.mqttc.is_connected():
+                try:
+                    self.mqttc.disconnect()
+                except Exception as e:
+                    self.logger.warning(f"Error during MQTT disconnect: {e}")
+            self.logger.info("Main loop complete.")

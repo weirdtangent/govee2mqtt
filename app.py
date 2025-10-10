@@ -5,95 +5,59 @@
 #
 # The software is provided 'as is', without any warranty.
 
+#!/usr/bin/env python3
 import asyncio
 import argparse
-from govee_mqtt import GoveeMqtt
 import logging
-import os
-import sys
-import time
-from util import *
-import yaml
+from govee_mqtt import GoveeMqtt
+from util import load_config
 
-# Let's go!
-version = read_version()
-
-# Cmd-line args
+# Parse arguments
 argparser = argparse.ArgumentParser()
 argparser.add_argument(
-    '-c',
-    '--config',
+    "-c",
+    "--config",
     required=False,
-    help='Directory holding config.yaml or full path to config file',
+    help="Directory or file path for config.yaml (defaults to /config/config.yaml)",
 )
 args = argparser.parse_args()
 
-# Setup config from yaml file or env
-configpath = args.config or '/config'
-try:
-    if not configpath.endswith('.yaml'):
-        if not configpath.endswith('/'):
-            configpath += '/'
-        configfile = configpath + 'config.yaml'
-    with open(configfile) as file:
-        config = yaml.safe_load(file)
-    config['config_path'] = configpath
-    config['config_from'] = 'file'
-except:
-    config = {
-        'mqtt': {
-            'host': os.getenv('MQTT_HOST') or 'localhost',
-            'qos': int(os.getenv('MQTT_QOS') or 0),
-            'port': int(os.getenv('MQTT_PORT') or 1883),
-            'username': os.getenv('MQTT_USERNAME'),
-            'password': os.getenv('MQTT_PASSWORD'),  # can be None
-            'tls_enabled': os.getenv('MQTT_TLS_ENABLED') == 'true',
-            'tls_ca_cert': os.getenv('MQTT_TLS_CA_CERT'),
-            'tls_cert': os.getenv('MQTT_TLS_CERT'),
-            'tls_key': os.getenv('MQTT_TLS_KEY'),
-            'prefix': os.getenv('MQTT_PREFIX') or 'govee2mqtt',
-            'homeassistant': os.getenv('MQTT_HOMEASSISTANT') == True,
-            'discovery_prefix': os.getenv('MQTT_DISCOVERY_PREFIX') or 'homeassistant',
-        },
-        'govee': {
-            'api_key': os.getenv('GOVEE_API_KEY'),
-            'device_interval': int(os.getenv('GOVEE_DEVICE_INTERVAL') or 30),
-            'device_boost_interval': int(os.getenv('GOVEE_DEVICE_BOOST_INTERVAL') or 5),
-            'device_list_interval': int(os.getenv('GOVEE_LIST_INTERVAL') or 3600),
-        },
-        'debug': True if os.getenv('GOVEE_DEBUG') else False,
-        'hide_ts': True if os.getenv('HIDE_TS') else False,
-        'timezone': os.getenv('TZ'),
-        'config_from': 'env',
-    }
-config['version'] = version
-config['configpath'] = os.path.dirname(configpath)
+# Load configuration
+config = load_config(args.config)
 
-# defaults
-if 'username' not in config['mqtt']: config['mqtt']['username'] = ''
-if 'password' not in config['mqtt']: config['mqtt']['password'] = ''
-if 'qos'      not in config['mqtt']: config['mqtt']['qos'] = 0
-if 'timezone' not in config:         config['timezone'] = 'UTC'
-if 'debug'    not in config:         config['debug'] = os.getenv('DEBUG') or False
-if 'hide_ts'  not in config:         config['hide_ts'] = os.getenv('HIDE_TS') or False
-
-# Setup logging based on config settings
+# Setup logging
 logging.basicConfig(
-    format = '%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s' if config['hide_ts'] == False else '[%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    level=logging.INFO if config['debug'] == False else logging.DEBUG
+    format=(
+        "%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s"
+        if not config["hide_ts"]
+        else "[%(levelname)s] %(name)s: %(message)s"
+    ),
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.DEBUG if config["debug"] else logging.INFO,
 )
+
 logger = logging.getLogger(__name__)
-logger.info(f'Starting: govee2mqtt {version}')
-logger.info(f'Config loaded from {config["config_from"]}')
+logger.info(f"Starting govee2mqtt {config['version']}")
+logger.info(f"Config loaded from {config['config_from']} ({config['config_path']})")
 
-# Check for required config properties
-if not 'govee' in config or not 'api_key' in config['govee'] or not config['govee']['api_key']:
-    logger.error('`govee.api_key` required in config file or in GOVEE_API_KEY env var')
-    exit(1)
-
-logger.debug("DEBUG logging is ON")
-
-# Go!
-with GoveeMqtt(config) as mqtt:
-    asyncio.run(mqtt.main_loop())
+# Run main loop safely
+try:
+    with GoveeMqtt(config) as mqtt:
+        try:
+            # Prefer a clean async run, but handle environments with existing event loops
+            asyncio.run(mqtt.main_loop())
+        except RuntimeError as e:
+            if "asyncio.run() cannot be called from a running event loop" in str(e):
+                # Nested event loop (common in tests or Jupyter) — fall back gracefully
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(mqtt.main_loop())
+            else:
+                raise
+except KeyboardInterrupt:
+    logger.info("Shutdown requested (Ctrl+C). Exiting gracefully...")
+except asyncio.CancelledError:
+    logger.warning("Main loop cancelled.")
+except Exception as e:
+    logger.exception(f"Unhandled exception in main loop: {e}")
+finally:
+    logger.info("govee2mqtt stopped.")
