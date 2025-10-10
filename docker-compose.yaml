@@ -1,8 +1,22 @@
+version: "3.8"
+
 services:
   govee2mqtt:
     image: graystorm/govee2mqtt:latest
-    network_mode: host
     container_name: govee2mqtt
     restart: unless-stopped
+    network_mode: host
     volumes:
-      - /volume1/docker/govee2mqtt/config:/config
+      - ./config:/config
+    environment:
+      - TZ=${TZ:-UTC}
+      - CONFIG_PATH=/config/config.yaml
+    labels:
+      org.opencontainers.image.title: "govee2mqtt"
+      org.opencontainers.image.description: "Publishes Govee device data to MQTT for Home Assistant auto-discovery"
+      org.opencontainers.image.source: "https://github.com/weirdtangent/govee2mqtt"
+      org.opencontainers.image.authors: "weirdTangent <jeff@weirdtangent.com>"
+      org.opencontainers.image.url: "https://www.graystorm.com"
+      org.opencontainers.image.documentation: "https://github.com/weirdtangent/govee2mqtt#readme"
+      org.opencontainers.image.description: "Publishes Govee device data to MQTT for Home Assistant auto-discovery"
+      org.opencontainers.image.licenses: "GPL-3.0-or-later"
