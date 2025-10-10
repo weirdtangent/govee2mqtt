@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/weirdtangent/govee2mqtt/compare/v1.0.2...v1.0.3) (2025-10-10)
+
+
+### Bug Fixes
+
+* improve startup flow and configuration handling ([1292fdf](https://github.com/weirdtangent/govee2mqtt/commit/1292fdf5767a12dc57263088c3067f2c86253417))
+
 ## [1.0.2](https://github.com/weirdtangent/govee2mqtt/compare/v1.0.1...v1.0.2) (2025-10-09)
 
 
