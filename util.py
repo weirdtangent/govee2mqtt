@@ -55,12 +55,17 @@ def number_to_rgb(number, max_value):
 def rgb_to_number(rgb):
     """Pack an RGB dict into an integer (0xRRGGBB)."""
     try:
-        r = int(rgb.get("r", 0)) & 0xFF
-        g = int(rgb.get("g", 0)) & 0xFF
-        b = int(rgb.get("b", 0)) & 0xFF
+        if isinstance(rgb, (list, tuple)):
+            r, g, b = (int(rgb[0]), int(rgb[1]), int(rgb[2]))
+        elif isinstance(rgb, dict):
+            r = int(rgb.get("r", 0))
+            g = int(rgb.get("g", 0))
+            b = int(rgb.get("b", 0))
+        else:
+            raise TypeError(f"Unsupported RGB type: {type(rgb).__name__}")
         return (r << 16) | (g << 8) | b
     except Exception as e:
-        raise ValueError(f"Invalid RGB dict: {rgb!r}") from e
+        raise ValueError(f"Invalid RGB value: {rgb!r}") from e
 
 
 def find_key_by_value(d, target):
@@ -126,8 +131,6 @@ def load_config(config_arg=None):
         "tls_cert": mqtt.get("tls_cert") or os.getenv("MQTT_TLS_CERT"),
         "tls_key": mqtt.get("tls_key") or os.getenv("MQTT_TLS_KEY"),
         "prefix": mqtt.get("prefix") or os.getenv("MQTT_PREFIX", "govee2mqtt"),
-        "homeassistant": mqtt.get("homeassistant")
-        or (os.getenv("MQTT_HOMEASSISTANT", "false").lower() == "true"),
         "discovery_prefix": mqtt.get("discovery_prefix")
         or os.getenv("MQTT_DISCOVERY_PREFIX", "homeassistant"),
     }

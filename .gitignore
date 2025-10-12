@@ -1,30 +1,75 @@
-# Byte-compiled / optimized / DLL files
+# -----------------------------------------------------------------------------
+# 🐍 Python: compiled, virtualenv, packaging
+# -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
-
-# Distribution / packaging
-.Python
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
 build/
 dist/
 lib/
 include/
-node_modules/
+pip-wheel-metadata/
+.Python
 
-# Environments
+# -----------------------------------------------------------------------------
+# 🧪 Testing, coverage, and cache
+# -----------------------------------------------------------------------------
+.pytest_cache/
+.cache/
+.coverage
+coverage/
+coverage.xml
+htmlcov/
+nosetests.xml
+
+# -----------------------------------------------------------------------------
+# ⚙️ Environments and local configs
+# -----------------------------------------------------------------------------
 .env
-.venv
+.venv/
 venv/
-
-# Local testing and notes
+ENV/
+env/
 config
 config/
 config.yaml
+config.local.yaml
 govee2mqtt.dat
-npm-debug.log
 NOTES
-coverage/
-dist/
 tools/
 
-# Apple
+# -----------------------------------------------------------------------------
+# 🐋 Docker, runtime, and app data
+# -----------------------------------------------------------------------------
+/config/
+data/
+logs/
+tmp/
+*.log
+*.tmp
+*.bak
+
+# -----------------------------------------------------------------------------
+# 🧱 Frontend / NodeJS (if present)
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log
+
+# -----------------------------------------------------------------------------
+# 💻 IDEs and editors
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# -----------------------------------------------------------------------------
+# 🍎 macOS & Windows noise
+# -----------------------------------------------------------------------------
 .DS_Store
+Thumbs.db
+

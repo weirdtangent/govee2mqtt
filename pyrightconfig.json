@@ -1,0 +1,7 @@
+{
+  "include": ["."],
+  "extraPaths": ["./mixins"],
+  "venvPath": "./.venv",
+  "venv": ".venv"
+}
+

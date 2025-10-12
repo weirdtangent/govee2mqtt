@@ -31,7 +31,6 @@ It supports the following environment variables:
 -   `MQTT_USERNAME: admin`
 -   `MQTT_PASSWORD: password`
 -   `MQTT_PREFIX: govee`
--   `MQTT_HOMEASSISTANT: true` (with False, it won't publish HA discovery devices)
 -   `MQTT_DISCOVERY_PREFIX: homeassistant`
 
 -   `GOVEE_API_KEY: [your_api_key]` (see https://developer.govee.com/reference/apply-you-govee-api-key)

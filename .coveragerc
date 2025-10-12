@@ -1,0 +1,33 @@
+# .coveragerc
+[run]
+branch = True
+source =
+    govee_api
+    govee_mqtt
+    util
+omit =
+    tests/*
+    */__init__.py
+    */venv/*
+    */.venv/*
+    */site-packages/*
+
+[report]
+fail_under = 75
+show_missing = True
+skip_covered = False
+precision = 1
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    while self.running:
+    async def main_loop
+    async def service_loop
+    async def device_loop
+    async def mqtt_loop
+    async def watch_loop
+    async def start
+    async def stop
+    def signal_handler
+    if not self.running
+    if self.running

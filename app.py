@@ -9,14 +9,13 @@
 import asyncio
 import argparse
 import logging
-from govee_mqtt import GoveeMqtt
+from govee_mqtt.core import GoveeMqtt
 from util import load_config
 
 # Parse arguments
 argparser = argparse.ArgumentParser()
 argparser.add_argument(
-    "-c",
-    "--config",
+    "-c", "--config",
     required=False,
     help="Directory or file path for config.yaml (defaults to /config/config.yaml)",
 )
@@ -35,12 +34,12 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     level=logging.DEBUG if config["debug"] else logging.INFO,
 )
-
 logger = logging.getLogger(__name__)
+
 logger.info(f"Starting govee2mqtt {config['version']}")
 logger.info(f"Config loaded from {config['config_from']} ({config['config_path']})")
 
-# Run main loop safely
+# Run main loop
 try:
     with GoveeMqtt(config) as mqtt:
         try:

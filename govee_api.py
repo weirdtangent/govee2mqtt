@@ -1,17 +1,13 @@
-# This software is licensed under the MIT License, which allows you to use,
 # copy, modify, merge, publish, distribute, and sell copies of the software,
 # with the requirement to include the original copyright notice and this
 # permission notice in all copies or substantial portions of the software.
 #
 # The software is provided 'as is', without any warranty.
 
-import asyncio
 from datetime import datetime
-import json
 import logging
 import requests
 from requests.exceptions import RequestException
-import time
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -35,7 +31,6 @@ class GoveeAPI(object):
     def restore_state_values(self, api_calls, last_call_date):
         self.api_calls = api_calls
         self.last_call_date = last_call_date
-        self.logger.info(f'Restored state to {self.api_calls} api_calls so far for {self.last_call_date}')
 
     def increase_api_calls(self):
         if not self.last_call_date or self.last_call_date != str(datetime.now(tz=ZoneInfo(self.timezone)).date()):
@@ -54,7 +49,8 @@ class GoveeAPI(object):
         return self.last_call_date
 
     def is_rate_limited(self):
-        return self.rate_limited == True
+        return self.rate_limited
+        return self.rate_limited
 
     def get_headers(self):
         return {
@@ -78,10 +74,10 @@ class GoveeAPI(object):
                 return {}
             data = r.json()
 
-        except RequestException as err:
+        except RequestException:
             self.logger.error('Request error communicating with Govee for device list')
             return {}
-        except Exception as err:
+        except Exception:
             self.logger.error('Error communicating with Govee for device list')
             return {}
 
@@ -109,10 +105,10 @@ class GoveeAPI(object):
                     self.logger.error(f'Error ({r.status_code}) getting device ({device_id})')
                 return {}
             data = r.json()
-        except RequestException as err:
+        except RequestException:
             self.logger.error(f'Request error communicating with Govee for device ({device_id})')
             return {}
-        except Exception as err:
+        except Exception:
             self.logger.error(f'Error communicating with Govee for device ({device_id})')
             return {}
 
@@ -154,11 +150,11 @@ class GoveeAPI(object):
                     self.logger.error(f'Error ({r.status_code}) sending command to device ({device_id})')
                 return {}
             data = r.json()
-            self.logger.info(f'Raw response from Govee: {data}')
-        except RequestException as err:
+            self.logger.debug(f'Raw response from Govee: {data}')
+        except RequestException:
             self.logger.error(f'Request error communicating with Govee sending command to device ({device_id})')
             return {}
-        except Exception as err:
+        except Exception:
             self.logger.error(f'Error communicating with Govee sending command to device ({device_id})')
             return {}
 
@@ -174,7 +170,7 @@ class GoveeAPI(object):
 
                 # only if we got any `capabilties` back from Govee will we update the `last_update`
                 new_capabilities['lastUpdate'] = datetime.now(ZoneInfo(self.timezone))
-        except Exception as err:
+        except Exception:
             self.logger.error(f'Failed to process response sending command to device ({device_id})')
             return {}
 
