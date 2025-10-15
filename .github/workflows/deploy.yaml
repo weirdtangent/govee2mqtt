@@ -41,14 +41,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
-      - name: Get latest release tag
-        id: get_release
-        run: |
-          TAG=$(git describe --tags --abbrev=0)
-          echo "$TAG" > VERSION
-          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Found release tag: $TAG"
-
   docker:
     name: Build and Push Docker Image
     needs: [release]
