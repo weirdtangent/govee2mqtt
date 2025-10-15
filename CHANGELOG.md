@@ -1,3 +1,18 @@
+# [2.0.0](https://github.com/weirdtangent/govee2mqtt/compare/v1.0.3...v2.0.0) (2025-10-15)
+
+
+* refactor!: correct MQTT discovery and refactor everything! ([ed70562](https://github.com/weirdtangent/govee2mqtt/commit/ed70562154d158e8d260acd3a47d1778b12fe014))
+
+
+### Bug Fixes
+
+* remove github action requirement for now ([c6cb35c](https://github.com/weirdtangent/govee2mqtt/commit/c6cb35cd76445a5af5d680244f34953050602990))
+
+
+### BREAKING CHANGES
+
+* unique_id values changed. Home Assistant will create new entities.
+
 ## [1.0.3](https://github.com/weirdtangent/govee2mqtt/compare/v1.0.2...v1.0.3) (2025-10-10)
 
 
