@@ -94,13 +94,13 @@ def test_read_version_unknown_when_no_file_and_no_env(tmp_path, monkeypatch):
     ],
 )
 def test_number_to_rgb_basic(number, max_value, expected):
-    assert util.number_to_rgb(number, max_value) == expected
+    assert util.number_to_rgb_linear(number, max_value) == expected
 
 
 @pytest.mark.parametrize("bad_max", [0, -1, None])
 def test_number_to_rgb_bad_max_raises(bad_max):
     with pytest.raises(ValueError):
-        util.number_to_rgb(10, bad_max)
+        util.number_to_rgb_linear(10, bad_max)
 
 
 # ---------- number_to_rgb_bluepop (R↔G with blue peaking at midpoint) ----------
