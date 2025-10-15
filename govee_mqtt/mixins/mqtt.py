@@ -188,7 +188,7 @@ class MqttMixin:
         return bool(self.states.get(device_id, {}).get("internal", {}).get("discovered", False))
 
     def set_discovered(self, device_id) -> None:
-        self.states.setdefault(device_id, {}).setdefault("internal", {})["discovered"] = True
+        self.upsert_state(device_id, internal={'discovered': True})
 
     def mqtt_on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         reason_names = [rc.getName() for rc in reason_code_list]

@@ -5,6 +5,8 @@ import os
 import signal
 import threading
 from util import number_to_rgb_hsv, rgb_to_number, find_key_by_value
+from typing import Any, MutableMapping, Dict, Optional
+from deepmerge import Merger
 
 class HelpersMixin:
 
@@ -286,3 +288,22 @@ class HelpersMixin:
 
         threading.Timer(5.0, _force_exit).start()
 
+    # Upsert devices and states -------------------------------------------------------------------
+
+    MERGER = Merger(
+        [(dict, "merge"), (list, "append_unique"), (set, "union")],
+        ["override"],  # type conflicts: new wins
+        ["override"],  # fallback
+    )
+
+    def upsert_device(self, key: str, **fields: Any,) -> Dict[str, Any]:
+        rec = self.devices.setdefault(key, {})
+        if fields:
+            self.MERGER.merge(rec, fields)
+        return rec
+
+    def upsert_state(self, key: str, **fields: Any,) -> Dict[str, Any]:
+        rec = self.states.setdefault(key, {})
+        if fields:
+            self.MERGER.merge(rec, fields)
+        return rec

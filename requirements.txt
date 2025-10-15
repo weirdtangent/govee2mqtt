@@ -1,3 +1,4 @@
-PyYAML
+deepmerge==2.0
 paho-mqtt
+PyYAML
 requests

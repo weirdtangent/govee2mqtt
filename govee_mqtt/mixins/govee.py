@@ -91,11 +91,11 @@ class GoveeMixin:
             "supported_color_modes": ["onoff"],
             "device": device_block,
         }
-        self.states[device_id] = {
-            "internal": {"raw_id": raw_id, "sku": device.get('sku', None)},
-            "light": {},
-            "switch": {"component_type": "switch"},
-        }
+        self.upsert_state(
+            device_id,
+            internal={"raw_id": raw_id, "sku": device.get('sku', None)},
+            light={},
+        )
         modes = {}
 
         for cap in device['capabilities']:
@@ -107,7 +107,7 @@ class GoveeMixin:
                     component["brightness_value_template"] = "{{ value_json.brightness }}"
                     component["brightness_command_topic"] = self.get_command_topic(device_id, "light")
                     component["brightness_command_template"] = '{"brightness": {{ value }}}'
-                    self.states[device_id]['light']['brightness'] = 0
+                    self.upsert_state(device_id, light={'brightness': 0})
                 case 'powerSwitch':
                     component['supported_color_modes'].append('onoff')
                 case 'colorRgb':
@@ -116,7 +116,7 @@ class GoveeMixin:
                     component["rgb_value_template"] = "{{ value_json.rgb_color | join(',') }}"
                     component["rgb_command_topic"] = self.get_command_topic(device_id, "light")
                     component["rgb_command_template"] = '{"rgb": [{{ value }}] }'
-                    self.states[device_id]['light']['rgb_max'] = cap['parameters']['range']['max'] or 16777215
+                    self.upsert_state(device_id, light={'rgb_max': cap['parameters']['range']['max'] or 16777215})
                 case 'colorTemperatureK':
                     component['supported_color_modes'].append('color_temp')
                     component['color_temp_kelvin'] = True
@@ -126,7 +126,7 @@ class GoveeMixin:
                     component["color_temp_command_template"] = '{"color_temp": {{ value }}}'
                     component['min_kelvin'] = cap['parameters']['range']['min'] or 2000
                     component['max_kelvin'] = cap['parameters']['range']['max'] or 9000
-                    self.states[device_id]['light']['color_temp'] = 0
+                    self.upsert_state(device_id, light={'color_temp': 0})
                 case 'gradientToggle':
                     modes["gradient"] = {
                         "component_type": "switch",
@@ -143,7 +143,7 @@ class GoveeMixin:
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.states[device_id].setdefault("switch", {})["gradient"] = "off"
+                    self.upsert_state(device_id, switch={'gradient': 'off'})
 
                 case 'nightlightToggle':
                     modes["nightlight"] = {
@@ -161,7 +161,7 @@ class GoveeMixin:
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.states[device_id].setdefault("switch", {})["nightlight"] = "off"
+                    self.upsert_state(device_id, switch={'nightlight': 'off'})
 
                 case 'dreamViewToggle':
                     modes["dreamview"] = {
@@ -179,7 +179,7 @@ class GoveeMixin:
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.states[device_id].setdefault("switch", {})["dreamview"] = "off"
+                    self.upsert_state(device_id, switch={'dreamview': 'off'})
 
                 # case 'musicMode':
                 #     # setup to store state
@@ -259,12 +259,10 @@ class GoveeMixin:
             component["payload_on"] = "on"
             component["payload_off"] = "off"
 
-        self.devices[device_id] = {
-            'component': component,
-            'modes': modes,
-        }
+        # insert, or update anything that changed, but don't lose anything
+        self.upsert_device(device_id, component=component, modes=modes);
 
-        self.build_device_states(self.states[device_id],raw_id,device['sku'])
+        self.build_device_states(self.states[device_id], raw_id, device["sku"])
 
         if not self.is_discovered(device_id):
             self.logger.info(f'Added new light: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
@@ -335,11 +333,14 @@ class GoveeMixin:
 
             if device_id:
                 created.append(device_id)
-                self.devices[device_id] = { "component": component }
-                self.states[device_id] = {
-                    "internal": {"raw_id": raw_id, "sku": device.get('sku', None)},
-                    "sensor": {},
-                }
+
+                # insert, or update anything that changed, but don't lose anything
+                self.upsert_device(device_id, component=component)
+                self.upsert_state(
+                    device_id,
+                    internal={"raw_id": raw_id, "sku": device.get('sku', None)},
+                    sensor={},
+                )
                 self.build_device_states(self.states[device_id],raw_id,device['sku'])
 
                 if not self.is_discovered(device_id):
