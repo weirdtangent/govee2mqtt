@@ -38,7 +38,7 @@ class MqttMixin:
         self.mqttc.on_log = self.mqtt_on_log
 
         # Define a "last will" message (LWT):
-        self.mqttc.will_set(self.get_service_topic('status'), 'offline', qos=self.qos, retain=True)
+        self.mqttc.will_set(self.get_service_topic('status'), 'offline', qos=1, retain=True)
 
         try:
             host = self.mqtt_config.get('host')
@@ -72,7 +72,6 @@ class MqttMixin:
 
         self.logger.info('Subscribing to topics on MQTT')
         client.subscribe("homeassistant/status")
-        client.subscribe(f"{self.service_slug}/devices/#")
         client.subscribe(f"{self.service_slug}/service/+/set")
         client.subscribe(f"{self.service_slug}/service/+/command")
         client.subscribe(f"{self.service_slug}/light/#")
@@ -101,6 +100,8 @@ class MqttMixin:
         topic = msg.topic
         payload = self._decode_payload(msg.payload)
         components = topic.split("/")
+
+        self.logger.info(f"Got message on topic: {topic} with {payload}")
 
         # Dispatch based on type of message
         if components[0] == self.mqtt_config['discovery_prefix']:

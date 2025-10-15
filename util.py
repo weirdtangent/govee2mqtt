@@ -5,6 +5,7 @@
 #
 # The software is provided 'as is', without any warranty.
 
+import colorsys
 import os
 import yaml
 import logging
@@ -40,17 +41,43 @@ def read_version():
         return env_version.strip() if env_version else "unknown"
 
 
-def number_to_rgb(number, max_value):
-    """Map a number in [0, max_value] to a red→green gradient with optional blue hue."""
-    if max_value <= 0:
+def number_to_rgb_linear(number, max_value):
+    if max_value is None or max_value <= 0:
         raise ValueError("max_value must be > 0")
-
-    normalized = min(max(number / max_value, 0.0), 1.0)  # clamp to [0,1]
-    r = int((1 - normalized) * 255)
-    g = int(normalized * 255)
-    b = int(((0.5 - abs(normalized - 0.5)) * 2 * 255)) if normalized > 0.5 else 0
+    t = max(0.0, min(1.0, number / max_value))
+    r = int(255 * (1.0 - t))  # or round(...) if you prefer 128 at 50%
+    g = int(255 * t)
+    b = 0
     return {"r": r, "g": g, "b": b}
 
+def number_to_rgb_hsv(number, max_value, value=1.0, saturation=1.0):
+    # value & saturation are 0.0–1.0; many bulbs like value tied to the brightness slider
+    if max_value is None or max_value <= 0:
+        raise ValueError("max_value must be > 0")
+    t = max(0.0, min(1.0, number / max_value))
+    hue = (1.0 / 3.0) * t  # 0=red, 1/3=green
+    r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+    return {
+        "r": int(round(r * 255)),
+        "g": int(round(g * 255)),
+        "b": int(round(b * 255)),
+    }
+
+def number_to_rgb_bluepop(number, max_value, brightness=255):
+    # brightness: 0–255 cap applied AFTER color math
+    if max_value is None or max_value <= 0:
+        raise ValueError("max_value must be > 0")
+    t = max(0.0, min(1.0, number / max_value))
+
+    r = 255 * (1.0 - t)
+    g = 255 * t
+    b = 255 * (1.0 - abs(2.0 * t - 1.0))  # triangle peaking at midpoint
+
+    # normalize to desired brightness by scaling so the max channel == brightness
+    m = max(r, g, b, 1e-6)
+    scale = brightness / m
+    r, g, b = int(round(r * scale)), int(round(g * scale)), int(round(b * scale))
+    return {"r": r, "g": g, "b": b}
 
 def rgb_to_number(rgb):
     """Pack an RGB dict into an integer (0xRRGGBB)."""

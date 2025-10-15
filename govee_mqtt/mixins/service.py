@@ -129,8 +129,8 @@ class ServiceMixin:
         )
         self.logger.debug(f"[HA] Discovery published for {self.service} ({self.service_slug})")
 
-    def publish_service_availability(self):
-        self.mqtt_safe_publish(self.get_service_topic('status'), 'online', qos=self.qos, retain=True)
+    def publish_service_availability(self, status='online'):
+        self.mqtt_safe_publish(self.get_service_topic('status'), status, qos=self.qos, retain=True)
 
     def publish_service_state(self):
         service = {

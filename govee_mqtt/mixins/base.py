@@ -47,6 +47,7 @@ class BaseMixin:
 
         if self.mqttc is not None:
             try:
+                self.publish_service_availability('offline')
                 # Stop the Paho background network thread
                 self.mqttc.loop_stop()
             except Exception as e:

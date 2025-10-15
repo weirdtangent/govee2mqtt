@@ -4,7 +4,7 @@ import json
 import os
 import signal
 import threading
-from util import number_to_rgb, rgb_to_number, find_key_by_value
+from util import number_to_rgb_hsv, rgb_to_number, find_key_by_value
 
 class HelpersMixin:
 
@@ -22,7 +22,7 @@ class HelpersMixin:
                 case 'brightness':
                     states['light']['brightness'] = data[key]
                 case 'colorRgb':
-                    states['light']['rgb'] = number_to_rgb(data[key], states['light']['rgb_max'])
+                    states["light"]["rgb"] = number_to_rgb_hsv(data[key], states["light"]["rgb_max"])
                 case 'colorTemperatureK':
                     states['light']['color_temp'] = data[key]
                 case 'gradientToggle':
@@ -97,7 +97,7 @@ class HelpersMixin:
                         "value": int(value),
                     }
 
-                case "rgb":
+                case "rgb" | "color":
                     rgb_val = rgb_to_number(value)
                     light["rgb_color"] = value
                     capabilities["colorRgb"] = {
