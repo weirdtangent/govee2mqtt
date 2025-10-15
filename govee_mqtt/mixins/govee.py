@@ -266,7 +266,7 @@ class GoveeMixin:
 
         self.build_device_states(self.states[device_id],raw_id,device['sku'])
 
-        if not self.states[device_id].get('discovered', None):
+        if not self.is_discovered(device_id):
             self.logger.info(f'Added new light: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
 
         self.publish_device_discovery(device_id)
@@ -342,7 +342,7 @@ class GoveeMixin:
                 }
                 self.build_device_states(self.states[device_id],raw_id,device['sku'])
 
-                if not self.states[device_id].get('discovered', None):
+                if not self.is_discovered(device_id):
                     self.logger.info(f'Added new sensor: "{component["name"]}" [Govee {device["sku"]}] ({device_id})')
 
                 self.publish_device_discovery(device_id)
@@ -359,11 +359,11 @@ class GoveeMixin:
 
         topic = self.get_discovery_topic(component["component_type"], device_id)
         self.mqtt_safe_publish(topic, json.dumps(payload), retain=True)
-        self.states[device_id].setdefault('discovered', 1)
+        self.set_discovered(device_id)
 
     def publish_device_state(self, device_id):
         states = self.states.get(device_id, None)
-        if not states.get('discovered', None):
+        if not self.is_discovered(device_id):
             self.logger.debug(f"[device state] Discovery not complete for {device_id} yet, holding off on sending state")
             return
 

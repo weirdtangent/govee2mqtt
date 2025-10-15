@@ -184,6 +184,12 @@ class MqttMixin:
             self.logger.warning(f"Ignoring malformed topic: {topic}")
             return (None, None)
 
+    def is_discovered(self, device_id) -> bool:
+        return bool(self.states.get(device_id, {}).get("internal", {}).get("discovered", False))
+
+    def set_discovered(self, device_id) -> None:
+        self.states.setdefault(device_id, {}).setdefault("internal", {})["discovered"] = True
+
     def mqtt_on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         reason_names = [rc.getName() for rc in reason_code_list]
         joined = "; ".join(reason_names) if reason_names else "none"
