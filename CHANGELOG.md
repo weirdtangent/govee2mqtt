@@ -1,3 +1,11 @@
+## [2.0.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.1...v2.0.2) (2025-10-15)
+
+
+### Bug Fixes
+
+* test to use renamed legacy method ([286ea19](https://github.com/weirdtangent/govee2mqtt/commit/286ea196a4ab14c14b4661b00dce19fffaebbe0b))
+* using semantic-release plugin to update VERSION ([d57569c](https://github.com/weirdtangent/govee2mqtt/commit/d57569c70e2708ac98f3139dd53e2858d66a92b3))
+
 ## [2.0.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.0...v2.0.1) (2025-10-15)
 
 
