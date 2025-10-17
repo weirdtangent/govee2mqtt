@@ -97,13 +97,13 @@ class ServiceMixin:
             retain=True,
         )
         self.mqtt_safe_publish(
-            topic=self.get_discovery_topic('number', f"{self.service_slug}_device_boost_refresh"),
+            topic=self.get_discovery_topic('number', f"{self.service_slug}_snapshot_refresh"),
             payload=json.dumps({
                 "name": f"{self.service_name} Device Boost Refresh Interval",
-                "uniq_id": f"{self.service_slug}_device_boost_refresh",
-                "stat_t": self.get_state_topic('service', 'service', 'device_boost_refresh'),
-                "json_attr_t": self.get_attribute_topic('service','service','device_boost_refresh','attributes'),
-                "cmd_t": self.get_command_topic('service','device_boost_refresh'),
+                "uniq_id": f"{self.service_slug}_snapshot_refresh",
+                "stat_t": self.get_state_topic('service', 'service', 'snapshot_refresh'),
+                "json_attr_t": self.get_attribute_topic('service','service','snapshot_refresh','attributes'),
+                "cmd_t": self.get_command_topic('service','snapshot_refresh'),
                 "unit_of_measurement": "s",
                 "min": 1,
                 "max": 30,
@@ -142,7 +142,7 @@ class ServiceMixin:
             "rate_limited": "yes" if self.goveec.is_rate_limited() else "no",
             "device_refresh": self.device_interval,
             "device_list_refresh": self.device_list_interval,
-            "device_boost_refresh": self.device_boost_interval,
+            "snapshot_refresh": self.device_boost_interval,
         }
 
         for key, value in service.items():

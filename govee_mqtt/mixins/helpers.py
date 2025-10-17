@@ -238,7 +238,7 @@ class HelpersMixin:
                 self.device_interval = message
             case 'device_list_refresh':
                 self.device_list_interval = message
-            case 'device_boost_refresh':
+            case 'snapshot_refresh':
                 self.device_boost_interval = message
             case "refresh_device_list":
                 if message == "refresh":

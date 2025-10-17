@@ -353,14 +353,28 @@ class GoveeMixin:
 
 
     def publish_device_discovery(self, device_id):
+        def _publish_one(dev_id: str, defn: dict, suffix: str | None = None):
+            # Shallow copy to avoid mutating source
+            payload = {k: v for k, v in defn.items() if k != "component_type"}
+
+            # Compute a per-mode device_id for topic namespacing
+            eff_device_id = dev_id if not suffix else f"{dev_id}_{suffix}"
+
+            # Publish discovery
+            topic = self.get_discovery_topic(defn["component_type"], eff_device_id)
+            self.mqtt_safe_publish(topic, json.dumps(payload), retain=True)
+
+            # Mark discovered in state (per published entity)
+            self.states.setdefault(eff_device_id, {}).setdefault("internal", {})["discovered"] = 1
+
         component = self.get_component(device_id)
+        _publish_one(device_id, component, suffix=None)
 
-        # create a copy so we don't mutate the real one
-        payload = {k: v for k, v in component.items() if k != "component_type"}
+        # Publish any modes (0..n)
+        modes = self.devices[device_id].get("modes", {})
+        for slug, mode in modes.items():
+            _publish_one(device_id, mode, suffix=slug)
 
-        topic = self.get_discovery_topic(component["component_type"], device_id)
-        self.mqtt_safe_publish(topic, json.dumps(payload), retain=True)
-        self.set_discovered(device_id)
 
     def publish_device_state(self, device_id):
         states = self.states.get(device_id, None)
