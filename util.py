@@ -9,9 +9,21 @@ import colorsys
 import os
 import yaml
 import logging
+import time
+import pathlib
+
+READY_FILE = os.getenv("READY_FILE", "/tmp/govee2mqtt.ready")
+
+# Helper functions --------------------------------------------------------------------------------
+
+def mark_ready():
+    pathlib.Path(READY_FILE).touch()
 
 
-# Helper functions
+def heartbeat_ready():
+    pathlib.Path(READY_FILE).touch()
+
+
 def read_file(file_name, strip_newlines=True, default=None, encoding="utf-8"):
     """Read a file and return its contents.
     Optionally strip newlines and return a default value if the file is missing.

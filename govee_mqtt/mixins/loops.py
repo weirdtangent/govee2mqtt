@@ -2,7 +2,7 @@ from .._imports import *
 
 import asyncio
 import signal
-
+from util import mark_ready, heartbeat_ready
 class LoopsMixin:
 
     async def device_list_loop(self):
@@ -32,6 +32,15 @@ class LoopsMixin:
                 self.logger.debug("device_boost_loop cancelled during sleep")
                 break
 
+    async def heartbeat(self):
+        while self.running:
+            heartbeat_ready()
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                self.logger.debug("heartbeat cancelled during sleep")
+                break
+
     # main loop
     async def main_loop(self):
         """Main async runtime loop for Govee2MQTT."""
@@ -42,11 +51,13 @@ class LoopsMixin:
                 self.logger.debug(f"Cannot install handler for {sig}")
 
         self.running = True
+        mark_ready()
 
         tasks = [
             asyncio.create_task(self.device_list_loop(), name="device_list_loop"),
             asyncio.create_task(self.device_loop(), name="device_loop"),
             asyncio.create_task(self.device_boosted_loop(), name="device_boosted_loop"),
+            asyncio.create_task(self.heartbeat(), name="heartbeat"),
         ]
 
         try:

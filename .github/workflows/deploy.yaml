@@ -85,6 +85,22 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: graystorm/govee2mqtt
+          tags: |
+            type=raw,value=${{ env.RELEASE_TAG }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=govee2mqtt
+            org.opencontainers.image.description=Publishes Govee device data to MQTT for Home Assistant
+            org.opencontainers.image.url=https://www.graystorm.com
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
       - name: Build and push
         id: build-and-push
         uses: docker/build-push-action@v6
@@ -92,18 +108,8 @@ jobs:
           sbom: true
           provenance: true
           platforms: linux/arm64,linux/amd64
-          tags: |
-            graystorm/govee2mqtt:latest
-            graystorm/govee2mqtt:${{ env.RELEASE_TAG }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.version=${{ env.RELEASE_TAG }}
-            org.opencontainers.image.title=govee2mqtt
-            org.opencontainers.image.source=${{ github.repository }}
-            org.opencontainers.image.authors=weirdTangent <jeff@weirdtangent.com>
-            org.opencontainers.image.url=https://www.graystorm.com
-            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
-            org.opencontainers.image.description=Publishes Govee device data to MQTT for Home Assistant auto-discovery
-            org.opencontainers.image.licenses=GPL-3.0-or-later
