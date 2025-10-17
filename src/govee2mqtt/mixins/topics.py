@@ -1,18 +1,9 @@
-from .._imports import *
-
-import random
-import string
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jeff Culverhouse
 from typing import Optional
 
 
 class TopicsMixin:
-    def get_new_client_id(self):
-        return (
-            self.mqtt_config["prefix"]
-            + "-"
-            + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-        )
-
     # Slug strings --------------------------------------------------------------------------------
 
     def get_device_slug(self, device_id: str, type: Optional[str] = None) -> str:
@@ -22,7 +13,6 @@ class TopicsMixin:
 
     def get_vendor_device_slug(self, device_id):
         return f"{self.service_slug}-{device_id.replace(':', '')}"
-
 
     # Topic strings -------------------------------------------------------------------------------
 
@@ -37,17 +27,29 @@ class TopicsMixin:
             return "/".join([self.service_slug, *map(str, parts)])
 
         device_slug = self.get_device_slug(device_id)
-        return "/".join([self.service_slug, component_type, device_slug, *map(str, parts)])
+        return "/".join(
+            [self.service_slug, component_type, device_slug, *map(str, parts)]
+        )
 
     def get_discovery_topic(self, component, item) -> str:
         return f"{self.mqtt_config['discovery_prefix']}/{component}/{item}/config"
 
     def get_state_topic(self, device_id, category, item=None) -> str:
-        topic = f"{self.service_slug}/{category}" if device_id == "service" else f"{self.service_slug}/devices/{self.get_device_slug(device_id)}/{category}"
+        topic = (
+            f"{self.service_slug}/{category}"
+            if device_id == "service"
+            else f"{self.service_slug}/devices/{self.get_device_slug(device_id)}/{category}"
+        )
         return f"{topic}/{item}" if item else topic
 
-    def get_availability_topic(self, device_id, category="availability", item=None) -> str:
-        topic = f"{self.service_slug}/{category}" if device_id == "service" else f"{self.service_slug}/devices/{self.get_device_slug(device_id)}/{category}"
+    def get_availability_topic(
+        self, device_id, category="availability", item=None
+    ) -> str:
+        topic = (
+            f"{self.service_slug}/{category}"
+            if device_id == "service"
+            else f"{self.service_slug}/devices/{self.get_device_slug(device_id)}/{category}"
+        )
         return f"{topic}/{item}" if item else topic
 
     def get_attribute_topic(self, device_id, category, item, attribute) -> str:
@@ -62,13 +64,13 @@ class TopicsMixin:
         )
         return f"{self.mqtt_config['discovery_prefix']}/{component}/{self.get_device_slug(device_id)}/{item}/{attribute}"
 
-    def get_command_topic(self, device_id, category, command='set') -> str:
+    def get_command_topic(self, device_id, category, command="set") -> str:
         if device_id == "service":
             return f"{self.service_slug}/service/{category}/{command}"
 
         # if category is not passed in, device must exist already
         if not category:
-            category = self.devices[device_id]['component']['component_type']
+            category = self.devices[device_id]["component"]["component_type"]
 
         return f"{self.service_slug}/{category}/{self.get_device_slug(device_id)}/{command}"
 
@@ -76,17 +78,23 @@ class TopicsMixin:
 
     def get_device_name(self, device_id):
         return self.devices[device_id]["component"]["name"]
+
     def get_raw_id(self, device_id):
         return self.states[device_id]["internal"]["raw_id"]
+
     def get_device_sku(self, device_id):
         return self.states[device_id]["internal"]["sku"]
+
     def get_component(self, device_id):
         return self.devices[device_id]["component"]
+
     def get_component_type(self, device_id):
         return self.devices[device_id]["component"]["component_type"]
+
     def get_device_state_topic(self, device_id):
         component = self.get_component(device_id)
         return component.get("stat_t", component.get("state_topic", None))
+
     def get_device_availability_topic(self, device_id):
         component = self.get_component(device_id)
         return component.get("avty_t", component.get("availability_topic", None))

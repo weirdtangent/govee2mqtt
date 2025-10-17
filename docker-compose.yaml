@@ -5,12 +5,20 @@ services:
     image: graystorm/govee2mqtt:latest
     container_name: govee2mqtt
     restart: unless-stopped
-    network_mode: host
+    networks: [appnet]
     volumes:
-      - ./config:/config
+      - ./config:/config:rw
+    tmpfs:
+      - /tmp
     environment:
       - TZ=${TZ:-UTC}
       - CONFIG_PATH=/config/config.yaml
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
     labels:
       org.opencontainers.image.title: "govee2mqtt"
       org.opencontainers.image.description: "Publishes Govee device data to MQTT for Home Assistant auto-discovery"
@@ -19,3 +27,6 @@ services:
       org.opencontainers.image.url: "https://www.graystorm.com"
       org.opencontainers.image.documentation: "https://github.com/weirdtangent/govee2mqtt#readme"
       org.opencontainers.image.licenses: "GPL-3.0-or-later"
+networks:
+  appnet:
+    driver: bridge

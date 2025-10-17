@@ -1,16 +1,17 @@
-from .._imports import *
-
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jeff Culverhouse
 import asyncio
 import json
 import re
 
 
 class GoveeMixin:
-
     async def refresh_device_list(self):
-        self.logger.info( f"Refreshing device list from Govee (every {self.device_list_interval} sec)")
+        self.logger.info(
+            f"Refreshing device list from Govee (every {self.device_list_interval} sec)"
+        )
 
-        govee_devices = self.goveec.get_device_list()
+        govee_devices = self.get_device_list()
         self.publish_service_state()
 
         seen_devices = set()
@@ -64,8 +65,9 @@ class GoveeMixin:
         device_name = device.get("deviceName", "Unknown Device")
         device_id = device.get("device", "Unknown ID")
 
-        self.logger.debug(f"Unrecognized Govee device type: \"{device_name}\" [{sku}] ({device_id})")
-        self.logger.debug(json.dumps(device.get("capabilities", []), indent=2))
+        self.logger.debug(
+            f'Unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})'
+        )
 
         return None
 
@@ -74,7 +76,12 @@ class GoveeMixin:
         device_id = raw_id.replace(":", "").upper()
         self.devices.setdefault(device_id, {})
 
-        device_block = self.get_device_block(self.get_device_slug(device_id), device["deviceName"], device["sku"], self.get_service_device())
+        device_block = self.get_device_block(
+            self.get_device_slug(device_id),
+            device["deviceName"],
+            device["sku"],
+            self.get_service_device(),
+        )
 
         component = {
             "component_type": "light",
@@ -93,41 +100,68 @@ class GoveeMixin:
         }
         self.upsert_state(
             device_id,
-            internal={"raw_id": raw_id, "sku": device.get('sku', None)},
+            internal={"raw_id": raw_id, "sku": device.get("sku", None)},
             light={},
         )
         modes = {}
 
-        for cap in device['capabilities']:
-            match cap['instance']:
+        for cap in device["capabilities"]:
+            match cap["instance"]:
                 case "brightness":
                     component["supported_color_modes"].append("brightness")
                     component["brightness_scale"] = cap["parameters"]["range"]["max"]
-                    component["brightness_state_topic"] = self.get_state_topic(device_id,'light')
-                    component["brightness_value_template"] = "{{ value_json.brightness }}"
-                    component["brightness_command_topic"] = self.get_command_topic(device_id, "light")
-                    component["brightness_command_template"] = '{"brightness": {{ value }}}'
-                    self.upsert_state(device_id, light={'brightness': 0})
-                case 'powerSwitch':
-                    component['supported_color_modes'].append('onoff')
-                case 'colorRgb':
-                    component['supported_color_modes'].append('rgb')
-                    component['rgb_state_topic'] = self.get_state_topic(device_id,'light')
-                    component["rgb_value_template"] = "{{ value_json.rgb_color | join(',') }}"
-                    component["rgb_command_topic"] = self.get_command_topic(device_id, "light")
+                    component["brightness_state_topic"] = self.get_state_topic(
+                        device_id, "light"
+                    )
+                    component["brightness_value_template"] = (
+                        "{{ value_json.brightness }}"
+                    )
+                    component["brightness_command_topic"] = self.get_command_topic(
+                        device_id, "light"
+                    )
+                    component["brightness_command_template"] = (
+                        '{"brightness": {{ value }}}'
+                    )
+                    self.upsert_state(device_id, light={"brightness": 0})
+                case "powerSwitch":
+                    component["supported_color_modes"].append("onoff")
+                case "colorRgb":
+                    component["supported_color_modes"].append("rgb")
+                    component["rgb_state_topic"] = self.get_state_topic(
+                        device_id, "light"
+                    )
+                    component["rgb_value_template"] = (
+                        "{{ value_json.rgb_color | join(',') }}"
+                    )
+                    component["rgb_command_topic"] = self.get_command_topic(
+                        device_id, "light"
+                    )
                     component["rgb_command_template"] = '{"rgb": [{{ value }}] }'
-                    self.upsert_state(device_id, light={'rgb_max': cap['parameters']['range']['max'] or 16777215})
-                case 'colorTemperatureK':
-                    component['supported_color_modes'].append('color_temp')
-                    component['color_temp_kelvin'] = True
-                    component['color_temp_state_topic'] = self.get_state_topic(device_id,'light')
-                    component["color_temp_value_template"] = "{{ value_json.color_temp }}"
-                    component["color_temp_command_topic"] = self.get_command_topic(device_id, "light")
-                    component["color_temp_command_template"] = '{"color_temp": {{ value }}}'
-                    component['min_kelvin'] = cap['parameters']['range']['min'] or 2000
-                    component['max_kelvin'] = cap['parameters']['range']['max'] or 9000
-                    self.upsert_state(device_id, light={'color_temp': 0})
-                case 'gradientToggle':
+                    self.upsert_state(
+                        device_id,
+                        light={
+                            "rgb_max": cap["parameters"]["range"]["max"] or 16777215
+                        },
+                    )
+                case "colorTemperatureK":
+                    component["supported_color_modes"].append("color_temp")
+                    component["color_temp_kelvin"] = True
+                    component["color_temp_state_topic"] = self.get_state_topic(
+                        device_id, "light"
+                    )
+                    component["color_temp_value_template"] = (
+                        "{{ value_json.color_temp }}"
+                    )
+                    component["color_temp_command_topic"] = self.get_command_topic(
+                        device_id, "light"
+                    )
+                    component["color_temp_command_template"] = (
+                        '{"color_temp": {{ value }}}'
+                    )
+                    component["min_kelvin"] = cap["parameters"]["range"]["min"] or 2000
+                    component["max_kelvin"] = cap["parameters"]["range"]["max"] or 9000
+                    self.upsert_state(device_id, light={"color_temp": 0})
+                case "gradientToggle":
                     modes["gradient"] = {
                         "component_type": "switch",
                         "name": f"{device['deviceName']} Gradient",
@@ -139,18 +173,24 @@ class GoveeMixin:
                         "pl_not_avail": "offline",
                         "payload_on": "on",
                         "payload_off": "off",
-                        "icon": "mdi:gradient-horizontal" if device["sku"] == "H6042" else "mdi:gradient-vertical",
+                        "icon": (
+                            "mdi:gradient-horizontal"
+                            if device["sku"] == "H6042"
+                            else "mdi:gradient-vertical"
+                        ),
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.upsert_state(device_id, switch={'gradient': 'off'})
+                    self.upsert_state(device_id, switch={"gradient": "off"})
 
-                case 'nightlightToggle':
+                case "nightlightToggle":
                     modes["nightlight"] = {
                         "component_type": "switch",
                         "name": f"{device['deviceName']} Nightlight",
                         "uniq_id": f"{self.service_slug}_{self.get_device_slug(device_id, 'nightlight')}",
-                        "stat_t": self.get_state_topic(device_id, "switch", "nightlight"),
+                        "stat_t": self.get_state_topic(
+                            device_id, "switch", "nightlight"
+                        ),
                         "cmd_t": self.get_command_topic(device_id, "switch"),
                         "avty_t": self.get_availability_topic(device_id),
                         "pl_avail": "online",
@@ -161,14 +201,16 @@ class GoveeMixin:
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.upsert_state(device_id, switch={'nightlight': 'off'})
+                    self.upsert_state(device_id, switch={"nightlight": "off"})
 
-                case 'dreamViewToggle':
+                case "dreamViewToggle":
                     modes["dreamview"] = {
                         "component_type": "switch",
                         "name": f"{device['deviceName']} Dreamview",
                         "uniq_id": f"{self.service_slug}_{self.get_device_slug(device_id, 'dreamview')}",
-                        "stat_t": self.get_state_topic(device_id, "switch", "dreamview"),
+                        "stat_t": self.get_state_topic(
+                            device_id, "switch", "dreamview"
+                        ),
                         "cmd_t": self.get_command_topic(device_id, "switch"),
                         "avty_t": self.get_availability_topic(device_id),
                         "pl_avail": "online",
@@ -179,7 +221,7 @@ class GoveeMixin:
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.upsert_state(device_id, switch={'dreamview': 'off'})
+                    self.upsert_state(device_id, switch={"dreamview": "off"})
 
                 # case 'musicMode':
                 #     # setup to store state
@@ -241,31 +283,48 @@ class GoveeMixin:
         component["supported_color_modes"] = list(modeset)
 
         # watch for capabilities we don't handle
-        unsupported = [cap["instance"] for cap in device["capabilities"]
-               if cap["instance"] not in ["brightness", "powerSwitch", "colorRgb",
-                                          "colorTemperatureK", "gradientToggle",
-                                          "nightlightToggle", "dreamViewToggle"]]
+        unsupported = [
+            cap["instance"]
+            for cap in device["capabilities"]
+            if cap["instance"]
+            not in [
+                "brightness",
+                "powerSwitch",
+                "colorRgb",
+                "colorTemperatureK",
+                "gradientToggle",
+                "nightlightToggle",
+                "dreamViewToggle",
+            ]
+        ]
         if unsupported:
-            self.logger.debug(f'Unhandled light capabilities for {device["deviceName"]}: {unsupported}')
+            self.logger.debug(
+                f'Unhandled light capabilities for {device["deviceName"]}: {unsupported}'
+            )
 
         # if we ended up with no fancy way to command the light, add a simple way
-        if not any(x in component for x in [
-            "brightness_command_topic",
-            "rgb_command_topic",
-            "color_temp_command_topic"
-        ]):
+        if not any(
+            x in component
+            for x in [
+                "brightness_command_topic",
+                "rgb_command_topic",
+                "color_temp_command_topic",
+            ]
+        ):
             # fallback for simple on/off devices
             component["command_topic"] = self.get_command_topic(device_id, "light")
             component["payload_on"] = "on"
             component["payload_off"] = "off"
 
         # insert, or update anything that changed, but don't lose anything
-        self.upsert_device(device_id, component=component, modes=modes);
+        self.upsert_device(device_id, component=component, modes=modes)
 
         self.build_device_states(self.states[device_id], raw_id, device["sku"])
 
         if not self.is_discovered(device_id):
-            self.logger.info(f'Added new light: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
+            self.logger.info(
+                f'Added new light: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})'
+            )
 
         self.publish_device_discovery(device_id)
         self.publish_device_availability(device_id, online=True)
@@ -338,19 +397,20 @@ class GoveeMixin:
                 self.upsert_device(device_id, component=component)
                 self.upsert_state(
                     device_id,
-                    internal={"raw_id": raw_id, "sku": device.get('sku', None)},
+                    internal={"raw_id": raw_id, "sku": device.get("sku", None)},
                     sensor={},
                 )
-                self.build_device_states(self.states[device_id],raw_id,device['sku'])
+                self.build_device_states(self.states[device_id], raw_id, device["sku"])
 
                 if not self.is_discovered(device_id):
-                    self.logger.info(f'Added new sensor: "{component["name"]}" [Govee {device["sku"]}] ({device_id})')
+                    self.logger.info(
+                        f'Added new sensor: "{component["name"]}" [Govee {device["sku"]}] ({device_id})'
+                    )
 
                 self.publish_device_discovery(device_id)
                 self.publish_device_availability(device_id, online=True)
                 self.publish_device_state(device_id)
         return created
-
 
     def publish_device_discovery(self, device_id):
         def _publish_one(dev_id: str, defn: dict, suffix: str | None = None):
@@ -365,7 +425,9 @@ class GoveeMixin:
             self.mqtt_safe_publish(topic, json.dumps(payload), retain=True)
 
             # Mark discovered in state (per published entity)
-            self.states.setdefault(eff_device_id, {}).setdefault("internal", {})["discovered"] = 1
+            self.states.setdefault(eff_device_id, {}).setdefault("internal", {})[
+                "discovered"
+            ] = 1
 
         component = self.get_component(device_id)
         _publish_one(device_id, component, suffix=None)
@@ -375,11 +437,12 @@ class GoveeMixin:
         for slug, mode in modes.items():
             _publish_one(device_id, mode, suffix=slug)
 
-
     def publish_device_state(self, device_id):
         states = self.states.get(device_id, None)
         if not self.is_discovered(device_id):
-            self.logger.debug(f"[device state] Discovery not complete for {device_id} yet, holding off on sending state")
+            self.logger.debug(
+                f"[device state] Discovery not complete for {device_id} yet, holding off on sending state"
+            )
             return
 
         flat = {}

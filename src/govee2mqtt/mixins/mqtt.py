@@ -1,34 +1,48 @@
-from .._imports import *
-
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jeff Culverhouse
 import json
 import paho.mqtt.client as mqtt
 from paho.mqtt.properties import Properties
 from paho.mqtt.packettypes import PacketTypes
+import random
 import ssl
+import string
 import time
 
+
 class MqttMixin:
+    def _build_client_id(self, prefix):
+        return (
+            prefix
+            + "-"
+            + "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        )
 
     def mqttc_create(self):
+        if not hasattr(self, "config"):
+            raise RuntimeError("config not initialized; ensure Base.__init__ ran")
+
+        client_id = self._build_client_id(self.config["mqtt"]["prefix"])
+
         self.mqttc = mqtt.Client(
-            client_id=self.client_id,
+            client_id=client_id,
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             reconnect_on_failure=False,
             protocol=mqtt.MQTTv5,
         )
 
-        if self.mqtt_config.get('tls_enabled'):
+        if self.mqtt_config.get("tls_enabled"):
             self.mqttc.tls_set(
-                ca_certs=self.mqtt_config.get('tls_ca_cert'),
-                certfile=self.mqtt_config.get('tls_cert'),
-                keyfile=self.mqtt_config.get('tls_key'),
+                ca_certs=self.mqtt_config.get("tls_ca_cert"),
+                certfile=self.mqtt_config.get("tls_cert"),
+                keyfile=self.mqtt_config.get("tls_key"),
                 cert_reqs=ssl.CERT_REQUIRED,
                 tls_version=ssl.PROTOCOL_TLS,
             )
-        if self.mqtt_config.get('username') or self.mqtt_config.get('password'):
+        if self.mqtt_config.get("username") or self.mqtt_config.get("password"):
             self.mqttc.username_pw_set(
-                username=self.mqtt_config.get('username') or None,
-                password=self.mqtt_config.get('password') or None,
+                username=self.mqtt_config.get("username") or None,
+                password=self.mqtt_config.get("password") or None,
             )
 
         self.mqttc.on_connect = self.mqtt_on_connect
@@ -38,12 +52,16 @@ class MqttMixin:
         self.mqttc.on_log = self.mqtt_on_log
 
         # Define a "last will" message (LWT):
-        self.mqttc.will_set(self.get_service_topic('status'), 'offline', qos=1, retain=True)
+        self.mqttc.will_set(
+            self.get_service_topic("status"), "offline", qos=1, retain=True
+        )
 
         try:
-            host = self.mqtt_config.get('host')
-            port = self.mqtt_config.get('port')
-            self.logger.info(f"Connecting to MQTT broker at {host}:{port} as {self.client_id}")
+            host = self.mqtt_config.get("host")
+            port = self.mqtt_config.get("port")
+            self.logger.info(
+                f"Connecting to MQTT broker at {host}:{port} as {self.mqtt_client_id}"
+            )
 
             props = Properties(PacketTypes.CONNECT)
             props.SessionExpiryInterval = 0
@@ -54,15 +72,17 @@ class MqttMixin:
             self.mqtt_connect_time = time.time()
             self.mqttc.loop_start()
         except ConnectionError as error:
-            self.logger.error(f'Failed to connect to MQTT host {host}: {error}')
+            self.logger.error(f"Failed to connect to MQTT host {host}: {error}")
             self.running = False
         except Exception as error:
-            self.logger.error(f'Network problem trying to connect to MQTT host {host}: {error}')
+            self.logger.error(
+                f"Network problem trying to connect to MQTT host {host}: {error}"
+            )
             self.running = False
 
     def mqtt_on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code.value != 0:
-            self.logger.error(f'MQTT failed to connect ({reason_code.getName()})')
+            self.logger.error(f"MQTT failed to connect ({reason_code.getName()})")
             self.running = False
             return
 
@@ -70,7 +90,7 @@ class MqttMixin:
         self.publish_service_availability()
         self.publish_service_state()
 
-        self.logger.info('Subscribing to topics on MQTT')
+        self.logger.info("Subscribing to topics on MQTT")
         client.subscribe("homeassistant/status")
         client.subscribe(f"{self.service_slug}/service/+/set")
         client.subscribe(f"{self.service_slug}/service/+/command")
@@ -78,13 +98,15 @@ class MqttMixin:
 
     def mqtt_on_disconnect(self, client, userdata, flags, reason_code, properties):
         if reason_code.value != 0:
-            self.logger.error(f'MQTT lost connection ({reason_code.getName()})')
+            self.logger.error(f"MQTT lost connection ({reason_code.getName()})")
         else:
-            self.logger.info('Closed MQTT connection')
+            self.logger.info("Closed MQTT connection")
 
-        if self.running and (self.mqtt_connect_time is None or time.time() > self.mqtt_connect_time + 10):
+        if self.running and (
+            self.mqtt_connect_time is None or time.time() > self.mqtt_connect_time + 10
+        ):
             # lets use a new client_id for a reconnect attempt
-            self.client_id = self.get_new_client_id()
+            self.mqtt_client_id = self.build_client_id(self.mqtt_config["prefix"])
             self.mqttc_create()
         else:
             self.logger.info("MQTT disconnect — stopping service loop")
@@ -92,9 +114,9 @@ class MqttMixin:
 
     def mqtt_on_log(self, client, userdata, paho_log_level, msg):
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_ERR:
-            self.logger.error(f'MQTT logged: {msg}')
+            self.logger.error(f"MQTT logged: {msg}")
         if paho_log_level == mqtt.LogLevel.MQTT_LOG_WARNING:
-            self.logger.warning(f'MQTT logged: {msg}')
+            self.logger.warning(f"MQTT logged: {msg}")
 
     def mqtt_on_message(self, client, userdata, msg):
         topic = msg.topic
@@ -104,7 +126,7 @@ class MqttMixin:
         self.logger.info(f"Got message on topic: {topic} with {payload}")
 
         # Dispatch based on type of message
-        if components[0] == self.mqtt_config['discovery_prefix']:
+        if components[0] == self.mqtt_config["discovery_prefix"]:
             return self._handle_homeassistant_message(payload)
 
         if components[0] == self.service_slug and components[1] == "service":
@@ -132,17 +154,20 @@ class MqttMixin:
             self.rediscover_all()
             self.logger.info("Home Assistant came online — rediscovering devices")
 
-
     def _handle_device_topic(self, components, payload):
         vendor, device_id, attribute = self._parse_device_topic(components)
         if not vendor or not vendor.startswith(self.service_slug):
-            self.logger.debug(f"Ignoring non-Govee device topic: {'/'.join(components)}")
+            self.logger.debug(
+                f"Ignoring non-Govee device topic: {'/'.join(components)}"
+            )
             return
         if not self.devices.get(device_id, None):
             self.logger.warning(f"Got MQTT message for unknown device: {device_id}")
             return
 
-        self.logger.debug(f"Got message for {self.get_device_name(device_id)}: {payload}")
+        self.logger.debug(
+            f"Got message for {self.get_device_name(device_id)}: {payload}"
+        )
         self.send_command(device_id, payload)
 
     def _parse_device_topic(self, components):
@@ -185,10 +210,12 @@ class MqttMixin:
             return (None, None)
 
     def is_discovered(self, device_id) -> bool:
-        return bool(self.states.get(device_id, {}).get("internal", {}).get("discovered", False))
+        return bool(
+            self.states.get(device_id, {}).get("internal", {}).get("discovered", False)
+        )
 
     def set_discovered(self, device_id) -> None:
-        self.upsert_state(device_id, internal={'discovered': True})
+        self.upsert_state(device_id, internal={"discovered": True})
 
     def mqtt_on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         reason_names = [rc.getName() for rc in reason_code_list]
@@ -197,10 +224,14 @@ class MqttMixin:
 
     def mqtt_safe_publish(self, topic, payload, **kwargs):
         if "component" in payload or "//////" in payload:
-            self.logger.warning(f"Questionable payload includes 'component' or string of slashes - wont't send to HA")
+            self.logger.warning(
+                "Questionable payload includes 'component' or string of slashes - wont't send to HA"
+            )
             self.logger.warning(f"topic: {topic}")
             self.logger.warning(f"payload: {payload}")
-            raise ValueError("Possible invalid payload. topic: {topic} payload: {payload}")
+            raise ValueError(
+                "Possible invalid payload. topic: {topic} payload: {payload}"
+            )
         try:
             self.mqttc.publish(topic, payload, **kwargs)
         except Exception as e:

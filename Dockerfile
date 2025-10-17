@@ -1,55 +1,45 @@
-# ---------- builder ----------
+# ---------- builder: make a wheel ----------
 FROM python:3-slim AS builder
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=UTC UV_INSTALL_DIR=/usr/local/bin
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -LsSf https://astral.sh/uv/install.sh | sh && uv --version
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      build-essential gcc libffi-dev libssl-dev \
+ARG APP_VERSION=0.0.0
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=$APP_VERSION
+
+COPY pyproject.toml uv.lock /app/
+COPY src/ /app/src/
+RUN uv build
+RUN ls -l dist
+
+# ---------- runtime ----------
+FROM python:3-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=UTC
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata \
  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /usr/src/app
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=builder /app/dist/*.whl /tmp/
+RUN uv pip install --system --no-cache /tmp/*.whl
 
-# Upgrade tooling
-RUN python -m ensurepip && pip install --upgrade pip setuptools wheel
-
-COPY requirements.txt .
-RUN python -m venv .venv \
- && .venv/bin/pip install --no-cache-dir -r requirements.txt
-
-# ---------- production ----------
-FROM python:3-slim AS production
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PATH="/usr/src/app/.venv/bin:${PATH}"
-
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tzdata \
- && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /usr/src/app
-
-# Copy app and the prepared venv
-COPY . .
-COPY --from=builder /usr/src/app/.venv .venv
-
-# copy and make executable
-COPY healthcheck.py /usr/local/bin/healthcheck.py
+# healthcheck
+COPY src/healthcheck.py /usr/local/bin/healthcheck.py
 RUN chmod +x /usr/local/bin/healthcheck.py
+ENV READY_FILE=/tmp/govee2mqtt.ready HEALTH_MAX_AGE=90
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD ["/usr/bin/env","python","/usr/local/bin/healthcheck.py"]
 
-# Non-root user
-ARG USER_ID=1000
-ARG GROUP_ID=1000
+# non-root & /config
+ARG USER_ID=1000 GROUP_ID=1000
 RUN addgroup --gid ${GROUP_ID} appuser \
- && adduser  --uid ${USER_ID} --gid ${GROUP_ID} --disabled-password --gecos "" appuser
-
-# Config directory (shows up in Synology as a Volume)
-RUN install -d -m 0775 -o appuser -g appuser /config
+ && adduser --uid ${USER_ID} --gid ${GROUP_ID} --disabled-password --gecos "" appuser \
+ && install -d -m 0775 -o appuser -g appuser /config
 VOLUME ["/config"]
-
 USER appuser
 
-ENTRYPOINT ["python3", "./app.py"]
-CMD ["-c", "/config"]
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD ["/usr/bin/env","python3","/usr/local/bin/healthcheck.py"]
+# run the installed console script (from pyproject)
+ENTRYPOINT ["govee2mqtt"]
+CMD ["-c","/config"]

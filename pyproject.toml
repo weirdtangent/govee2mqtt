@@ -1,0 +1,139 @@
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm>=8", "wheel"]  # if you’re using setuptools-scm
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "govee2mqtt"
+dynamic = ["version"]
+license = { text = "MIT" }
+requires-python = ">=3.13"
+dependencies = [
+    "deepmerge==2.0",
+    "paho-mqtt>=2.1.0",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+]
+
+[project.scripts]
+govee2mqtt = "govee2mqtt.app:main"
+
+[project.optional-dependencies]
+dev = [
+    "attrs>=25.4.0",
+    "certifi>=2025.10.5",
+    "charset-normalizer>=3.4.4",
+    "coverage>=7.11.0",
+    "idna>=3.11",
+    "iniconfig>=2.1.0",
+    "jsonschema>=4.25.1",
+    "jsonschema-specifications>=2025.9.1",
+    "packaging>=25.0",
+    "paho-mqtt>=2.1.0",
+    "pluggy>=1.6.0",
+    "pygments>=2.19.2",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+    "pyyaml>=6.0.3",
+    "referencing>=0.37.0",
+    "requests>=2.32.5",
+    "rpds-py>=0.27.1",
+    "urllib3>=2.5.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+license-files = ["LICENSE"]
+
+[tool.setuptools.package-data]
+qtt = ["VERSION"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["govee2mqtt*"]
+
+[tool.setuptools_scm]
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Assume Python 3.13
+target-version = "py313"
+
+[tool.pyright]
+include = [ "." ]
+extraPaths = [ "./mixins" ]
+venvPath = "./.venv"
+venv = ".venv"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--quiet"
+testpaths = "tests"
+pythonpath = "src"
+
+[tool.coverage.run]
+# .coveragerc
+branch = true
+source = [
+    "govee_api",
+    "qtt",
+    "util",
+]
+omit = [
+    "tests/*",
+    "*/__init__.py",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/site-packages/*"
+]
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true
+skip_covered = false
+precision = 1
+exclude_lines = [
+    "pragma: no cover"
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+force-exclude = '''
+/(
+    \.venv
+)/
+'''

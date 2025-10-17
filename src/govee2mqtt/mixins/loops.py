@@ -1,10 +1,10 @@
-from .._imports import *
-
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jeff Culverhouse
 import asyncio
 import signal
-from util import mark_ready, heartbeat_ready
-class LoopsMixin:
 
+
+class LoopsMixin:
     async def device_list_loop(self):
         while self.running:
             await self.refresh_device_list()
@@ -34,7 +34,7 @@ class LoopsMixin:
 
     async def heartbeat(self):
         while self.running:
-            heartbeat_ready()
+            self.heartbeat_ready()
             try:
                 await asyncio.sleep(60)
             except asyncio.CancelledError:
@@ -51,7 +51,7 @@ class LoopsMixin:
                 self.logger.debug(f"Cannot install handler for {sig}")
 
         self.running = True
-        mark_ready()
+        self.mark_ready()
 
         tasks = [
             asyncio.create_task(self.device_list_loop(), name="device_list_loop"),

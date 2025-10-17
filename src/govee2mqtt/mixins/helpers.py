@@ -1,17 +1,16 @@
-from .._imports import *
-
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Jeff Culverhouse
 import json
 import os
 import signal
 import threading
-from util import number_to_rgb_hsv, rgb_to_number, find_key_by_value
-from typing import Any, MutableMapping, Dict, Optional
+from typing import Any, Dict
 from deepmerge import Merger
 
-class HelpersMixin:
 
+class HelpersMixin:
     def build_device_states(self, states, raw_id, sku):
-        data = self.goveec.get_device(raw_id, sku)
+        data = self.get_device(raw_id, sku)
 
         for key in data:
             if not data[key]:
@@ -19,48 +18,56 @@ class HelpersMixin:
             match key:
                 case "online":
                     states["availability"] = "online" if data[key] else "offline"
-                case 'powerSwitch':
-                    states['light']['state'] = 'ON' if data[key] == 1 else 'OFF'
-                case 'brightness':
-                    states['light']['brightness'] = data[key]
-                case 'colorRgb':
-                    states["light"]["rgb"] = number_to_rgb_hsv(data[key], states["light"]["rgb_max"])
-                case 'colorTemperatureK':
-                    states['light']['color_temp'] = data[key]
-                case 'gradientToggle':
-                    states['switch']['gradient'] = 'on' if data[key] == 1 else 'off'
-                case 'nightlightToggle':
-                    states['switch']['nightlight'] = 'on' if data[key] == 1 else 'off'
-                case 'dreamViewToggle':
-                    states['switch']['dreamview'] = 'on' if data[key] == 1 else 'off'
-                case 'sensorTemperature':
-                    states['sensor']['temperature'] = data[key]
-                case 'sensorHumidity':
-                    states['sensor']['humidity'] = data[key]
-                case 'musicMode':
-                    if isinstance(data[key], dict):
-                        if data['musicMode'] != "":
-                            states['music']['mode'] = data['musicMode']
-                        states['music']['sensitivity'] = data['sensitivity']
-                    elif data[key] != '':
-                        states['music']['mode'] = find_key_by_value(states['music']['options'], data[key])
-                case 'sensitivity':
-                    states['music']['sensitivity'] = data[key]
-                case 'lastUpdate':
-                    states.setdefault('meta', {})['last_update'] = (
-                        data[key].strftime("%Y-%m-%d %H:%M:%S") if hasattr(data[key], "isoformat") else str(data[key])
+                case "powerSwitch":
+                    states["light"]["state"] = "ON" if data[key] == 1 else "OFF"
+                case "brightness":
+                    states["light"]["brightness"] = data[key]
+                case "colorRgb":
+                    states["light"]["rgb"] = self.number_to_rgb_hsv(
+                        data[key], states["light"]["rgb_max"]
                     )
-                case 'lastUpdate':
-                    states['state']['last_update'] = data[key].isoformat()
+                case "colorTemperatureK":
+                    states["light"]["color_temp"] = data[key]
+                case "gradientToggle":
+                    states["switch"]["gradient"] = "on" if data[key] == 1 else "off"
+                case "nightlightToggle":
+                    states["switch"]["nightlight"] = "on" if data[key] == 1 else "off"
+                case "dreamViewToggle":
+                    states["switch"]["dreamview"] = "on" if data[key] == 1 else "off"
+                case "sensorTemperature":
+                    states["sensor"]["temperature"] = data[key]
+                case "sensorHumidity":
+                    states["sensor"]["humidity"] = data[key]
+                case "musicMode":
+                    if isinstance(data[key], dict):
+                        if data["musicMode"] != "":
+                            states["music"]["mode"] = data["musicMode"]
+                        states["music"]["sensitivity"] = data["sensitivity"]
+                    elif data[key] != "":
+                        states["music"]["mode"] = self.find_key_by_value(
+                            states["music"]["options"], data[key]
+                        )
+                case "sensitivity":
+                    states["music"]["sensitivity"] = data[key]
+                case "lastUpdate":
+                    states.setdefault("meta", {})["last_update"] = (
+                        data[key].strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(data[key], "isoformat")
+                        else str(data[key])
+                    )
+                case "lastUpdate":
+                    states["state"]["last_update"] = data[key].isoformat()
                 case _:
-                    self.logger.warning(f"Unhandled state {key} with value {data[key]} from Govee")
+                    self.logger.warning(
+                        f"Unhandled state {key} with value {data[key]} from Govee"
+                    )
 
     # convert MQTT attributes to Govee capabilities
     def build_govee_capabilities(self, device_id, attributes):
         # Handle case where attributes was sent as a JSON string
         if isinstance(attributes, str):
-            if attributes == 'ON' or attributes == 'OFF':
-                attributes = {'light': attributes }
+            if attributes == "ON" or attributes == "OFF":
+                attributes = {"light": attributes}
         elif not isinstance(attributes, dict):
             try:
                 attributes = json.loads(attributes)
@@ -75,8 +82,8 @@ class HelpersMixin:
             return {}
 
         states = self.states[device_id]
-        light = states.get('light', {})
-        switch = states.get('switch', {})
+        light = states.get("light", {})
+        switch = states.get("switch", {})
 
         capabilities = {}
         for key, value in attributes.items():
@@ -100,7 +107,7 @@ class HelpersMixin:
                     }
 
                 case "rgb" | "color":
-                    rgb_val = rgb_to_number(value)
+                    rgb_val = self.rgb_to_number(value)
                     light["rgb_color"] = value
                     capabilities["colorRgb"] = {
                         "type": "devices.capabilities.color_setting",
@@ -158,12 +165,11 @@ class HelpersMixin:
                 case _:
                     self.logger.warning(f"Ignored unknown attribute: {key} => {value}")
 
-
         # cannot send "turn" with either brightness or color
-        if 'brightness' in capabilities and 'turn' in capabilities:
-            del capabilities['turn']
-        if 'color' in capabilities and 'turn' in capabilities:
-            del capabilities['turn']
+        if "brightness" in capabilities and "turn" in capabilities:
+            del capabilities["turn"]
+        if "color" in capabilities and "turn" in capabilities:
+            del capabilities["turn"]
 
         return capabilities
 
@@ -192,8 +198,10 @@ class HelpersMixin:
     # send command to Govee -----------------------------------------------------------------------
 
     def send_command(self, device_id, response):
-        if device_id == 'service':
-            self.logger.error(f'Why are you trying to send {response} to the "service"? Ignoring you.')
+        if device_id == "service":
+            self.logger.error(
+                f'Why are you trying to send {response} to the "service"? Ignoring you.'
+            )
             return
         states = self.states.get(device_id, None)
         raw_id = self.get_raw_id(device_id)
@@ -201,22 +209,30 @@ class HelpersMixin:
 
         capabilities = self.build_govee_capabilities(device_id, response)
         if not capabilities:
-            self.logger.debug(f'No set of capabilities built to send Govee for {device_id}')
+            self.logger.debug(
+                f"No set of capabilities built to send Govee for {device_id}"
+            )
             return
 
         need_boost = False
         for key in capabilities:
-            response = self.goveec.send_command(raw_id, sku, capabilities[key]['type'], capabilities[key]['instance'], capabilities[key]['value'])
+            response = self.post_command(
+                raw_id,
+                sku,
+                capabilities[key]["type"],
+                capabilities[key]["instance"],
+                capabilities[key]["value"],
+            )
             self.publish_service_state()
 
             # no need to boost-refresh if we get the state back on the successful command response
             if len(response) > 0:
-                self.build_device_states(states,raw_id,sku)
+                self.build_device_states(states, raw_id, sku)
 
                 # now that we've used the data, lets remove the chunky
                 # `lastUpdate` key and then dump the rest into the log
                 response.pop("lastUpdate", None)
-                self.logger.debug(f'Got Govee response from command: {response}')
+                self.logger.debug(f"Got Govee response from command: {response}")
 
                 self.publish_device_state(device_id)
 
@@ -224,7 +240,7 @@ class HelpersMixin:
                 if device_id in self.boosted:
                     self.boosted.remove(device_id)
             else:
-                self.logger.info(f'Did not find changes in Govee response: {response}')
+                self.logger.info(f"Did not find changes in Govee response: {response}")
                 need_boost = True
 
         # if we send a command and did not get a state change back on the response
@@ -236,18 +252,20 @@ class HelpersMixin:
         match handler:
             case "device_refresh":
                 self.device_interval = message
-            case 'device_list_refresh':
+            case "device_list_refresh":
                 self.device_list_interval = message
-            case 'snapshot_refresh':
+            case "snapshot_refresh":
                 self.device_boost_interval = message
             case "refresh_device_list":
                 if message == "refresh":
                     self.rediscover_all()
                 else:
-                    self.logger.error('[handler] unknown [message]')
+                    self.logger.error("[handler] unknown [message]")
                     return
             case _:
-                self.logger.error(f'Unrecognized message to {self.service_slug}: {attribute} -> {message}')
+                self.logger.error(
+                    f"Unrecognized message to {self.service_slug}: {handler} with {message}"
+                )
                 return
         self.publish_service_state()
 
@@ -255,7 +273,8 @@ class HelpersMixin:
         self.publish_service_state()
         self.publish_service_discovery()
         for device_id in self.devices:
-            if device_id == 'service': continue
+            if device_id == "service":
+                continue
             self.publish_device_state(device_id)
             self.publish_device_discovery(device_id)
 
@@ -296,13 +315,21 @@ class HelpersMixin:
         ["override"],  # fallback
     )
 
-    def upsert_device(self, key: str, **fields: Any,) -> Dict[str, Any]:
+    def upsert_device(
+        self,
+        key: str,
+        **fields: Any,
+    ) -> Dict[str, Any]:
         rec = self.devices.setdefault(key, {})
         if fields:
             self.MERGER.merge(rec, fields)
         return rec
 
-    def upsert_state(self, key: str, **fields: Any,) -> Dict[str, Any]:
+    def upsert_state(
+        self,
+        key: str,
+        **fields: Any,
+    ) -> Dict[str, Any]:
         rec = self.states.setdefault(key, {})
         if fields:
             self.MERGER.merge(rec, fields)

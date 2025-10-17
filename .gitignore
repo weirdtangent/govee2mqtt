@@ -19,6 +19,7 @@ pip-wheel-metadata/
 # 🧪 Testing, coverage, and cache
 # -----------------------------------------------------------------------------
 .pytest_cache/
+.ruff_cache/
 .cache/
 .coverage
 coverage/
