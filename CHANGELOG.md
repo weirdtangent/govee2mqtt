@@ -1,3 +1,10 @@
+## [2.0.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.2...v2.0.3) (2025-10-17)
+
+
+### Bug Fixes
+
+* publish discovery for modes; fix naming ([4ee15db](https://github.com/weirdtangent/govee2mqtt/commit/4ee15db9f1a3af9557f5c564b3368eb5bb5ee274))
+
 ## [2.0.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.1...v2.0.2) (2025-10-15)
 
 
