@@ -32,6 +32,10 @@ WORKDIR /usr/src/app
 COPY . .
 COPY --from=builder /usr/src/app/.venv .venv
 
+# copy and make executable
+COPY healthcheck.py /usr/local/bin/healthcheck.py
+RUN chmod +x /usr/local/bin/healthcheck.py
+
 # Non-root user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -48,13 +52,4 @@ ENTRYPOINT ["python3", "./app.py"]
 CMD ["-c", "/config"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD python - <<'PY' || exit 1
-import os, time, sys
-p = os.getenv("READY_FILE","/tmp/govee2mqtt.ready")
-try:
-    st = os.stat(p)
-    # “healthy” if file exists and touched within last 90s
-    sys.exit(0 if time.time() - st.st_mtime < 90 else 1)
-except FileNotFoundError:
-    sys.exit(1)
-PY
+  CMD ["/usr/bin/env","python3","/usr/local/bin/healthcheck.py"]
