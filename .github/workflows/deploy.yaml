@@ -47,10 +47,7 @@ jobs:
         run: uv run ruff check src
 
       - name: Black
-        run: uv run black --check --color --diff govee2mqtt tests tools
-
-      - name: RST-Lint (optional)
-        run: uv run rst-lint README.rst CHANGES.rst CONTRIBUTING.rst
+        run: uv run black --check --color --diff src tests tools
 
   release:
     name: Semantic Release
