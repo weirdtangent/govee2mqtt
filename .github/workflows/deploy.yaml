@@ -47,7 +47,9 @@ jobs:
         run: uv run ruff check src
 
       - name: Black
-        run: uv run black --check --color --diff src tests tools
+        run: |
+          uv run black --version
+          uv run black --check --color --diff .s
 
   release:
     name: Semantic Release
