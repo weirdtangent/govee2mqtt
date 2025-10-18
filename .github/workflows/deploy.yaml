@@ -44,7 +44,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Ruff
-        run: uv run ruff check govee2mqtt tests tools
+        run: uv run ruff check src
 
       - name: Black
         run: uv run black --check --color --diff govee2mqtt tests tools
