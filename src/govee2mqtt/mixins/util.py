@@ -169,7 +169,7 @@ class UtilMixin:
 
         # Validate required fields
         if not config["govee"].get("api_key"):
-            raise TypeError (
+            raise TypeError(
                 "`govee.api_key` required in config file or GOVEE_API_KEY env var"
             )
 
