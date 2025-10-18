@@ -41,29 +41,16 @@ jobs:
       # If your dev tools (ruff/black/rst-lint/rich/etc.) are in optional-dependencies
       # like [project.optional-dependencies.dev], this installs them.
       - name: Install project (dev)
-        run: |
-          uv sync --all-extras --dev
-          uv run python -V
+        run: uv sync --all-extras --dev
 
       - name: Ruff
-        run: |
-          uv run ruff --version
-          uv run ruff check govee2mqtt tests tools
+        run: uv run ruff check govee2mqtt tests tools
 
       - name: Black
-        run: |
-          uv run black --version
-          uv run black --check --color --diff govee2mqtt tests tools
+        run: uv run black --check --color --diff govee2mqtt tests tools
 
-      - name: RST-Lint (if .rst files present)
-        run: |
-          set -euo pipefail
-          files=$(ls README.rst CHANGES.rst CONTRIBUTING.rst 2>/dev/null || true)
-          if [ -n "$files" ]; then
-            uv run rst-lint $files
-          else
-            echo "No .rst files found; skipping rst-lint."
-          fi
+      - name: RST-Lint (optional)
+        run: uv run rst-lint README.rst CHANGES.rst CONTRIBUTING.rst
 
   release:
     name: Semantic Release
