@@ -124,9 +124,14 @@ exclude_lines = [
 
 [tool.black]
 line-length = 88
-target-version = ['py313']
-force-exclude = '''
+target-version = ["py313"]
+extend-exclude = '''
 /(
-    \.venv
+  \.venv
+ |\.ruff_cache
+ |\.pytest_cache
+ |node_modules
+ |dist
+ |build
 )/
 '''

@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   lint:
-    name: Lint (ruff/black/rst-lint)
+    name: Lint (ruff/black)
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     strategy:
