@@ -32,31 +32,38 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          cache-dependency-path: |
-            requirements.txt
-            requirements_test.txt
 
-      - name: Install dependencies
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      # If your dev tools (ruff/black/rst-lint/rich/etc.) are in optional-dependencies
+      # like [project.optional-dependencies.dev], this installs them.
+      - name: Install project (dev)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements_test.txt
-          # Make sure CLI tools are present even if not in your reqs files:
-          pip install ruff black restructuredtext-lint
+          uv sync --all-extras --dev
+          uv run python -V
 
       - name: Ruff
         run: |
-          ruff --version
-          ruff check blinkpy tests blinkapp
+          uv run ruff --version
+          uv run ruff check govee2mqtt tests tools
 
       - name: Black
         run: |
-          black --version
-          black --check --color --diff blinkpy tests blinkapp
+          uv run black --version
+          uv run black --check --color --diff govee2mqtt tests tools
 
-      - name: RST-Lint
+      - name: RST-Lint (if .rst files present)
         run: |
-          rst-lint README.rst CHANGES.rst CONTRIBUTING.rst
+          set -euo pipefail
+          files=$(ls README.rst CHANGES.rst CONTRIBUTING.rst 2>/dev/null || true)
+          if [ -n "$files" ]; then
+            uv run rst-lint $files
+          else
+            echo "No .rst files found; skipping rst-lint."
+          fi
 
   release:
     name: Semantic Release
