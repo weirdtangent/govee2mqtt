@@ -5,6 +5,7 @@ import os
 from typing import Any
 import yaml
 import pathlib
+import logging
 from importlib.metadata import version as pkg_version
 
 READY_FILE = os.getenv("READY_FILE", "/tmp/govee2mqtt.ready")
@@ -112,9 +113,9 @@ class UtilMixin:
                     config = yaml.safe_load(f) or {}
                 config_from = "file"
             except Exception as e:
-                self.logger.warning(f"Failed to load config from {config_file}: {e}")
+                logging.warning(f"Failed to load config from {config_file}: {e}")
         else:
-            self.logger.warning(
+            logging.warning(
                 f"Config file not found at {config_file}, falling back to environment vars"
             )
 
@@ -168,7 +169,7 @@ class UtilMixin:
 
         # Validate required fields
         if not config["govee"].get("api_key"):
-            raise ValueError(
+            raise TypeError (
                 "`govee.api_key` required in config file or GOVEE_API_KEY env var"
             )
 

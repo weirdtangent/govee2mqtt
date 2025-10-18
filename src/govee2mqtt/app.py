@@ -37,6 +37,8 @@ def main(argv=None):
                     loop.run_until_complete(govee2mqtt.main_loop())
                 else:
                     raise
+    except TypeError as e:
+        logging.error(f"TypeError: {e}")
     except KeyboardInterrupt:
         logging.warning("Shutdown requested (Ctrl+C). Exiting gracefully...")
     except asyncio.CancelledError:
