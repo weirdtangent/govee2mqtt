@@ -1,3 +1,10 @@
+## [2.0.4](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.3...v2.0.4) (2025-10-19)
+
+
+### Bug Fixes
+
+* cleanup and getting modes to work ([9d9b82d](https://github.com/weirdtangent/govee2mqtt/commit/9d9b82d0a59c942dba56b0c0fd1b0660b2a9d152))
+
 ## [2.0.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.2...v2.0.3) (2025-10-17)
 
 
