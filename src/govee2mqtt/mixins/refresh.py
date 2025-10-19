@@ -22,11 +22,7 @@ class RefreshMixin:
             if device_id == "service" or device_id in self.boosted:
                 continue
 
-            self.build_device_states(
-                self.states[device_id],
-                self.get_raw_id(device_id),
-                self.get_device_sku(device_id),
-            )
+            self.refresh_device_states(device_id)
 
     # refresh boosted devices ---------------------------------------------------------------------
 
@@ -40,10 +36,7 @@ class RefreshMixin:
                 f"Refreshing {len(self.boosted)} boosted devices from Govee"
             )
             for device_id in self.boosted:
+                self.boosted.remove(device_id)
                 if not self.running:
                     break
-                self.build_device_states(
-                    self.states[device_id],
-                    self.get_raw_id(device_id),
-                    self.get_device_sku(device_id),
-                )
+                self.refresh_device_states(device_id)

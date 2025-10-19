@@ -86,7 +86,12 @@ class TopicsMixin:
         return self.states[device_id]["internal"]["sku"]
 
     def get_component(self, device_id):
-        return self.devices[device_id]["component"]
+        if device_id in self.devices:
+            return self.devices[device_id]["component"]
+        if "_" not in device_id:
+            raise ValueError(f"Cannot get_component for {device_id}")
+        parts = device_id.split("_")
+        return self.devices[parts[0]]["modes"][parts[1]]
 
     def get_component_type(self, device_id):
         return self.devices[device_id]["component"]["component_type"]

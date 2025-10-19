@@ -92,14 +92,14 @@ class GoveeAPIMixin:
                     )
                 return {}
             data = r.json()
-        except RequestException:
+        except RequestException as e:
             self.logger.error(
-                f"Request error communicating with Govee for device ({device_id})"
+                f"Request error communicating with Govee for device ({device_id}): {e}"
             )
             return {}
-        except Exception:
+        except Exception as e:
             self.logger.error(
-                f"Error communicating with Govee for device ({device_id})"
+                f"Error communicating with Govee for device ({device_id}): {e}"
             )
             return {}
 

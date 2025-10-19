@@ -95,6 +95,7 @@ class MqttMixin:
         client.subscribe(f"{self.service_slug}/service/+/set")
         client.subscribe(f"{self.service_slug}/service/+/command")
         client.subscribe(f"{self.service_slug}/light/#")
+        client.subscribe(f"{self.service_slug}/switch/#")
 
     def mqtt_on_disconnect(self, client, userdata, flags, reason_code, properties):
         if reason_code.value != 0:
@@ -127,15 +128,19 @@ class MqttMixin:
 
         # Dispatch based on type of message
         if components[0] == self.mqtt_config["discovery_prefix"]:
+            self.logger.debug("  Looks like a HomeAssistant message")
             return self._handle_homeassistant_message(payload)
 
-        if components[0] == self.service_slug and components[1] == "service":
-            return self.handle_service_message(components[2], payload)
-
         if components[0] == self.service_slug:
+            if components[1] == "service":
+                self.logger.debug("  Looks like a govee2mqtt-service message")
+                return self.handle_service_message(components[2], payload)
+            self.logger.debug("  Looks like a govee device command")
             return self._handle_device_topic(components, payload)
 
-        # self.logger.debug(f"Ignoring unrelated MQTT topic: {topic}")
+        self.logger.debug(
+            f"Did not process message on MQTT topic: {topic} with {payload}"
+        )
 
     def _decode_payload(self, raw):
         """Try to decode MQTT payload as JSON, fallback to UTF-8 string, else None."""
@@ -158,12 +163,15 @@ class MqttMixin:
         vendor, device_id, attribute = self._parse_device_topic(components)
         if not vendor or not vendor.startswith(self.service_slug):
             self.logger.debug(
-                f"Ignoring non-Govee device topic: {'/'.join(components)}"
+                f"Ignoring non-Govee device topic for {vendor}: {'/'.join(components)}"
             )
             return
         if not self.devices.get(device_id, None):
             self.logger.warning(f"Got MQTT message for unknown device: {device_id}")
             return
+
+        if attribute and isinstance(payload, str):
+            payload = {attribute: payload}
 
         self.logger.debug(
             f"Got message for {self.get_device_name(device_id)}: {payload}"
@@ -173,19 +181,17 @@ class MqttMixin:
     def _parse_device_topic(self, components):
         """Extract (vendor, device_id, attribute) from an MQTT topic components list (underscore-delimited)."""
         try:
-            if components[-1] != "set":
-                return (None, None, None)
-
             # Example topics:
             # govee2mqtt/light/govee2mqtt_2BEFD0C907BB6BF2/set
+            # govee2mqtt/light/govee2mqtt_2BEFD0C907BB6BF2/gradient
             # govee2mqtt/light/govee2mqtt_2BEFD0C907BB6BF2/brightness/set
 
-            # Case 1: .../<device>/set
+            # Case 1 and 2
             if len(components) >= 4 and "_" in components[-2]:
                 vendor, device_id = components[-2].split("_", 1)
-                attribute = None
+                attribute = components[-1]
 
-            # Case 2: .../<device>/<attribute>/set
+            # Case 3
             elif len(components) >= 5 and "_" in components[-3]:
                 vendor, device_id = components[-3].split("_", 1)
                 attribute = components[-2]

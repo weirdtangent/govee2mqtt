@@ -92,9 +92,6 @@ class GoveeMixin:
             "avty_t": self.get_availability_topic(device_id, "light"),
             "avty_tpl": "{{ value_json.availability }}",
             "cmd_t": self.get_command_topic(device_id, "light"),
-            "schema": "json",
-            "pl_avail": "online",
-            "pl_not_avail": "offline",
             "supported_color_modes": ["onoff"],
             "device": device_block,
         }
@@ -166,13 +163,13 @@ class GoveeMixin:
                         "component_type": "switch",
                         "name": f"{device['deviceName']} Gradient",
                         "uniq_id": f"{self.service_slug}_{self.get_device_slug(device_id, 'gradient')}",
-                        "stat_t": self.get_state_topic(device_id, "switch", "gradient"),
-                        "cmd_t": self.get_command_topic(device_id, "switch"),
-                        "avty_t": self.get_availability_topic(device_id),
-                        "pl_avail": "online",
-                        "pl_not_avail": "offline",
-                        "payload_on": "on",
-                        "payload_off": "off",
+                        "stat_t": self.get_state_topic(device_id, "switch"),
+                        "state_value_template": "{{ value_json.gradient }}",
+                        "cmd_t": self.get_command_topic(
+                            device_id, "switch", "gradient"
+                        ),
+                        "avty_t": self.get_availability_topic(device_id, "light"),
+                        "avty_tpl": "{{ value_json.availability }}",
                         "icon": (
                             "mdi:gradient-horizontal"
                             if device["sku"] == "H6042"
@@ -181,7 +178,7 @@ class GoveeMixin:
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.upsert_state(device_id, switch={"gradient": "off"})
+                    self.upsert_state(device_id, switch={"gradient": "OFF"})
 
                 case "nightlightToggle":
                     modes["nightlight"] = {
@@ -191,17 +188,17 @@ class GoveeMixin:
                         "stat_t": self.get_state_topic(
                             device_id, "switch", "nightlight"
                         ),
-                        "cmd_t": self.get_command_topic(device_id, "switch"),
-                        "avty_t": self.get_availability_topic(device_id),
-                        "pl_avail": "online",
-                        "pl_not_avail": "offline",
-                        "payload_on": "on",
-                        "payload_off": "off",
+                        "state_value_template": "{{ value_json.nightlight }}",
+                        "cmd_t": self.get_command_topic(
+                            device_id, "switch", "nightlight"
+                        ),
+                        "avty_t": self.get_availability_topic(device_id, "light"),
+                        "avty_tpl": "{{ value_json.availability }}",
                         "icon": "mdi:weather-night",
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.upsert_state(device_id, switch={"nightlight": "off"})
+                    self.upsert_state(device_id, switch={"nightlight": "OFF"})
 
                 case "dreamViewToggle":
                     modes["dreamview"] = {
@@ -211,17 +208,17 @@ class GoveeMixin:
                         "stat_t": self.get_state_topic(
                             device_id, "switch", "dreamview"
                         ),
-                        "cmd_t": self.get_command_topic(device_id, "switch"),
-                        "avty_t": self.get_availability_topic(device_id),
-                        "pl_avail": "online",
-                        "pl_not_avail": "offline",
-                        "payload_on": "on",
-                        "payload_off": "off",
+                        "state_value_template": "{{ value_json.dreamview }}",
+                        "cmd_t": self.get_command_topic(
+                            device_id, "switch", "dreamview"
+                        ),
+                        "avty_t": self.get_availability_topic(device_id, "light"),
+                        "avty_tpl": "{{ value_json.availability }}",
                         "icon": "mdi:creation",
                         "via_device": self.get_service_device(),
                         "device": device_block,
                     }
-                    self.upsert_state(device_id, switch={"dreamview": "off"})
+                    self.upsert_state(device_id, switch={"dreamview": "OFF"})
 
                 # case 'musicMode':
                 #     # setup to store state
@@ -258,7 +255,6 @@ class GoveeMixin:
                 #     components[self.get_device_slug(device_id, 'music_sensitivity')] = {
                 #         'name': 'Music Sensitivity',
                 #         'platform': 'number',
-                #         'schema': 'json',
                 #         'icon': 'mdi:numeric',
                 #         'min': music_min,
                 #         'max': music_max,
@@ -302,24 +298,22 @@ class GoveeMixin:
                 f'Unhandled light capabilities for {device["deviceName"]}: {unsupported}'
             )
 
-        # if we ended up with no fancy way to command the light, add a simple way
-        if not any(
-            x in component
-            for x in [
-                "brightness_command_topic",
-                "rgb_command_topic",
-                "color_temp_command_topic",
-            ]
-        ):
-            # fallback for simple on/off devices
-            component["command_topic"] = self.get_command_topic(device_id, "light")
-            component["payload_on"] = "on"
-            component["payload_off"] = "off"
+        # # if we ended up with no fancy way to command the light, add a simple way
+        # if not any(
+        #     x in component
+        #     for x in [
+        #         "brightness_command_topic",
+        #         "rgb_command_topic",
+        #         "color_temp_command_topic",
+        #     ]
+        # ):
+        #     # fallback for simple on/off devices
+        #     component["command_topic"] = self.get_command_topic(device_id, "light")
 
         # insert, or update anything that changed, but don't lose anything
         self.upsert_device(device_id, component=component, modes=modes)
 
-        self.build_device_states(self.states[device_id], raw_id, device["sku"])
+        self.refresh_device_states(device_id)
 
         if not self.is_discovered(device_id):
             self.logger.info(
@@ -400,7 +394,7 @@ class GoveeMixin:
                     internal={"raw_id": raw_id, "sku": device.get("sku", None)},
                     sensor={},
                 )
-                self.build_device_states(self.states[device_id], raw_id, device["sku"])
+                self.refresh_device_states(device_id)
 
                 if not self.is_discovered(device_id):
                     self.logger.info(
@@ -438,6 +432,39 @@ class GoveeMixin:
             _publish_one(device_id, mode, suffix=slug)
 
     def publish_device_state(self, device_id):
+        def _publish_one(dev_id: str, defn: dict, suffix: str | None = None):
+            # Shallow copy to avoid mutating source
+            payload = {k: v for k, v in defn.items() if k != "component_type"}
+
+            # Publish state
+            flat = {}
+
+            for component_name, component_state in payload.items():
+                if not component_name:
+                    continue
+                if not isinstance(component_state, dict):
+                    # scalar fields like availability
+                    flat[component_name] = component_state
+                    continue
+
+                for k, v in component_state.items():
+                    if k == "component_type":
+                        continue
+
+                    # special flatten rules for nested RGB
+                    if k == "rgb" and isinstance(v, dict):
+                        flat["rgb_color"] = [
+                            v.get("r", 0),
+                            v.get("g", 0),
+                            v.get("b", 0),
+                        ]
+                        flat["color_mode"] = "rgb"
+                    else:
+                        flat[k] = v
+
+            topic = self.get_device_state_topic(dev_id)
+            self.mqtt_safe_publish(topic, json.dumps(flat), retain=True)
+
         states = self.states.get(device_id, None)
         if not self.is_discovered(device_id):
             self.logger.debug(
@@ -445,32 +472,14 @@ class GoveeMixin:
             )
             return
 
-        flat = {}
+        # Publish state of component
+        _publish_one(device_id, states, suffix=None)
 
-        for component_name, component_state in states.items():
-            if not isinstance(component_state, dict):
-                # scalar fields like availability
-                flat[component_name] = component_state
-                continue
-
-            for k, v in component_state.items():
-                if k == "component_type":
-                    continue
-
-                # special flatten rules for nested RGB
-                if k == "rgb" and isinstance(v, dict):
-                    flat["rgb_color"] = [v.get("r", 0), v.get("g", 0), v.get("b", 0)]
-                    flat["color_mode"] = "rgb"
-                else:
-                    flat[k] = v
-
-                # Add metadata
-                meta = states.get("meta")
-                if isinstance(meta, dict) and "last_update" in meta:
-                    flat["last_update"] = meta["last_update"]
-
-        topic = self.get_device_state_topic(device_id)
-        self.mqtt_safe_publish(topic, json.dumps(flat), retain=True)
+        # Publish same state to each mode
+        modes = self.devices[device_id].get("modes", {})
+        for slug in modes.keys():
+            eff_device_id = f"{device_id}_{slug}"
+            _publish_one(eff_device_id, states, suffix=slug)
 
     def publish_device_availability(self, device_id, online: bool = True):
         payload = "online" if online else "offline"

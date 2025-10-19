@@ -9,66 +9,88 @@ from deepmerge import Merger
 
 
 class HelpersMixin:
-    def build_device_states(self, states, raw_id, sku):
-        data = self.get_device(raw_id, sku)
+    def refresh_device_states(self, device_id, data=None):
+        if not data:
+            data = self.get_device(
+                self.get_raw_id(device_id), self.get_device_sku(device_id)
+            )
 
         for key in data:
             if not data[key]:
                 continue
             match key:
                 case "online":
-                    states["availability"] = "online" if data[key] else "offline"
+                    self.upsert_state(
+                        device_id, availability="online" if data[key] else "offline"
+                    )
                 case "powerSwitch":
-                    states["light"]["state"] = "ON" if data[key] == 1 else "OFF"
+                    self.upsert_state(
+                        device_id, light={"state": "ON" if data[key] == 1 else "OFF"}
+                    )
                 case "brightness":
-                    states["light"]["brightness"] = data[key]
+                    self.upsert_state(device_id, light={"brightness": data[key]})
                 case "colorRgb":
-                    states["light"]["rgb"] = self.number_to_rgb_hsv(
-                        data[key], states["light"]["rgb_max"]
+                    rgb_int = data[key]
+                    self.upsert_state(
+                        device_id,
+                        light={
+                            "rgb_color": [
+                                (rgb_int >> 16) & 0xFF,
+                                (rgb_int >> 8) & 0xFF,
+                                rgb_int & 0xFF,
+                            ]
+                        },
                     )
                 case "colorTemperatureK":
-                    states["light"]["color_temp"] = data[key]
+                    self.upsert_state(device_id, light={"color_temp": data[key]})
                 case "gradientToggle":
-                    states["switch"]["gradient"] = "on" if data[key] == 1 else "off"
-                case "nightlightToggle":
-                    states["switch"]["nightlight"] = "on" if data[key] == 1 else "off"
-                case "dreamViewToggle":
-                    states["switch"]["dreamview"] = "on" if data[key] == 1 else "off"
-                case "sensorTemperature":
-                    states["sensor"]["temperature"] = data[key]
-                case "sensorHumidity":
-                    states["sensor"]["humidity"] = data[key]
-                case "musicMode":
-                    if isinstance(data[key], dict):
-                        if data["musicMode"] != "":
-                            states["music"]["mode"] = data["musicMode"]
-                        states["music"]["sensitivity"] = data["sensitivity"]
-                    elif data[key] != "":
-                        states["music"]["mode"] = self.find_key_by_value(
-                            states["music"]["options"], data[key]
-                        )
-                case "sensitivity":
-                    states["music"]["sensitivity"] = data[key]
-                case "lastUpdate":
-                    states.setdefault("meta", {})["last_update"] = (
-                        data[key].strftime("%Y-%m-%d %H:%M:%S")
-                        if hasattr(data[key], "isoformat")
-                        else str(data[key])
+                    self.upsert_state(
+                        device_id,
+                        switch={"gradient": "ON" if data[key] == 1 else "OFF"},
                     )
+                case "nightlightToggle":
+                    self.upsert_state(
+                        device_id,
+                        switch={"nightlight": "ON" if data[key] == 1 else "OFF"},
+                    )
+                case "dreamViewToggle":
+                    self.upsert_state(
+                        device_id,
+                        switch={"dreamview": "ON" if data[key] == 1 else "OFF"},
+                    )
+                case "sensorTemperature":
+                    self.upsert_state(device_id, sensor={"temperature": data[key]})
+                case "sensorHumidity":
+                    self.upsert_state(device_id, sensor={"humidity": data[key]})
+                # case "musicMode":
+                #     if isinstance(data[key], dict):
+                #         if data["musicMode"] != "":
+                #             states["music"]["mode"] = data["musicMode"]
+                #         states["music"]["sensitivity"] = data["sensitivity"]
+                #     elif data[key] != "":
+                #         states["music"]["mode"] = self.find_key_by_value(
+                #             states["music"]["options"], data[key]
+                #         )
+                # case "sensitivity":
+                #     states["music"]["sensitivity"] = data[key]
                 case "lastUpdate":
-                    states["state"]["last_update"] = data[key].isoformat()
+                    self.upsert_state(
+                        device_id, last_update=data[key].strftime("%Y-%m-%d %H:%M:%S")
+                    )
                 case _:
                     self.logger.warning(
                         f"Unhandled state {key} with value {data[key]} from Govee"
                     )
 
     # convert MQTT attributes to Govee capabilities
-    def build_govee_capabilities(self, device_id, attributes):
+    def build_govee_capabilities(
+        self, device_id: str, attributes: dict[str, Any]
+    ) -> Dict[str, dict]:
         # Handle case where attributes was sent as a JSON string
-        if isinstance(attributes, str):
-            if attributes == "ON" or attributes == "OFF":
-                attributes = {"light": attributes}
-        elif not isinstance(attributes, dict):
+        # if isinstance(attributes, str):
+        #     if attributes == "ON" or attributes == "OFF":
+        #         attributes = {"light": attributes}
+        if not isinstance(attributes, dict):
             try:
                 attributes = json.loads(attributes)
             except json.JSONDecodeError:
@@ -125,9 +147,10 @@ class HelpersMixin:
 
                 case "gradient" | "nightlight" | "dreamview":
                     state_on = str(value).lower() == "on"
-                    switch[key] = "on" if state_on else "off"
+                    switch[key] = "ON" if state_on else "OFF"
+                    # if one mode turned ON the others must be OFF
                     for other in {"gradient", "nightlight", "dreamview"} - {key}:
-                        switch[other] = "off"
+                        switch[other] = "OFF"
                     capabilities[f"{key}Toggle"] = {
                         "type": "devices.capabilities.toggle",
                         "instance": f"{key}Toggle",
@@ -197,28 +220,30 @@ class HelpersMixin:
 
     # send command to Govee -----------------------------------------------------------------------
 
-    def send_command(self, device_id, response):
+    def send_command(self, device_id, command: dict[str, Any]):
         if device_id == "service":
             self.logger.error(
-                f'Why are you trying to send {response} to the "service"? Ignoring you.'
+                f'Why are you trying to send {command} to the "service"? Ignoring you.'
             )
             return
-        states = self.states.get(device_id, None)
-        raw_id = self.get_raw_id(device_id)
-        sku = self.get_device_sku(device_id)
 
-        capabilities = self.build_govee_capabilities(device_id, response)
+        # convert what we received in the command to Govee API capabilities
+        capabilities = self.build_govee_capabilities(device_id, command)
         if not capabilities:
             self.logger.debug(
-                f"No set of capabilities built to send Govee for {device_id}"
+                f"Nothing to send Govee for {device_id} for command {command}"
             )
             return
 
         need_boost = False
         for key in capabilities:
+            self.logger.debug(
+                f"Posting {key} to Govee API: "
+                + ", ".join(f"{k}={v}" for k, v in capabilities[key].items())
+            )
             response = self.post_command(
-                raw_id,
-                sku,
+                self.get_raw_id(device_id),
+                self.get_device_sku(device_id),
                 capabilities[key]["type"],
                 capabilities[key]["instance"],
                 capabilities[key]["value"],
@@ -227,20 +252,15 @@ class HelpersMixin:
 
             # no need to boost-refresh if we get the state back on the successful command response
             if len(response) > 0:
-                self.build_device_states(states, raw_id, sku)
-
-                # now that we've used the data, lets remove the chunky
-                # `lastUpdate` key and then dump the rest into the log
-                response.pop("lastUpdate", None)
-                self.logger.debug(f"Got Govee response from command: {response}")
-
+                self.refresh_device_states(device_id, response)
+                self.logger.info(f"Got response from Govee API: {response}")
                 self.publish_device_state(device_id)
 
                 # remove from boosted list (if there), since we got a change
                 if device_id in self.boosted:
                     self.boosted.remove(device_id)
             else:
-                self.logger.info(f"Did not find changes in Govee response: {response}")
+                self.logger.info(f"No details in response from Govee API: {response}")
                 need_boost = True
 
         # if we send a command and did not get a state change back on the response
