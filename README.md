@@ -39,7 +39,6 @@ It supports the following environment variables:
 -   `GOVEE_LIST_INTERVAL: 300`
 
 -   `TZ: America/New_York` (see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)
--   `HIDE_TS: False` (hide timestamps in logs, in case your log-viewer adds one already)
 -   `DEBUG: True` (for much more logging)
 
 # Unsupported so far by Govee, or just plain wrong

@@ -150,9 +150,6 @@ class UtilMixin:
             "mqtt": mqtt,
             "govee": govee,
             "debug": config.get("debug", os.getenv("DEBUG", "").lower() == "true"),
-            "hide_ts": config.get(
-                "hide_ts", os.getenv("HIDE_TS", "").lower() == "true"
-            ),
             "timezone": config.get("timezone", os.getenv("TZ", "UTC")),
             "config_from": config_from,
             "config_path": config_path,
