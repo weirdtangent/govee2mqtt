@@ -3,12 +3,12 @@
 #!/usr/bin/env python3
 import asyncio
 import argparse
-import logging
+from json_logging import setup_logging, get_logger
 from .core import Govee2Mqtt
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="govee2mqtt")
+    p = argparse.ArgumentParser(prog="govee2mqtt", exit_on_error=True)
     p.add_argument(
         "-c",
         "--config",
@@ -16,12 +16,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     return p
 
-
 def main(argv=None):
-    logging.basicConfig(
-        level=logging.INFO, format="[%(levelname)s] %(name)s: %(message)s"
-    )
-    logging.info("🚀 This is govee2mqtt")
+    setup_logging()
+    logger = get_logger(__name__)
 
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -38,12 +35,14 @@ def main(argv=None):
                 else:
                     raise
     except TypeError as e:
-        logging.error(f"TypeError: {e}")
+        logger.error(f"TypeError: {e}")
+    except ValueError:
+        pass
     except KeyboardInterrupt:
-        logging.warning("Shutdown requested (Ctrl+C). Exiting gracefully...")
+        logger.warning("Shutdown requested (Ctrl+C). Exiting gracefully...")
     except asyncio.CancelledError:
-        logging.warning("Main loop cancelled.")
+        logger.warning("Main loop cancelled.")
     except Exception as e:
-        logging.exception(f"Unhandled exception in main loop: {e}")
+        logger.exception(f"Unhandled exception in main loop: {e}")
     finally:
-        logging.info("govee2mqtt stopped.")
+        logger.info("govee2mqtt stopped.")

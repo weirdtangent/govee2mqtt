@@ -3,6 +3,8 @@
 import argparse
 import json
 import logging
+from json_logging import get_logger
+import os
 from pathlib import Path
 
 
@@ -11,33 +13,22 @@ class Base:
         super().__init__(**kwargs)
 
         self.args = args
+        self.logger = get_logger(__name__)
 
-        # load config first
+        # and quiet down some others
+        logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+
+        # now load config right away
         cfg_arg = getattr(args, "config", None)
         self.config = self.load_config(cfg_arg)
+
+        # down in trenches if we have to
+        if self.config.get("debug"):
+            self.logger.setLevel(logging.DEBUG)
 
         self.mqtt_config = self.config["mqtt"]
         self.govee_config = self.config["govee"]
 
-        # now we can setup logging
-        time_fmt = "%(asctime)s.%(msecs)03d "
-        dbg_base_fmt = (
-            "[%(levelname)s] %(name)s (%(funcName)s#%(lineno)d):  %(message)s"
-        )
-        std_base_fmt = "[%(levelname)s] %(name)s: %(message)s"
-        fmt = dbg_base_fmt if self.config.get("debug") else std_base_fmt
-        if not self.config.get("hide_ts"):
-            fmt = time_fmt + fmt
-
-        level = logging.DEBUG if self.config.get("debug") else logging.INFO
-
-        # lets start (better) logging, and ignoring others
-        logging.basicConfig(
-            level=level, format=fmt, datefmt="%Y-%m-%d %H:%M:%S", force=True
-        )
-
-        logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
-        self.logger = logging.getLogger("govee2mqtt")
         self.logger.info(
             f"config loaded from {self.config['config_from']} ({self.config['config_path']})"
         )
@@ -120,7 +111,8 @@ class Base:
 
     def restore_state(self):
         data_file = Path(self.config["config_path"]) / "govee2mqtt.dat"
-        with open(data_file, "r") as file:
-            state = json.loads(file.read())
-            self.restore_state_values(state["api_calls"], state["last_call_date"])
-        self.logger.info(f"Restored state from {data_file}")
+        if os.path.exists(data_file):
+            with open(data_file, "r") as file:
+                state = json.loads(file.read())
+                self.restore_state_values(state["api_calls"], state["last_call_date"])
+            self.logger.info(f"Restored state from {data_file}")

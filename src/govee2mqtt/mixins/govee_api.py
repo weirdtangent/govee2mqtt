@@ -26,7 +26,7 @@ class GoveeAPIMixin:
     def reset_api_call_count(self):
         self.api_calls = 0
         self.last_call_date = str(datetime.now(tz=ZoneInfo(self.timezone)).date())
-        self.logger.info("Reset api call count for new day")
+        self.logger.debug("Reset api call count for new day")
 
     def get_api_calls(self):
         return self.api_calls
@@ -51,7 +51,7 @@ class GoveeAPIMixin:
             self.rate_limited = r.status_code == 429
             if r.status_code != 200:
                 if r.status_code == 429:
-                    self.logger.error("Rate-limited by Govee getting device list")
+                    self.logger.warning("Rate-limited by Govee getting device list")
                 else:
                     self.logger.error(f"Error ({r.status_code}) getting device list")
                 return {}

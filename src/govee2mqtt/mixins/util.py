@@ -77,14 +77,6 @@ class UtilMixin:
         return next((k for k, v in d.items() if v == target), None)
 
     def load_config(self, config_arg=None):
-        """Load configuration from YAML file or environment variables.
-
-        Args:
-            config_arg (str): Either a full path to config.yaml, a directory containing it,
-                              or None (defaults to /config/config.yaml).
-        Returns:
-            dict: Merged configuration dictionary with defaults.
-        """
         version = pkg_version("govee2mqtt")
         config_from = "env"
         config = {}
