@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     return p
 
+
 def main(argv=None):
     setup_logging()
     logger = get_logger(__name__)
