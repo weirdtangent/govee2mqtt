@@ -76,7 +76,7 @@ class UtilMixin:
         return next((k for k, v in d.items() if v == target), None)
 
     def load_config(self, config_arg=None):
-        version = os.getenv("BLINK2MQTT_VERSION", "0.0.0")
+        version = os.getenv("GOVEE2MQTT_VERSION", "0.0.0")
         config_from = "env"
         config = {}
 
