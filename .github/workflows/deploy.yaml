@@ -126,11 +126,18 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
+      - name: Fetch tags
+        run: git fetch --tags --force
+
       - name: Ensure VERSION is set
         id: version-fallback
         run: |
           if [ -z "${{ needs.release.outputs.version }}" ]; then
-            TAG=$(git describe --tags --abbrev=0)
+            TAG=$(git tag --sort=-creatordate | head -n 1)
+            if [ -z "$TAG" ]; then
+              echo "No tags found — defaulting to 0.0.0"
+              TAG="0.0.0"
+            fi
             echo "Using existing tag: $TAG"
             echo "VERSION=$TAG" >> $GITHUB_ENV
           else
