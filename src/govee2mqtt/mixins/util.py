@@ -6,7 +6,6 @@ from typing import Any
 import yaml
 import pathlib
 import logging
-from importlib.metadata import version as pkg_version
 
 READY_FILE = os.getenv("READY_FILE", "/tmp/govee2mqtt.ready")
 
@@ -77,7 +76,7 @@ class UtilMixin:
         return next((k for k, v in d.items() if v == target), None)
 
     def load_config(self, config_arg=None):
-        version = pkg_version("govee2mqtt")
+        version = os.getenv("BLINK2MQTT_VERSION", "0.0.0")
         config_from = "env"
         config = {}
 

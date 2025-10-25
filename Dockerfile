@@ -1,45 +1,30 @@
-# ---------- builder: make a wheel ----------
-FROM python:3-slim AS builder
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=UTC UV_INSTALL_DIR=/usr/local/bin
-WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata curl \
- && rm -rf /var/lib/apt/lists/* \
- && curl -LsSf https://astral.sh/uv/install.sh | sh && uv --version
-
-ARG APP_VERSION=0.0.0
-ENV SETUPTOOLS_SCM_PRETEND_VERSION=$APP_VERSION
-
-COPY pyproject.toml uv.lock /app/
-COPY src/ /app/src/
-RUN uv build
-RUN ls -l dist
-
-# ---------- runtime ----------
+# syntax=docker/dockerfile:1.7
 FROM python:3-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=UTC
+
+# Work inside /app
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata \
- && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
-COPY --from=builder /app/dist/*.whl /tmp/
-RUN uv pip install --system --no-cache /tmp/*.whl
+# Copy lock and project metadata first for dependency caching
+COPY pyproject.toml uv.lock ./
 
-# healthcheck
-COPY src/healthcheck.py /usr/local/bin/healthcheck.py
-RUN chmod +x /usr/local/bin/healthcheck.py
-ENV READY_FILE=/tmp/govee2mqtt.ready HEALTH_MAX_AGE=90
-HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD ["/usr/bin/env","python","/usr/local/bin/healthcheck.py"]
+# Install uv and dependencies (excluding dev)
+RUN pip install uv
+RUN uv sync --frozen --no-dev
 
-# non-root & /config
-ARG USER_ID=1000 GROUP_ID=1000
-RUN addgroup --gid ${GROUP_ID} appuser \
- && adduser --uid ${USER_ID} --gid ${GROUP_ID} --disabled-password --gecos "" appuser \
- && install -d -m 0775 -o appuser -g appuser /config
-VOLUME ["/config"]
-USER appuser
+# Copy source excluding .git
+COPY --exclude=.git . .
 
-# run the installed console script (from pyproject)
+# ---- Version injection support ----
+# Allows CI (e.g., semantic-release) to pass a version:
+# docker build --build-arg VERSION=1.2.3 ...
+ARG VERSION
+ENV GOVEE2MQTT_VERSION=${VERSION}
+
+# Install our package properly so setuptools-scm resolves the version
+RUN uv pip install .
+
+# ---- Runtime ----
+ENV SERVICE=govee2mqtt
 ENTRYPOINT ["govee2mqtt"]
-CMD ["-c","/config"]
+CMD ["-c", "/config"]
+
