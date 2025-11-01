@@ -74,11 +74,11 @@ class MqttMixin:
         except ConnectionError as error:
             self.logger.error(f"Failed to connect to MQTT host {host}: {error}")
             self.running = False
+            raise SystemExit(1)
         except Exception as error:
-            self.logger.error(
-                f"Network problem trying to connect to MQTT host {host}: {error}"
-            )
+            self.logger.error(f"Network problem trying to connect to MQTT host {host}: {error}")
             self.running = False
+            raise SystemExit(1)
 
     def mqtt_on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code.value != 0:
