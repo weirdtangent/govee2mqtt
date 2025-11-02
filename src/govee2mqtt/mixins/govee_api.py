@@ -6,42 +6,44 @@ from requests.exceptions import RequestException
 import uuid
 from zoneinfo import ZoneInfo
 
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
+
 DEVICE_URL = "https://openapi.api.govee.com/router/api/v1/device/state"
 DEVICE_LIST_URL = "https://openapi.api.govee.com/router/api/v1/user/devices"
 COMMAND_URL = "https://openapi.api.govee.com/router/api/v1/device/control"
 
 
 class GoveeAPIMixin:
-    def restore_state_values(self, api_calls, last_call_date):
+    def restore_state_values(self: Govee2Mqtt, api_calls: int, last_call_date: str) -> None:
         self.api_calls = api_calls
-        self.last_call_date = last_call_date
+        self.last_call_date = datetime.strptime(last_call_date, "%m/%d/%Y").date()
 
-    def increase_api_calls(self):
-        if not self.last_call_date or self.last_call_date != str(
-            datetime.now(tz=ZoneInfo(self.timezone)).date()
-        ):
+    def increase_api_calls(self: Govee2Mqtt) -> None:
+        if not self.last_call_date or self.last_call_date != datetime.now(tz=ZoneInfo(self.timezone)).date():
             self.reset_api_call_count()
         self.api_calls += 1
 
-    def reset_api_call_count(self):
+    def reset_api_call_count(self: Govee2Mqtt) -> None:
         self.api_calls = 0
-        self.last_call_date = str(datetime.now(tz=ZoneInfo(self.timezone)).date())
+        self.last_call_date = datetime.now(tz=ZoneInfo(self.timezone)).date()
         self.logger.debug("Reset api call count for new day")
 
-    def get_api_calls(self):
+    def get_api_calls(self: Govee2Mqtt) -> int:
         return self.api_calls
 
-    def get_last_call_date(self):
-        return self.last_call_date
+    def get_last_call_date(self: Govee2Mqtt) -> str:
+        return str(self.last_call_date)
 
-    def is_rate_limited(self):
-        return self.rate_limited
+    def is_rate_limited(self: Govee2Mqtt) -> bool:
         return self.rate_limited
 
-    def get_headers(self):
+    def get_headers(self: Govee2Mqtt) -> dict[str, str]:
         return {"Content-Type": "application/json", "Govee-API-Key": self.api_key}
 
-    def get_device_list(self):
+    def get_device_list(self: Govee2Mqtt) -> dict[str, Any]:
         headers = self.get_headers()
 
         try:
@@ -66,7 +68,7 @@ class GoveeAPIMixin:
 
         return data["data"] if "data" in data else {}
 
-    def get_device(self, device_id, sku):
+    def get_device(self: Govee2Mqtt, device_id: str, sku: str) -> dict[str, Any]:
         headers = self.get_headers()
         body = {
             "requestId": str(uuid.uuid4()),
@@ -83,24 +85,16 @@ class GoveeAPIMixin:
             self.rate_limited = r.status_code == 429
             if r.status_code != 200:
                 if r.status_code == 429:
-                    self.logger.error(
-                        f"Rate-limited by Govee getting device ({device_id})"
-                    )
+                    self.logger.error(f"Rate-limited by Govee getting device ({device_id})")
                 else:
-                    self.logger.error(
-                        f"Error ({r.status_code}) getting device ({device_id})"
-                    )
+                    self.logger.error(f"Error ({r.status_code}) getting device ({device_id})")
                 return {}
             data = r.json()
         except RequestException as e:
-            self.logger.error(
-                f"Request error communicating with Govee for device ({device_id}): {e}"
-            )
+            self.logger.error(f"Request error communicating with Govee for device ({device_id}): {e}")
             return {}
         except Exception as e:
-            self.logger.error(
-                f"Error communicating with Govee for device ({device_id}): {e}"
-            )
+            self.logger.error(f"Error communicating with Govee for device ({device_id}): {e}")
             return {}
 
         new_capabilities = {}
@@ -114,7 +108,7 @@ class GoveeAPIMixin:
 
         return new_capabilities
 
-    def post_command(self, device_id, sku, capability, instance, value):
+    def post_command(self: Govee2Mqtt, device_id: str, sku: str, capability: dict[str, Any], instance: str, value: str) -> dict[str, Any]:
         headers = self.get_headers()
         body = {
             "requestId": str(uuid.uuid4()),
@@ -136,34 +130,22 @@ class GoveeAPIMixin:
             self.rate_limited = r.status_code == 429
             if r.status_code != 200:
                 if r.status_code == 429:
-                    self.logger.error(
-                        f"Rate-limited by Govee sending command to device ({device_id})"
-                    )
+                    self.logger.error(f"Rate-limited by Govee sending command to device ({device_id})")
                 else:
-                    self.logger.error(
-                        f"Error ({r.status_code}) sending command to device ({device_id})"
-                    )
+                    self.logger.error(f"Error ({r.status_code}) sending command to device ({device_id})")
                 return {}
             data = r.json()
             self.logger.debug(f"Raw response from Govee: {data}")
         except RequestException:
-            self.logger.error(
-                f"Request error communicating with Govee sending command to device ({device_id})"
-            )
+            self.logger.error(f"Request error communicating with Govee sending command to device ({device_id})")
             return {}
         except Exception:
-            self.logger.error(
-                f"Error communicating with Govee sending command to device ({device_id})"
-            )
+            self.logger.error(f"Error communicating with Govee sending command to device ({device_id})")
             return {}
 
         new_capabilities = {}
         try:
-            if (
-                "capability" in data
-                and "state" in data["capability"]
-                and data["capability"]["state"]["status"] == "success"
-            ):
+            if "capability" in data and "state" in data["capability"] and data["capability"]["state"]["status"] == "success":
                 capability = data["capability"]
                 if isinstance(capability["value"], dict):
                     for key in capability["value"]:
@@ -174,9 +156,7 @@ class GoveeAPIMixin:
                 # only if we got any `capabilties` back from Govee will we update the `last_update`
                 new_capabilities["lastUpdate"] = datetime.now(ZoneInfo(self.timezone))
         except Exception:
-            self.logger.error(
-                f"Failed to process response sending command to device ({device_id})"
-            )
+            self.logger.error(f"Failed to process response sending command to device ({device_id})")
             return {}
 
         return new_capabilities

@@ -3,9 +3,14 @@
 import asyncio
 import signal
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
+
 
 class LoopsMixin:
-    async def device_list_loop(self):
+    async def device_list_loop(self: Govee2Mqtt) -> None:
         while self.running:
             await self.refresh_device_list()
             try:
@@ -14,7 +19,7 @@ class LoopsMixin:
                 self.logger.debug("device_list_loop cancelled during sleep")
                 break
 
-    async def device_loop(self):
+    async def device_loop(self: Govee2Mqtt) -> None:
         while self.running:
             await self.refresh_all_devices()
             try:
@@ -23,7 +28,7 @@ class LoopsMixin:
                 self.logger.debug("device_loop cancelled during sleep")
                 break
 
-    async def device_boosted_loop(self):
+    async def device_boosted_loop(self: Govee2Mqtt) -> None:
         while self.running:
             await self.refresh_boosted_devices()
             try:
@@ -32,7 +37,7 @@ class LoopsMixin:
                 self.logger.debug("device_boost_loop cancelled during sleep")
                 break
 
-    async def heartbeat(self):
+    async def heartbeat(self: Govee2Mqtt) -> None:
         while self.running:
             self.heartbeat_ready()
             try:
@@ -42,7 +47,7 @@ class LoopsMixin:
                 break
 
     # main loop
-    async def main_loop(self):
+    async def main_loop(self: Govee2Mqtt) -> None:
         """Main async runtime loop for Govee2MQTT."""
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
@@ -61,11 +66,7 @@ class LoopsMixin:
         ]
 
         try:
-            results = await asyncio.gather(*tasks)
-            for result in results:
-                if isinstance(result, Exception):
-                    self.logger.error(f"Task raised exception: {result}", exc_info=True)
-                    self.running = False
+            await asyncio.gather(*tasks)
         except asyncio.CancelledError:
             self.logger.warning("Main loop cancelled — shutting down...")
         except Exception as err:
