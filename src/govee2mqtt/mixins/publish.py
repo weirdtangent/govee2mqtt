@@ -168,7 +168,7 @@ class PublishMixin:
             "state": "online",
             "api_calls": {
                 "api_calls": self.get_api_calls(),
-                "last_api_call": self.get_last_call_date(),
+                "last_api_call": str(self.last_call_date),
             },
             "rate_limited": "yes" if self.is_rate_limited() else "no",
             "device_refresh": self.device_interval,

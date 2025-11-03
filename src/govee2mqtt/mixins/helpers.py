@@ -451,7 +451,7 @@ class HelpersMixin:
               "tls_ca_cert":            mqtt.get("tls_ca_cert")      or os.getenv("MQTT_TLS_CA_CERT"),
               "tls_cert":               mqtt.get("tls_cert")         or os.getenv("MQTT_TLS_CERT"),
               "tls_key":                mqtt.get("tls_key")          or os.getenv("MQTT_TLS_KEY"),
-              "prefix":                 mqtt.get("prefix")           or os.getenv("MQTT_PREFIX", "blink2mqtt"),
+              "prefix":                 mqtt.get("prefix")           or os.getenv("MQTT_PREFIX", "govee2mqtt"),
               "discovery_prefix":       mqtt.get("discovery_prefix") or os.getenv("MQTT_DISCOVERY_PREFIX", "homeassistant"),
         }
 
@@ -476,5 +476,9 @@ class HelpersMixin:
         # Validate required fields
         if not cast(dict, config["govee"]).get("api_key"):
             raise ConfigError("`govee.api_key` required in config file or GOVEE_API_KEY env var")
+        if not cast(dict, config["mqtt"]).get("host"):
+            raise ConfigError("`mqtt host` value is missing, not even the default value")
+        if not cast(dict, config["mqtt"]).get("port"):
+            raise ConfigError("`mqtt port` value is missing, not even the default value")
 
         return config

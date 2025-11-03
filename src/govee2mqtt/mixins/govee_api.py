@@ -19,7 +19,7 @@ COMMAND_URL = "https://openapi.api.govee.com/router/api/v1/device/control"
 class GoveeAPIMixin:
     def restore_state_values(self: Govee2Mqtt, api_calls: int, last_call_date: str) -> None:
         self.api_calls = api_calls
-        self.last_call_date = datetime.strptime(last_call_date, "%m/%d/%Y").date()
+        self.last_call_date = datetime.strptime(last_call_date, "%Y-%m-%d").date()
 
     def increase_api_calls(self: Govee2Mqtt) -> None:
         if not self.last_call_date or self.last_call_date != datetime.now(tz=ZoneInfo(self.timezone)).date():
@@ -34,16 +34,13 @@ class GoveeAPIMixin:
     def get_api_calls(self: Govee2Mqtt) -> int:
         return self.api_calls
 
-    def get_last_call_date(self: Govee2Mqtt) -> str:
-        return str(self.last_call_date)
-
     def is_rate_limited(self: Govee2Mqtt) -> bool:
         return self.rate_limited
 
     def get_headers(self: Govee2Mqtt) -> dict[str, str]:
         return {"Content-Type": "application/json", "Govee-API-Key": self.api_key}
 
-    def get_device_list(self: Govee2Mqtt) -> dict[str, Any]:
+    def get_device_list(self: Govee2Mqtt) -> list[dict[str, Any]]:
         headers = self.get_headers()
 
         try:
@@ -56,17 +53,17 @@ class GoveeAPIMixin:
                     self.logger.warning("Rate-limited by Govee getting device list")
                 else:
                     self.logger.error(f"Error ({r.status_code}) getting device list")
-                return {}
+                return []
             data = r.json()
 
         except RequestException:
             self.logger.error("Request error communicating with Govee for device list")
-            return {}
+            return []
         except Exception:
             self.logger.error("Error communicating with Govee for device list")
-            return {}
+            return []
 
-        return data["data"] if "data" in data else {}
+        return data["data"] if "data" in data else []
 
     def get_device(self: Govee2Mqtt, device_id: str, sku: str) -> dict[str, Any]:
         headers = self.get_headers()

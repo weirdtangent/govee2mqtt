@@ -69,11 +69,11 @@ class MqttMixin:
             self.mqtt_connect_time = datetime.now()
             self.mqttc.loop_start()
         except ConnectionError as error:
-            self.logger.error(f"Failed to connect to MQTT host {host}: {error}")
+            self.logger.error(f"Failed to connect to MQTT host: {error}")
             self.running = False
             raise SystemExit(1)
         except Exception as error:
-            self.logger.error(f"Network problem trying to connect to MQTT host {host}: {error}")
+            self.logger.error(f"Network problem trying to connect to MQTT host: {error}")
             self.running = False
             raise SystemExit(1)
 
@@ -81,9 +81,10 @@ class MqttMixin:
         self: Govee2Mqtt, client: Client, userdata: dict[str, Any], flags: ConnectFlags, reason_code: ReasonCode, properties: Properties | None
     ) -> None:
         if reason_code.value != 0:
-            self.logger.error(f"MQTT failed to connect ({reason_code.getName()})")
-            self.running = False
-            return
+            raise MqttError(f"MQTT failed to connect ({reason_code.getName()})")
+
+        # send our helper the client
+        self.mqtt_helper.set_client(self.mqttc)
 
         self.publish_service_discovery()
         self.publish_service_availability()

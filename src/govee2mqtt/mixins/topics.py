@@ -32,7 +32,7 @@ class TopicsMixin:
         return cast(dict, self.devices[device_id]["component"]["component_type"])
 
     def get_modes(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
-        return cast(dict[str, Any], self.devices[device_id]["modes"])
+        return cast(dict[str, Any], self.devices[device_id].get("modes", {}))
 
     def get_mode(self: Govee2Mqtt, device_id: str, mode_name: str) -> dict[str, Any]:
         return cast(dict[str, Any], self.devices[device_id]["modes"][mode_name])

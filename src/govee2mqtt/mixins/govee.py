@@ -20,7 +20,7 @@ class GoveeMixin:
 
         seen_devices = set()
 
-        for device in govee_devices.values():
+        for device in govee_devices:
             created = self.build_component(device)
             if created:
                 seen_devices.add(created)
@@ -80,7 +80,7 @@ class GoveeMixin:
         component = {
             "component_type": "light",
             "name": device["deviceName"],
-            "uniq_id": f"{self.mqtt_helper.device_slug(device_id, 'light')}",
+            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
             "stat_t": self.mqtt_helper.stat_t(device_id, "light"),
             "state_value_template": "{{ value_json.state | upper }}",
             "avty_t": self.mqtt_helper.avty_t(device_id, "light"),
@@ -132,7 +132,7 @@ class GoveeMixin:
                     modes["gradient"] = {
                         "component_type": "switch",
                         "name": f"{device['deviceName']} Gradient",
-                        "uniq_id": f"{self.mqtt_helper.service_slug}_{self.mqtt_helper.device_slug(device_id, 'gradient')}",
+                        "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "gradient"),
                         "stat_t": self.mqtt_helper.stat_t(device_id, "switch"),
                         "state_value_template": "{{ value_json.gradient }}",
                         "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "gradient"),
@@ -148,7 +148,7 @@ class GoveeMixin:
                     modes["nightlight"] = {
                         "component_type": "switch",
                         "name": f"{device['deviceName']} Nightlight",
-                        "uniq_id": f"{self.mqtt_helper.service_slug}_{self.mqtt_helper.device_slug(device_id, 'nightlight')}",
+                        "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "nightlight"),
                         "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "nightlight"),
                         "state_value_template": "{{ value_json.nightlight }}",
                         "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "nightlight"),
@@ -164,7 +164,7 @@ class GoveeMixin:
                     modes["dreamview"] = {
                         "component_type": "switch",
                         "name": f"{device['deviceName']} Dreamview",
-                        "uniq_id": f"{self.mqtt_helper.service_slug}_{self.mqtt_helper.device_slug(device_id, 'dreamview')}",
+                        "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "dreamview"),
                         "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "dreamview"),
                         "state_value_template": "{{ value_json.dreamview }}",
                         "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "dreamview"),
@@ -291,7 +291,7 @@ class GoveeMixin:
                     component = {
                         "component_type": "sensor",
                         "name": "Temperature",
-                        "uniq_id": f"{self.mqtt_helper.service_slug}_{self.mqtt_helper.device_slug(device_id, 'sensor')}",
+                        "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
                         "device_class": "temperature",
                         "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
                         "value_template": "{{ value_json.temperature | float }}",
@@ -314,7 +314,7 @@ class GoveeMixin:
                     component = {
                         "component_type": "sensor",
                         "name": "Humidity",
-                        "uniq_id": f"{self.mqtt_helper.service_slug}_{self.mqtt_helper.device_slug(device_id, 'sensor')}",
+                        "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
                         "device_class": "humidity",
                         "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
                         "value_template": "{{ value_json.humidity | float }}",

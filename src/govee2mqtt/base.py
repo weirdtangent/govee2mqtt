@@ -3,7 +3,7 @@
 import argparse
 import asyncio
 from asyncio import AbstractEventLoop
-from datetime import datetime, date
+from datetime import datetime
 import json
 from json_logging import get_logger
 import logging
@@ -29,7 +29,7 @@ class Base:
         cfg_arg = getattr(args, "config", None)
         self.config = self.load_config(cfg_arg)
 
-        if not self.config["mqtt"] or not self.config["blink"]:
+        if not self.config["mqtt"] or not self.config["govee"]:
             raise ValueError("config was not loaded")
 
         # down in trenches if we have to
@@ -72,7 +72,7 @@ class Base:
         self.api_key = self.config["govee"]["api_key"]
         self.rate_limited = False
         self.api_calls = 0
-        self.last_call_date: date
+        self.last_call_date = datetime.now().date()
         self.timezone = self.config["timezone"]
 
     def __enter__(self: Self) -> Govee2Mqtt:
