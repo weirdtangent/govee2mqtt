@@ -1,3 +1,10 @@
+## [2.0.6](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.5...v2.0.6) (2025-11-03)
+
+
+### Bug Fixes
+
+* error introduced from wild package changes ([02a115b](https://github.com/weirdtangent/govee2mqtt/commit/02a115bd53f63452b6c8e20f6d1b788a9a031c6c))
+
 ## [2.0.5](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.4...v2.0.5) (2025-11-03)
 
 
