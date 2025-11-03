@@ -1,3 +1,10 @@
+## [2.0.5](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.4...v2.0.5) (2025-11-03)
+
+
+### Bug Fixes
+
+* fix type hint for last_call_date ([84641d3](https://github.com/weirdtangent/govee2mqtt/commit/84641d39c99e403277c2b8daa80907389091e1ba))
+
 ## [2.0.4](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.3...v2.0.4) (2025-10-19)
 
 
