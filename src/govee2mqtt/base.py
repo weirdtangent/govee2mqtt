@@ -3,7 +3,7 @@
 import argparse
 import asyncio
 from asyncio import AbstractEventLoop
-from datetime import datetime, _Date
+from datetime import datetime, date
 import json
 from json_logging import get_logger
 import logging
@@ -72,7 +72,7 @@ class Base:
         self.api_key = self.config["govee"]["api_key"]
         self.rate_limited = False
         self.api_calls = 0
-        self.last_call_date: _Date
+        self.last_call_date: date
         self.timezone = self.config["timezone"]
 
     def __enter__(self: Self) -> Govee2Mqtt:

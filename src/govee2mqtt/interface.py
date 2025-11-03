@@ -1,6 +1,6 @@
 from argparse import Namespace
 from asyncio import AbstractEventLoop
-from datetime import datetime, _Date
+from datetime import datetime, date
 from logging import Logger
 from mqtt_helper import MqttHelper
 from paho.mqtt.client import Client, MQTTMessage, ConnectFlags, DisconnectFlags
@@ -25,7 +25,7 @@ class GoveeServiceProtocol(Protocol):
     devices: dict[str, Any]
     discovery_complete: bool
     events: list
-    last_call_date: _Date
+    last_call_date: date
     logger: Logger
     loop: AbstractEventLoop
     mqtt_config: dict[str, Any]
