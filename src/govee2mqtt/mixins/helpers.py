@@ -296,47 +296,6 @@ class HelpersMixin:
 
         threading.Timer(5.0, _force_exit).start()
 
-    # Upsert devices and states -------------------------------------------------------------------
-
-    def _assert_no_tuples(self: Govee2Mqtt, data: Any, path: str = "root") -> None:
-        if isinstance(data, tuple):
-            raise TypeError(f"⚠️ Found tuple at {path}: {data!r}")
-
-        if isinstance(data, dict):
-            for key, value in data.items():
-                if isinstance(key, tuple):
-                    raise TypeError(f"⚠️ Found tuple key at {path}: {key!r}")
-                self._assert_no_tuples(value, f"{path}.{key}")
-        elif isinstance(data, list):
-            for idx, value in enumerate(data):
-                self._assert_no_tuples(value, f"{path}[{idx}]")
-
-    def upsert_device(self: Govee2Mqtt, device_id: str, **kwargs: dict[str, Any] | str | int | bool | None) -> None:
-        MERGER = Merger(
-            [(dict, "merge"), (list, "append_unique"), (set, "union")],
-            ["override"],  # type conflicts: new wins
-            ["override"],  # fallback
-        )
-        for section, data in kwargs.items():
-            # Pre-merge check
-            self._assert_no_tuples(data, f"device[{device_id}].{section}")
-            merged = MERGER.merge(self.devices.get(device_id, {}), {section: data})
-            # Post-merge check
-            self._assert_no_tuples(merged, f"device[{device_id}].{section} (post-merge)")
-            self.devices[device_id] = merged
-
-    def upsert_state(self: Govee2Mqtt, device_id: str, **kwargs: dict[str, Any] | str | int | bool | None) -> None:
-        MERGER = Merger(
-            [(dict, "merge"), (list, "append_unique"), (set, "union")],
-            ["override"],  # type conflicts: new wins
-            ["override"],  # fallback
-        )
-        for section, data in kwargs.items():
-            self._assert_no_tuples(data, f"state[{device_id}].{section}")
-            merged = MERGER.merge(self.states.get(device_id, {}), {section: data})
-            self._assert_no_tuples(merged, f"state[{device_id}].{section} (post-merge)")
-            self.states[device_id] = merged
-
     def mark_ready(self: Govee2Mqtt) -> None:
         pathlib.Path(READY_FILE).touch()
 
@@ -482,3 +441,48 @@ class HelpersMixin:
             raise ConfigError("`mqtt port` value is missing, not even the default value")
 
         return config
+
+    # Upsert devices and states -------------------------------------------------------------------
+
+    def _assert_no_tuples(self: Govee2Mqtt, data: Any, path: str = "root") -> None:
+        if isinstance(data, tuple):
+            raise TypeError(f"⚠️ Found tuple at {path}: {data!r}")
+
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(key, tuple):
+                    raise TypeError(f"⚠️ Found tuple key at {path}: {key!r}")
+                self._assert_no_tuples(value, f"{path}.{key}")
+        elif isinstance(data, list):
+            for idx, value in enumerate(data):
+                self._assert_no_tuples(value, f"{path}[{idx}]")
+
+    def upsert_device(self: Govee2Mqtt, device_id: str, **kwargs: dict[str, Any] | str | int | bool | None) -> bool:
+        MERGER = Merger(
+            [(dict, "merge"), (list, "append_unique"), (set, "union")],
+            ["override"],
+            ["override"],
+        )
+        prev = self.devices.get(device_id, {})
+        for section, data in kwargs.items():
+            self._assert_no_tuples(data, f"device[{device_id}].{section}")
+            merged = MERGER.merge(self.devices.get(device_id, {}), {section: data})
+            self._assert_no_tuples(merged, f"device[{device_id}].{section} (post-merge)")
+            self.devices[device_id] = merged
+        new = self.devices.get(device_id, {})
+        return False if prev == new else True
+
+    def upsert_state(self: Govee2Mqtt, device_id: str, **kwargs: dict[str, Any] | str | int | bool | None) -> bool:
+        MERGER = Merger(
+            [(dict, "merge"), (list, "append_unique"), (set, "union")],
+            ["override"],
+            ["override"],
+        )
+        prev = self.states.get(device_id, {})
+        for section, data in kwargs.items():
+            self._assert_no_tuples(data, f"state[{device_id}].{section}")
+            merged = MERGER.merge(self.states.get(device_id, {}), {section: data})
+            self._assert_no_tuples(merged, f"state[{device_id}].{section} (post-merge)")
+            self.states[device_id] = merged
+        new = self.states.get(device_id, {})
+        return False if prev == new else True

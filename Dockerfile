@@ -5,6 +5,7 @@ FROM python:3-slim
 ARG APP_NAME=govee2mqtt
 ENV APP_NAME=${APP_NAME}
 ARG SERVICE_DESC="Publishes Govee device data to MQTT for Home Assistant"
+ENV GOVEE2MQTT_VERSION=v${VERSION}
 ARG VERSION=0.0.0
 ARG USER_ID=1000
 ARG GROUP_ID=1000

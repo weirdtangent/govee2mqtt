@@ -50,7 +50,6 @@ class PublishMixin:
                     "name": f"{self.service_name} API Calls Today",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_api_calls",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "api_calls"),
-                    "json_attr_t": self.mqtt_helper.attr_t("service", "service", "api_calls", "attributes"),
                     "unit_of_measurement": "calls",
                     "icon": "mdi:api",
                     "state_class": "total_increasing",
@@ -67,7 +66,6 @@ class PublishMixin:
                     "name": f"{self.service_name} Rate Limited by Govee",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_rate_limited",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "rate_limited"),
-                    "json_attr_t": self.mqtt_helper.attr_t("service", "service", "rate_limited", "attributes"),
                     "payload_on": "yes",
                     "payload_off": "no",
                     "device_class": "problem",
@@ -85,7 +83,6 @@ class PublishMixin:
                     "name": f"{self.service_name} Device Refresh Interval",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_device_refresh",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "device_refresh"),
-                    "json_attr_t": self.mqtt_helper.attr_t("service", "service", "device_refresh", "attributes"),
                     "cmd_t": self.mqtt_helper.cmd_t("service", "device_refresh"),
                     "unit_of_measurement": "s",
                     "min": 1,
@@ -105,7 +102,6 @@ class PublishMixin:
                     "name": f"{self.service_name} Device List Refresh Interval",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_device_list_refresh",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "device_list_refresh"),
-                    "json_attr_t": self.mqtt_helper.attr_t("service", "service", "device_list_refresh", "attributes"),
                     "cmd_t": self.mqtt_helper.cmd_t("service", "device_list_refresh"),
                     "unit_of_measurement": "s",
                     "min": 1,
@@ -125,7 +121,6 @@ class PublishMixin:
                     "name": f"{self.service_name} Device Boost Refresh Interval",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_device_boost_refresh",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "device_boost_refresh"),
-                    "json_attr_t": self.mqtt_helper.attr_t("service", "service", "device_boost_refresh", "attributes"),
                     "cmd_t": self.mqtt_helper.cmd_t("service", "device_boost_refresh"),
                     "unit_of_measurement": "s",
                     "min": 1,
@@ -156,36 +151,22 @@ class PublishMixin:
         self.logger.debug(f"[HA] Discovery published for {self.service} ({self.mqtt_helper.service_slug})")
 
     def publish_service_availability(self: Govee2Mqtt, status: str = "online") -> None:
-        self.mqtt_helper.safe_publish(
-            self.mqtt_helper.svc_t("status"),
-            status,
-            qos=self.mqtt_config["qos"],
-            retain=True,
-        )
+        self.mqtt_helper.safe_publish(self.mqtt_helper.avty_t("service"), status, qos=self.qos, retain=True)
 
     def publish_service_state(self: Govee2Mqtt) -> None:
         service = {
-            "state": "online",
-            "api_calls": {
-                "api_calls": self.get_api_calls(),
-                "last_api_call": str(self.last_call_date),
-            },
+            "api_calls": self.get_api_calls(),
+            "last_api_call": str(self.last_call_date),
             "rate_limited": "yes" if self.is_rate_limited() else "no",
             "device_refresh": self.device_interval,
             "device_list_refresh": self.device_list_interval,
             "device_boost_refresh": self.device_boost_interval,
         }
 
-        payload: Any
         for key, value in service.items():
-            if not isinstance(value, dict):
-                payload = str(value)
-            else:
-                payload = json.dumps(value)
-
             self.mqtt_helper.safe_publish(
                 self.mqtt_helper.stat_t("service", "service", key),
-                payload,
+                json.dumps(value) if isinstance(value, dict) else str(value),
                 qos=self.mqtt_config["qos"],
                 retain=True,
             )
