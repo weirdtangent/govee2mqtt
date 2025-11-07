@@ -1,3 +1,10 @@
+## [2.0.7](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.6...v2.0.7) (2025-11-07)
+
+
+### Bug Fixes
+
+* availability topic, mqtt subscribes, messages ([68613ed](https://github.com/weirdtangent/govee2mqtt/commit/68613edb244e35f790792e443a974125fdd75705))
+
 ## [2.0.6](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.5...v2.0.6) (2025-11-03)
 
 
