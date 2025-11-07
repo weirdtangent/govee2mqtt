@@ -366,7 +366,7 @@ class HelpersMixin:
         return next((k for k, v in d.items() if v == target), None)
 
     def load_config(self: Govee2Mqtt, config_arg: Any | None = None) -> dict[str, Any]:
-        version = os.getenv("AMCREST2MQTT_VERSION", self.read_file("VERSION"))
+        version = os.getenv("GOVEE2MQTT_VERSION", self.read_file("VERSION"))
         config_from = "env"
         config: dict[str, str | bool | int | dict] = {}
 
