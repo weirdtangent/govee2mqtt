@@ -98,7 +98,7 @@ class HelpersMixin:
         for key, value in attributes.items():
 
             match key:
-                case "state" | "light":
+                case "state" | "light" | "value":
                     state_on = str(value).lower() == "on"
                     light["state"] = "ON" if state_on else "OFF"
                     capabilities["powerSwitch"] = {
@@ -116,13 +116,16 @@ class HelpersMixin:
                     }
 
                 case "rgb" | "color":
-                    rgb_val = self.rgb_to_number(value)
-                    light["rgb_color"] = value
-                    capabilities["colorRgb"] = {
-                        "type": "devices.capabilities.color_setting",
-                        "instance": "colorRgb",
-                        "value": rgb_val,
-                    }
+                    if isinstance(value, list) and len(value) == 3:
+                        rgb_val = self.rgb_to_number(value)
+                        light["rgb_color"] = value
+                        capabilities["colorRgb"] = {
+                            "type": "devices.capabilities.color_setting",
+                            "instance": "colorRgb",
+                            "value": rgb_val,
+                        }
+                    else:
+                        self.logger.warning(f"Ignored unknown or invalid attribute: {key} => {value}")
 
                 case "color_temp":
                     light["color_temp"] = int(value)
@@ -173,7 +176,7 @@ class HelpersMixin:
                     }
 
                 case _:
-                    self.logger.warning(f"Ignored unknown attribute: {key} => {value}")
+                    self.logger.warning(f"Ignored unknown or invalid attribute: {key} => {value}")
 
         # cannot send "turn" with either brightness or color
         if "brightness" in capabilities and "turn" in capabilities:
@@ -233,14 +236,14 @@ class HelpersMixin:
             # no need to boost-refresh if we get the state back on the successful command response
             if len(response) > 0:
                 self.refresh_device_states(device_id, response)
-                self.logger.info(f"Got response from Govee API: {response}")
+                self.logger.debug(f"Got response from Govee API: {response}")
                 self.publish_device_state(device_id)
 
                 # remove from boosted list (if there), since we got a change
                 if device_id in self.boosted:
                     self.boosted.remove(device_id)
             else:
-                self.logger.info(f"No details in response from Govee API: {response}")
+                self.logger.debug(f"No details in response from Govee API: {response}")
                 need_boost = True
 
         # if we send a command and did not get a state change back on the response

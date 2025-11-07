@@ -94,8 +94,8 @@ class MqttMixin:
         client.subscribe("homeassistant/status")
         client.subscribe(f"{self.mqtt_helper.service_slug}/service/+/set")
         client.subscribe(f"{self.mqtt_helper.service_slug}/service/+/command")
-        client.subscribe(f"{self.mqtt_helper.service_slug}/light/#")
-        client.subscribe(f"{self.mqtt_helper.service_slug}/switch/#")
+        client.subscribe(f"{self.mqtt_helper.service_slug}/+/light/set")
+        client.subscribe(f"{self.mqtt_helper.service_slug}/+/switch/+/set")
 
     def mqtt_on_disconnect(
         self: Govee2Mqtt, client: Client, userdata: Any, flags: DisconnectFlags, reason_code: ReasonCode, properties: Properties | None
@@ -131,7 +131,7 @@ class MqttMixin:
             self.logger.error(f"Got invalid message on topic: {topic or "undef"} with {payload or "undef"}")
             return
 
-        self.logger.info(f"Got message on topic: {topic} with {json.dumps(payload)}")
+        self.logger.debug(f"Got message on topic: {topic} with {json.dumps(payload)}")
 
         # Dispatch based on type of message
         if components[0] == self.mqtt_config["discovery_prefix"]:
@@ -180,29 +180,21 @@ class MqttMixin:
             self.logger.warning(f"Got MQTT message for unknown device: {device_id}")
             return
 
-        self.logger.debug(f"Got message for {self.get_device_name(device_id)}: {payload}")
+        self.logger.info(f"Got message for {self.get_device_name(device_id)}: {payload}")
         self.send_command(device_id, payload)
 
     def _parse_device_topic(self: Govee2Mqtt, components: list[str]) -> list[str | None] | None:
         """Extract (vendor, device_id, attribute) from an MQTT topic components list (underscore-delimited)."""
         try:
-            # Example topics:
-            # govee2mqtt/light/govee2mqtt_2BEFD0C907BB6BF2/set
-            # govee2mqtt/light/govee2mqtt_2BEFD0C907BB6BF2/gradient
-            # govee2mqtt/light/govee2mqtt_2BEFD0C907BB6BF2/brightness/set
+            if components[-1] != "set":
+                return None
 
-            # Case 1 and 2
-            if len(components) >= 4 and "_" in components[-2]:
-                vendor, device_id = components[-2].split("_", 1)
-                attribute = components[-1]
+            # Example topics
+            # govee2mqtt/govee2mqtt_2BEFD0C907BB6BF2/light/set
+            # govee2mqtt/govee2mqtt_2BEFD0C907BB6BF2/switch/dreamview/set
 
-            # Case 3
-            elif len(components) >= 5 and "_" in components[-3]:
-                vendor, device_id = components[-3].split("_", 1)
-                attribute = components[-2]
-
-            else:
-                raise ValueError(f"Malformed topic (expected underscore): {'/'.join(components)}")
+            vendor, device_id = components[1].split("_", 1)
+            attribute = components[-2]
 
             return [vendor, device_id, attribute]
 

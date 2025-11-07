@@ -66,8 +66,8 @@ class PublishMixin:
                     "name": f"{self.service_name} Rate Limited by Govee",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_rate_limited",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "rate_limited"),
-                    "payload_on": "yes",
-                    "payload_off": "no",
+                    "payload_on": "YES",
+                    "payload_off": "NO",
                     "device_class": "problem",
                     "icon": "mdi:speedometer-slow",
                     "device": app,
@@ -89,6 +89,7 @@ class PublishMixin:
                     "max": 3600,
                     "step": 1,
                     "icon": "mdi:timer-refresh",
+                    "mode": "box",
                     "device": app,
                 }
             ),
@@ -108,6 +109,7 @@ class PublishMixin:
                     "max": 3600,
                     "step": 1,
                     "icon": "mdi:format-list-bulleted",
+                    "mode": "box",
                     "device": app,
                 }
             ),
@@ -127,6 +129,7 @@ class PublishMixin:
                     "max": 30,
                     "step": 1,
                     "icon": "mdi:lightning-bolt",
+                    "mode": "box",
                     "device": app,
                 }
             ),
@@ -157,7 +160,7 @@ class PublishMixin:
         service = {
             "api_calls": self.get_api_calls(),
             "last_api_call": str(self.last_call_date),
-            "rate_limited": "yes" if self.is_rate_limited() else "no",
+            "rate_limited": "YES" if self.is_rate_limited() else "NO",
             "device_refresh": self.device_interval,
             "device_list_refresh": self.device_list_interval,
             "device_boost_refresh": self.device_boost_interval,
