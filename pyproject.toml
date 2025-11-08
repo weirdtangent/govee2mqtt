@@ -12,10 +12,10 @@ dependencies = [
     "deepmerge==2.0",
     "paho-mqtt>=2.1.0",
     "pyyaml>=6.0.3",
-    "requests>=2.32.5",
     "json-logging-graystorm",
     "mqtt-helper-graystorm",
     "types-pyyaml>=6.0.12.20250915",
+    "aiohttp>=3.13.2",
 ]
 
 [project.scripts]
@@ -165,6 +165,8 @@ warn_unreachable = true
 strict_equality = true
 allow_untyped_globals = false
 allow_redefinition = false
+no_implicit_optional = true
+warn_unused_configs = true
 
 # Temporarily quiet noisy files or folders
 [[tool.mypy.overrides]]

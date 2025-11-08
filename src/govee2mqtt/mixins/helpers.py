@@ -25,9 +25,9 @@ class ConfigError(ValueError):
 
 
 class HelpersMixin:
-    def refresh_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] = {}) -> None:
+    async def refresh_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] = {}) -> None:
         if not data:
-            data = self.get_device(self.get_raw_id(device_id), self.get_device_sku(device_id))
+            data = await self.get_device(self.get_raw_id(device_id), self.get_device_sku(device_id))
 
         for key in data:
             if not data[key]:
@@ -210,7 +210,7 @@ class HelpersMixin:
 
     # send command to Govee -----------------------------------------------------------------------
 
-    def send_command(self: Govee2Mqtt, device_id: str, command: dict[str, Any]) -> None:
+    async def send_command(self: Govee2Mqtt, device_id: str, command: dict[str, Any]) -> None:
         if device_id == "service":
             self.logger.error(f'Why are you trying to send {command} to the "service"? Ignoring you.')
             return
@@ -224,20 +224,20 @@ class HelpersMixin:
         need_boost = False
         for key in capabilities:
             self.logger.debug(f"Posting {key} to Govee API: " + ", ".join(f"{k}={v}" for k, v in capabilities[key].items()))
-            response = self.post_command(
+            response = await self.post_command(
                 self.get_raw_id(device_id),
                 self.get_device_sku(device_id),
                 capabilities[key]["type"],
                 capabilities[key]["instance"],
                 capabilities[key]["value"],
             )
-            self.publish_service_state()
+            await self.publish_service_state()
 
             # no need to boost-refresh if we get the state back on the successful command response
             if len(response) > 0:
-                self.refresh_device_states(device_id, response)
+                await self.refresh_device_states(device_id, response)
                 self.logger.debug(f"Got response from Govee API: {response}")
-                self.publish_device_state(device_id)
+                await self.publish_device_state(device_id)
 
                 # remove from boosted list (if there), since we got a change
                 if device_id in self.boosted:
@@ -251,7 +251,7 @@ class HelpersMixin:
         if need_boost and device_id not in self.boosted:
             self.boosted.append(device_id)
 
-    def handle_service_message(self: Govee2Mqtt, handler: str, message: str) -> None:
+    async def handle_service_message(self: Govee2Mqtt, handler: str, message: str) -> None:
         match handler:
             case "device_refresh":
                 self.device_interval = int(message)
@@ -261,23 +261,21 @@ class HelpersMixin:
                 self.device_boost_interval = int(message)
             case "refresh_device_list":
                 if message == "refresh":
-                    self.rediscover_all()
+                    await self.rediscover_all()
                 else:
                     self.logger.error("[handler] unknown [message]")
                     return
             case _:
                 self.logger.error(f"Unrecognized message to {self.mqtt_helper.service_slug}: {handler} with {message}")
                 return
-        self.publish_service_state()
+        await self.publish_service_state()
 
-    def rediscover_all(self: Govee2Mqtt) -> None:
-        self.publish_service_state()
-        self.publish_service_discovery()
+    async def rediscover_all(self: Govee2Mqtt) -> None:
+        await self.publish_service_state()
+        await self.publish_service_discovery()
         for device_id in self.devices:
-            if device_id == "service":
-                continue
-            self.publish_device_state(device_id)
-            self.publish_device_discovery(device_id)
+            await self.publish_device_state(device_id)
+            await self.publish_device_discovery(device_id)
 
     # Utility functions ---------------------------------------------------------------------------
 
@@ -367,6 +365,10 @@ class HelpersMixin:
 
     def load_config(self: Govee2Mqtt, config_arg: Any | None = None) -> dict[str, Any]:
         version = os.getenv("GOVEE2MQTT_VERSION", self.read_file("VERSION"))
+        tier = os.getenv("AMCREST2MQTT_TIER", "prod")
+        if tier == "dev":
+            version += ":DEV"
+
         config_from = "env"
         config: dict[str, str | bool | int | dict] = {}
 

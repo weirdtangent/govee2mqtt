@@ -16,13 +16,8 @@ class RefreshMixin:
 
         self.logger.info(f"Refreshing all devices from Govee (every {self.device_interval} sec)")
 
-        for device_id in self.devices:
-            if not self.running:
-                break
-            if device_id == "service" or device_id in self.boosted:
-                continue
-
-            self.refresh_device_states(device_id)
+        tasks = [self.refresh_device_states(device_id) for device_id in self.devices if device_id not in self.boosted]
+        await asyncio.gather(*tasks)
 
     # refresh boosted devices ---------------------------------------------------------------------
 
@@ -33,8 +28,10 @@ class RefreshMixin:
 
         if len(self.boosted) > 0:
             self.logger.info(f"Refreshing {len(self.boosted)} boosted devices from Govee")
+
+            tasks = []
             for device_id in self.boosted:
                 self.boosted.remove(device_id)
-                if not self.running:
-                    break
-                self.refresh_device_states(device_id)
+                tasks.append(self.refresh_device_states(device_id))
+
+            await asyncio.gather(*tasks)

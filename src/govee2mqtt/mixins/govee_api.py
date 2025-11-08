@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
+import aiohttp
+from aiohttp import ClientError
 from datetime import datetime
-import requests
-from requests.exceptions import RequestException
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -40,32 +40,37 @@ class GoveeAPIMixin:
     def get_headers(self: Govee2Mqtt) -> dict[str, str]:
         return {"Content-Type": "application/json", "Govee-API-Key": self.api_key}
 
-    def get_device_list(self: Govee2Mqtt) -> list[dict[str, Any]]:
+    async def get_device_list(self: Govee2Mqtt) -> list[dict[str, Any]]:
         headers = self.get_headers()
 
         try:
-            r = requests.get(DEVICE_LIST_URL, headers=headers)
-            self.increase_api_calls()
+            async with self.session.get(DEVICE_LIST_URL, headers=headers) as r:
+                self.increase_api_calls()
 
-            self.rate_limited = r.status_code == 429
-            if r.status_code != 200:
-                if r.status_code == 429:
-                    self.logger.warning("Rate-limited by Govee getting device list")
-                else:
-                    self.logger.error(f"Error ({r.status_code}) getting device list")
-                return []
-            data = r.json()
+                self.rate_limited = r.status == 429
+                if r.status != 200:
+                    if r.status == 429:
+                        self.logger.warning("Rate-limited by Govee getting device list")
+                    else:
+                        self.logger.error(f"Error ({r.status}) getting device list")
+                    return []
 
-        except RequestException:
+                data = await r.json()
+
+        except ClientError:
             self.logger.error("Request error communicating with Govee for device list")
             return []
         except Exception:
             self.logger.error("Error communicating with Govee for device list")
             return []
 
-        return data["data"] if "data" in data else []
+        result = data.get("data", [])
+        if not isinstance(result, list):
+            self.logger.error(f"Unexpected response type from Govee: {type(result).__name__}")
+            return []
+        return result
 
-    def get_device(self: Govee2Mqtt, device_id: str, sku: str) -> dict[str, Any]:
+    async def get_device(self: Govee2Mqtt, device_id: str, sku: str) -> dict[str, Any]:
         headers = self.get_headers()
         body = {
             "requestId": str(uuid.uuid4()),
@@ -76,36 +81,37 @@ class GoveeAPIMixin:
         }
 
         try:
-            r = requests.post(DEVICE_URL, headers=headers, json=body)
-            self.increase_api_calls()
+            async with self.session.post(DEVICE_URL, headers=headers, json=body) as r:
+                self.increase_api_calls()
+                self.rate_limited = r.status == 429
 
-            self.rate_limited = r.status_code == 429
-            if r.status_code != 200:
-                if r.status_code == 429:
-                    self.logger.error(f"Rate-limited by Govee getting device ({device_id})")
-                else:
-                    self.logger.error(f"Error ({r.status_code}) getting device ({device_id})")
-                return {}
-            data = r.json()
-        except RequestException as e:
+                if r.status != 200:
+                    if r.status == 429:
+                        self.logger.error(f"Rate-limited by Govee getting device ({device_id})")
+                    else:
+                        self.logger.error(f"Error ({r.status}) getting device ({device_id})")
+                    return {}
+
+                data = await r.json()
+
+        except aiohttp.ClientError as e:
             self.logger.error(f"Request error communicating with Govee for device ({device_id}): {e}")
             return {}
         except Exception as e:
             self.logger.error(f"Error communicating with Govee for device ({device_id}): {e}")
             return {}
 
-        new_capabilities = {}
-        device = data["payload"] if "payload" in data else {}
+        new_capabilities: dict[str, Any] = {}
+        device = data.get("payload", {})
 
         if "capabilities" in device:
             for capability in device["capabilities"]:
                 new_capabilities[capability["instance"]] = capability["state"]["value"]
-            # only if we got any `capabilties` back from Govee will we update the `last_update`
             new_capabilities["lastUpdate"] = datetime.now(ZoneInfo(self.timezone))
 
         return new_capabilities
 
-    def post_command(self: Govee2Mqtt, device_id: str, sku: str, capability: dict[str, Any], instance: str, value: str) -> dict[str, Any]:
+    async def post_command(self: Govee2Mqtt, device_id: str, sku: str, capability: dict[str, Any], instance: str, value: str) -> dict[str, Any]:
         headers = self.get_headers()
         body = {
             "requestId": str(uuid.uuid4()),
@@ -121,19 +127,21 @@ class GoveeAPIMixin:
         }
 
         try:
-            r = requests.post(COMMAND_URL, headers=headers, json=body)
-            self.increase_api_calls()
+            async with self.session.post(COMMAND_URL, headers=headers, json=body) as r:
+                self.increase_api_calls()
 
-            self.rate_limited = r.status_code == 429
-            if r.status_code != 200:
-                if r.status_code == 429:
-                    self.logger.error(f"Rate-limited by Govee sending command to device ({device_id})")
-                else:
-                    self.logger.error(f"Error ({r.status_code}) sending command to device ({device_id})")
-                return {}
-            data = r.json()
-            self.logger.debug(f"Raw response from Govee: {data}")
-        except RequestException:
+                self.rate_limited = r.status == 429
+                if r.status != 200:
+                    if r.status == 429:
+                        self.logger.error(f"Rate-limited by Govee sending command to device ({device_id})")
+                    else:
+                        self.logger.error(f"Error ({r.status}) sending command to device ({device_id})")
+                    return {}
+
+                data = await r.json()
+                self.logger.debug(f"Raw response from Govee: {data}")
+
+        except ClientError:
             self.logger.error(f"Request error communicating with Govee sending command to device ({device_id})")
             return {}
         except Exception:

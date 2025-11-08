@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
+import asyncio
 import json
 
 from typing import TYPE_CHECKING, Any
@@ -12,7 +13,7 @@ class PublishMixin:
 
     # Service -------------------------------------------------------------------------------------
 
-    def publish_service_discovery(self: Govee2Mqtt) -> None:
+    async def publish_service_discovery(self: Govee2Mqtt) -> None:
         app = self.mqtt_helper.device_block(
             self.service_name,
             self.mqtt_helper.service_slug,
@@ -20,7 +21,8 @@ class PublishMixin:
             self.config["version"],
         )
 
-        self.mqtt_helper.safe_publish(
+        await asyncio.to_thread(
+            self.mqtt_helper.safe_publish,
             topic=self.mqtt_helper.disc_t("binary_sensor", self.mqtt_helper.service_slug),
             payload=json.dumps(
                 {
@@ -43,7 +45,8 @@ class PublishMixin:
             retain=True,
         )
 
-        self.mqtt_helper.safe_publish(
+        await asyncio.to_thread(
+            self.mqtt_helper.safe_publish,
             topic=self.mqtt_helper.disc_t("sensor", f"{self.mqtt_helper.service_slug}_api_calls"),
             payload=json.dumps(
                 {
@@ -59,7 +62,8 @@ class PublishMixin:
             qos=self.mqtt_config["qos"],
             retain=True,
         )
-        self.mqtt_helper.safe_publish(
+        await asyncio.to_thread(
+            self.mqtt_helper.safe_publish,
             topic=self.mqtt_helper.disc_t("binary_sensor", f"{self.mqtt_helper.service_slug}_rate_limited"),
             payload=json.dumps(
                 {
@@ -76,7 +80,8 @@ class PublishMixin:
             qos=self.mqtt_config["qos"],
             retain=True,
         )
-        self.mqtt_helper.safe_publish(
+        await asyncio.to_thread(
+            self.mqtt_helper.safe_publish,
             topic=self.mqtt_helper.disc_t("number", f"{self.mqtt_helper.service_slug}_device_refresh"),
             payload=json.dumps(
                 {
@@ -96,7 +101,8 @@ class PublishMixin:
             qos=self.mqtt_config["qos"],
             retain=True,
         )
-        self.mqtt_helper.safe_publish(
+        await asyncio.to_thread(
+            self.mqtt_helper.safe_publish,
             topic=self.mqtt_helper.disc_t("number", f"{self.mqtt_helper.service_slug}_device_list_refresh"),
             payload=json.dumps(
                 {
@@ -116,7 +122,8 @@ class PublishMixin:
             qos=self.mqtt_config["qos"],
             retain=True,
         )
-        self.mqtt_helper.safe_publish(
+        await asyncio.to_thread(
+            self.mqtt_helper.safe_publish,
             topic=self.mqtt_helper.disc_t("number", f"{self.mqtt_helper.service_slug}_device_boost_refresh"),
             payload=json.dumps(
                 {
@@ -136,7 +143,8 @@ class PublishMixin:
             qos=self.mqtt_config["qos"],
             retain=True,
         )
-        self.mqtt_helper.safe_publish(
+        await asyncio.to_thread(
+            self.mqtt_helper.safe_publish,
             topic=self.mqtt_helper.disc_t("button", f"{self.mqtt_helper.service_slug}_refresh_device_list"),
             payload=json.dumps(
                 {
@@ -153,10 +161,10 @@ class PublishMixin:
         )
         self.logger.debug(f"[HA] Discovery published for {self.service} ({self.mqtt_helper.service_slug})")
 
-    def publish_service_availability(self: Govee2Mqtt, status: str = "online") -> None:
-        self.mqtt_helper.safe_publish(self.mqtt_helper.avty_t("service"), status, qos=self.qos, retain=True)
+    async def publish_service_availability(self: Govee2Mqtt, status: str = "online") -> None:
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, self.mqtt_helper.avty_t("service"), status, qos=self.qos, retain=True)
 
-    def publish_service_state(self: Govee2Mqtt) -> None:
+    async def publish_service_state(self: Govee2Mqtt) -> None:
         service = {
             "api_calls": self.get_api_calls(),
             "last_api_call": str(self.last_call_date),
@@ -167,7 +175,8 @@ class PublishMixin:
         }
 
         for key, value in service.items():
-            self.mqtt_helper.safe_publish(
+            await asyncio.to_thread(
+                self.mqtt_helper.safe_publish,
                 self.mqtt_helper.stat_t("service", "service", key),
                 json.dumps(value) if isinstance(value, dict) else str(value),
                 qos=self.mqtt_config["qos"],
@@ -176,8 +185,8 @@ class PublishMixin:
 
     # Devices -------------------------------------------------------------------------------------
 
-    def publish_device_discovery(self: Govee2Mqtt, device_id: str) -> None:
-        def _publish_one(dev_id: str, defn: dict, suffix: str = "") -> None:
+    async def publish_device_discovery(self: Govee2Mqtt, device_id: str) -> None:
+        async def _publish_one(dev_id: str, defn: dict, suffix: str = "") -> None:
             # Compute a per-mode device_id for topic namespacing
             eff_device_id = dev_id if not suffix else f"{dev_id}_{suffix}"
 
@@ -188,27 +197,27 @@ class PublishMixin:
             payload = {k: v for k, v in defn.items() if k != "component_type"}
 
             # Publish discovery
-            self.mqtt_helper.safe_publish(topic, json.dumps(payload), retain=True)
+            await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(payload), retain=True)
 
             # Mark discovered in state (per published entity)
             self.upsert_state(eff_device_id, internal={"discovered": True})
 
         component = self.get_component(device_id)
-        _publish_one(device_id, component, suffix="")
+        await _publish_one(device_id, component, suffix="")
 
         # Publish any modes (0..n)
         modes = self.get_modes(device_id)
         for slug, mode in modes.items():
-            _publish_one(device_id, mode, suffix=slug)
+            await _publish_one(device_id, mode, suffix=slug)
 
-    def publish_device_availability(self: Govee2Mqtt, device_id: str, online: bool = True) -> None:
+    async def publish_device_availability(self: Govee2Mqtt, device_id: str, online: bool = True) -> None:
         payload = "online" if online else "offline"
 
         avty_t = self.get_device_availability_topic(device_id)
-        self.mqtt_helper.safe_publish(avty_t, payload, retain=True)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, avty_t, payload, retain=True)
 
-    def publish_device_state(self: Govee2Mqtt, device_id: str) -> None:
-        def _publish_one(dev_id: str, defn: str | dict[str, Any], suffix: str = "") -> None:
+    async def publish_device_state(self: Govee2Mqtt, device_id: str) -> None:
+        async def _publish_one(dev_id: str, defn: str | dict[str, Any], suffix: str = "") -> None:
             # Grab this component's state topic
             topic = self.get_device_state_topic(dev_id, suffix)
 
@@ -220,16 +229,16 @@ class PublishMixin:
                 meta = self.states[dev_id].get("meta")
                 if isinstance(meta, dict) and "last_update" in meta:
                     flat["last_update"] = meta["last_update"]
-                self.mqtt_helper.safe_publish(topic, json.dumps(flat), retain=True)
+                await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(flat), retain=True)
             else:
-                self.mqtt_helper.safe_publish(topic, defn, retain=True)
+                await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, defn, retain=True)
 
         if not self.is_discovered(device_id):
             self.logger.debug(f"[device state] Discovery not complete for {device_id} yet, holding off on sending state")
             return
 
         states = self.states[device_id]
-        _publish_one(device_id, states[self.get_component_type(device_id)])
+        await _publish_one(device_id, states[self.get_component_type(device_id)])
 
         # Publish any modes (0..n)
         modes = self.get_modes(device_id)
@@ -241,4 +250,4 @@ class PublishMixin:
                 continue
 
             type_states = states[component_type][name] if isinstance(states[component_type], dict) else states[component_type]
-            _publish_one(device_id, type_states, name)
+            await _publish_one(device_id, type_states, name)

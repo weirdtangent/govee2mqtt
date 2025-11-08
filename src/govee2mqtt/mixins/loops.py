@@ -48,13 +48,13 @@ class LoopsMixin:
 
     # main loop
     async def main_loop(self: Govee2Mqtt) -> None:
-        """Main async runtime loop for Govee2MQTT."""
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
                 signal.signal(sig, self._handle_signal)
             except Exception:
                 self.logger.debug(f"Cannot install handler for {sig}")
 
+        await self.refresh_device_list()
         self.running = True
         self.mark_ready()
 

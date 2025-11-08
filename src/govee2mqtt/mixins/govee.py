@@ -13,39 +13,45 @@ class GoveeMixin:
     async def refresh_device_list(self: Govee2Mqtt) -> None:
         self.logger.info(f"Refreshing device list from Govee (every {self.device_list_interval} sec)")
 
-        govee_devices = self.get_device_list()
+        govee_devices = await self.get_device_list()
         if not govee_devices:
             return
-        self.publish_service_state()
+        await self.publish_service_state()
 
-        seen_devices = set()
+        seen_devices: set[str] = set()
 
-        for device in govee_devices:
-            created = self.build_component(device)
-            if created:
-                seen_devices.add(created)
+        # Build all components concurrently
+        tasks = [self.build_component(device) for device in govee_devices]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Collect successful device IDs
+        for result in results:
+            if isinstance(result, Exception):
+                self.logger.error(f"error during build_component: {result}", exc_info=True)
+            elif result and isinstance(result, str):
+                seen_devices.add(result)
 
         # Mark missing devices offline
         missing_devices = set(self.devices.keys()) - seen_devices
         for device_id in missing_devices:
-            self.publish_device_availability(device_id, online=False)
+            await self.publish_device_availability(device_id, online=False)
             self.logger.warning(f"Device {device_id} not seen in Govee API list — marked offline")
 
         # Handle first discovery completion
         if not self.discovery_complete:
             await asyncio.sleep(5)
-            self.rediscover_all()
+            await self.rediscover_all()
             self.logger.info("First-time device setup and discovery is done")
             self.discovery_complete = True
 
     # convert Govee device capabilities into MQTT components
-    def build_component(self: Govee2Mqtt, device: dict[str, Any]) -> str:
+    async def build_component(self: Govee2Mqtt, device: dict[str, Any]) -> str:
         device_class = self.classify_device(device)
         match device_class:
             case "light":
-                return self.build_light(device)
+                return await self.build_light(device)
             case "sensor":
-                return self.build_sensor(device)
+                return await self.build_sensor(device)
         return ""
 
     def classify_device(self: Govee2Mqtt, device: dict[str, Any]) -> str:
@@ -66,7 +72,7 @@ class GoveeMixin:
 
         return ""
 
-    def build_light(self: Govee2Mqtt, device: dict[str, Any]) -> str:
+    async def build_light(self: Govee2Mqtt, device: dict[str, Any]) -> str:
         raw_id = cast(str, device["device"])
         device_id = raw_id.replace(":", "").upper()
         self.devices.setdefault(device_id, {})
@@ -264,18 +270,18 @@ class GoveeMixin:
         # insert, or update anything that changed, but don't lose anything
         self.upsert_device(device_id, component=component, modes=modes)
 
-        self.refresh_device_states(device_id)
+        await self.refresh_device_states(device_id)
 
         if not self.is_discovered(device_id):
             self.logger.info(f'Added new light: "{device["deviceName"]}" [Govee {device["sku"]}] ({device_id})')
 
-        self.publish_device_discovery(device_id)
-        self.publish_device_availability(device_id, online=True)
-        self.publish_device_state(device_id)
+        await self.publish_device_discovery(device_id)
+        await self.publish_device_availability(device_id, online=True)
+        await self.publish_device_state(device_id)
 
         return device_id
 
-    def build_sensor(self: Govee2Mqtt, device: dict[str, Any]) -> str:
+    async def build_sensor(self: Govee2Mqtt, device: dict[str, Any]) -> str:
         raw_id = device["device"]
         parent = raw_id.replace(":", "").upper()
 
@@ -340,14 +346,14 @@ class GoveeMixin:
                     internal={"raw_id": raw_id, "sku": device.get("sku", None)},
                     sensor={},
                 )
-                self.refresh_device_states(device_id)
+                await self.refresh_device_states(device_id)
 
                 if not self.is_discovered(device_id):
                     self.logger.info(f'Added new sensor: "{component["name"]}" [Govee {device["sku"]}] ({device_id})')
 
-                self.publish_device_discovery(device_id)
-                self.publish_device_availability(device_id, online=True)
-                self.publish_device_state(device_id)
+                await self.publish_device_discovery(device_id)
+                await self.publish_device_availability(device_id, online=True)
+                await self.publish_device_state(device_id)
                 return device_id
 
         return ""
