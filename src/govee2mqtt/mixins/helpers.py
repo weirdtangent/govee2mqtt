@@ -118,7 +118,7 @@ class HelpersMixin:
                         "value": int(value),
                     }
 
-                case "rgb_color" | "color":
+                case "rgb_color" | "rgb" | "color":
                     if isinstance(value, str):
                         value = list(map(int, value.split(",", 3)))
                     if isinstance(value, list) and len(value) == 3:
