@@ -7,7 +7,7 @@ name = "govee2mqtt"
 dynamic = ["version"]
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "deepmerge==2.0",
     "paho-mqtt>=2.1.0",
@@ -85,8 +85,8 @@ exclude = [
 line-length = 160
 indent-width = 4
 
-# Assume Python 3.14
-target-version = "py314"
+# Assume Python 3.13
+target-version = "py313"
 
 [tool.pyright]
 include = [ "." ]
@@ -153,7 +153,7 @@ dev = [
 ]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.13"
 ignore_missing_imports = true
 check_untyped_defs = true
 disallow_incomplete_defs = true
