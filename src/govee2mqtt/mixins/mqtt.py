@@ -155,7 +155,7 @@ class MqttMixin:
             return await self.handle_service_message(components[2], payload)
 
         if isinstance(payload, str | int):
-            payload = { components[-2]: payload }
+            payload = {components[-2]: payload}
         if components[0] == self.mqtt_helper.service_slug:
             return await self.handle_device_topic(components, payload)
 

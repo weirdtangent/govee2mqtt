@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
@@ -107,7 +107,7 @@ class PublishMixin:
                     "icon": "mdi:lightning-bolt",
                     "mode": "box",
                 },
-            }
+            },
         }
 
         topic = self.mqtt_helper.disc_t("device", device_id)

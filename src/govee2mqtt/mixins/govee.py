@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
 import asyncio
-import json
-import os
 import re
 
 from typing import TYPE_CHECKING, Any, cast
@@ -29,7 +27,7 @@ class GoveeMixin:
         # Collect successful device IDs
         for result in results:
             if isinstance(result, Exception):
-                self.logger.error(f"error during build_component", exc_info=result)
+                self.logger.error("error during build_component", exc_info=result)
             elif result and isinstance(result, str):
                 seen_devices.add(result)
 
@@ -92,7 +90,7 @@ class GoveeMixin:
                 "connections": [
                     ["mac", light["device"]],
                 ],
-                "via_device": self.service
+                "via_device": self.service,
             },
             "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
             "qos": self.qos,
@@ -278,7 +276,7 @@ class GoveeMixin:
                             "connections": [
                                 ["mac", sensor["device"]],
                             ],
-                            "via_device": self.service
+                            "via_device": self.service,
                         },
                         "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
                         "qos": self.qos,
@@ -291,7 +289,7 @@ class GoveeMixin:
                             "state_class": "measurement",
                             "unit_of_measurement": "°F",
                             "icon": "mdi:thermometer",
-                        }
+                        },
                     }
 
                 case "sensorHumidity":
@@ -310,7 +308,7 @@ class GoveeMixin:
                             "connections": [
                                 ["mac", sensor["device"]],
                             ],
-                            "via_device": self.service
+                            "via_device": self.service,
                         },
                         "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
                         "qos": self.qos,
@@ -323,7 +321,7 @@ class GoveeMixin:
                             "state_class": "measurement",
                             "unit_of_measurement": "%",
                             "icon": "mdi:water-percent",
-                        }
+                        },
                     }
                 case _:
                     continue
