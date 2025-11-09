@@ -45,7 +45,7 @@ async def async_main() -> int:
         logger.error(f"Unhandled exception: {err}", exc_info=True)
         return 1
     finally:
-        logger.info("amcrest2mqtt stopped.")
+        logger.info("govee2mqtt stopped.")
 
     return 0
 
