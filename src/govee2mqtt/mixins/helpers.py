@@ -92,13 +92,16 @@ class HelpersMixin:
                     self.logger.warning(f"Unhandled state {key} with value {data[key]} from Govee")
 
     # convert MQTT attributes to Govee capabilities
-    def build_govee_capabilities(self: Govee2Mqtt, device_id: str, attributes: dict[str, Any]) -> dict[str, dict]:
+    def build_govee_capabilities(self: Govee2Mqtt, device_id: str, attribute: str, payload: Any) -> dict[str, dict]:
         states = self.states[device_id]
         light = states.get("light", {})
         switch = states.get("switch", {})
 
+        if isinstance(payload, int | str | float):
+            payload = {attribute: payload}
+
         capabilities: dict[str, Any] = {}
-        for key, value in attributes.items():
+        for key, value in payload.items():
 
             match key:
                 case "state" | "light" | "value":
@@ -154,8 +157,8 @@ class HelpersMixin:
 
                 case "music_sensitivity":
                     mode = states["music"]["options"][states["music"]["mode"]]
-                    if isinstance(attributes, dict) and "music_mode" in attributes:
-                        mode = states["music"]["options"][attributes["music_mode"]]
+                    if isinstance(payload, dict) and "music_mode" in payload:
+                        mode = states["music"]["options"][payload["music_mode"]]
                     capabilities["musicMode"] = {
                         "type": "devices.capabilities.music_setting",
                         "instance": "musicMode",
@@ -167,7 +170,7 @@ class HelpersMixin:
 
                 case "music_mode":
                     mode = states["music"]["options"][value]
-                    sensitivity = attributes.get(
+                    sensitivity = payload.get(
                         "music_sensitivity",
                         states["music"]["sensitivity"],
                     )
@@ -215,13 +218,13 @@ class HelpersMixin:
 
     # send command to Govee -----------------------------------------------------------------------
 
-    async def send_command(self: Govee2Mqtt, device_id: str, command: dict[str, Any]) -> None:
+    async def send_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         if device_id == "service":
             self.logger.error(f'Why are you trying to send {command} to the "service"? Ignoring you.')
             return
 
         # convert what we received in the command to Govee API capabilities
-        capabilities = self.build_govee_capabilities(device_id, command)
+        capabilities = self.build_govee_capabilities(device_id, attribute, command)
         if not capabilities:
             self.logger.debug(f"Nothing to send Govee for {device_id} for command {command}")
             return
@@ -256,20 +259,17 @@ class HelpersMixin:
         if need_boost and device_id not in self.boosted:
             self.boosted.append(device_id)
 
-    async def handle_service_message(self: Govee2Mqtt, handler: str, message: str) -> None:
+    async def handle_service_message(self: Govee2Mqtt, handler: str, message: Any) -> None:
         match handler:
-            case "device_refresh":
+            case "refresh_interval":
                 self.device_interval = int(message)
-            case "device_list_refresh":
+                self.logger.info(f"refresh_interval updated to be {message}")
+            case "rescan_interval":
                 self.device_list_interval = int(message)
-            case "device_boost_refresh":
+                self.logger.info(f"rescan_interval updated to be {message}")
+            case "boost_interval":
                 self.device_boost_interval = int(message)
-            case "refresh_device_list":
-                if message == "refresh":
-                    await self.rediscover_all()
-                else:
-                    self.logger.error("[handler] unknown [message]")
-                    return
+                self.logger.info(f"boost_interval updated to be {message}")
             case _:
                 self.logger.error(f"Unrecognized message to {self.mqtt_helper.service_slug}: {handler} with {message}")
                 return

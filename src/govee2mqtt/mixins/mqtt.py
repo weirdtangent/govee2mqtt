@@ -154,8 +154,6 @@ class MqttMixin:
         if components[0] == self.mqtt_helper.service_slug and components[1] == "service":
             return await self.handle_service_message(components[2], payload)
 
-        if isinstance(payload, str | int):
-            payload = {components[-2]: payload}
         if components[0] == self.mqtt_helper.service_slug:
             return await self.handle_device_topic(components, payload)
 
@@ -166,7 +164,7 @@ class MqttMixin:
             await self.rediscover_all()
             self.logger.info("Home Assistant came online — rediscovering devices")
 
-    async def handle_device_topic(self: Govee2Mqtt, components: list[str], payload: dict[str, Any]) -> None:
+    async def handle_device_topic(self: Govee2Mqtt, components: list[str], payload: Any) -> None:
         parsed = self._parse_device_topic(components)
         if not parsed:
             return
@@ -183,7 +181,7 @@ class MqttMixin:
             return
 
         self.logger.info(f"Got message for {device_id}: {payload}")
-        await self.send_command(device_id, payload)
+        await self.send_command(device_id, attribute, payload)
 
     def _parse_device_topic(self: Govee2Mqtt, components: list[str]) -> list[str | None] | None:
         """Extract (vendor, device_id, attribute) from an MQTT topic components list (underscore-delimited)."""
