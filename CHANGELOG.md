@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.7...v2.1.0) (2025-11-09)
+
+
+### Features
+
+* **mqtt:** migrate Govee devices and service discovery to new 2024 “device” schema ([04b1687](https://github.com/weirdtangent/govee2mqtt/commit/04b1687dab4e2c26f5e2854203463e2c26815bfd))
+
 ## [2.0.7](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.6...v2.0.7) (2025-11-07)
 
 
