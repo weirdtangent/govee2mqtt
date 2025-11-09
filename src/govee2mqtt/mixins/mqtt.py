@@ -107,6 +107,7 @@ class MqttMixin:
         client.subscribe(f"{self.mqtt_helper.service_slug}/service/+/set")
         client.subscribe(f"{self.mqtt_helper.service_slug}/service/+/command")
         client.subscribe(f"{self.mqtt_helper.service_slug}/+/light/set")
+        client.subscribe(f"{self.mqtt_helper.service_slug}/+/light/+/set")
         client.subscribe(f"{self.mqtt_helper.service_slug}/+/switch/+/set")
 
     async def mqtt_on_disconnect(
@@ -153,7 +154,9 @@ class MqttMixin:
         if components[0] == self.mqtt_helper.service_slug and components[1] == "service":
             return await self.handle_service_message(components[2], payload)
 
-        if components[0] == self.mqtt_helper.service_slug and isinstance(payload, dict):
+        if isinstance(payload, str | int):
+            payload = { components[-2]: payload }
+        if components[0] == self.mqtt_helper.service_slug:
             return await self.handle_device_topic(components, payload)
 
         self.logger.debug(f"Did not process message on MQTT topic: {topic} with {payload}")
@@ -179,7 +182,7 @@ class MqttMixin:
             self.logger.warning(f"Got MQTT message for unknown device: {device_id}")
             return
 
-        self.logger.info(f"Got message for {self.get_device_name(device_id)}: {payload}")
+        self.logger.info(f"Got message for {device_id}: {payload}")
         await self.send_command(device_id, payload)
 
     def _parse_device_topic(self: Govee2Mqtt, components: list[str]) -> list[str | None] | None:
@@ -190,6 +193,7 @@ class MqttMixin:
 
             # Example topics
             # govee2mqtt/govee2mqtt_2BEFD0C907BB6BF2/light/set
+            # govee2mqtt/govee2mqtt_2BEFD0C907BB6BF2/light/rgb_color/set
             # govee2mqtt/govee2mqtt_2BEFD0C907BB6BF2/switch/dreamview/set
 
             vendor, device_id = components[1].split("_", 1)

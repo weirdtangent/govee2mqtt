@@ -12,7 +12,7 @@ class TopicsMixin:
     # Device properties ---------------------------------------------------------------------------
 
     def get_device_name(self: Govee2Mqtt, device_id: str) -> str:
-        return cast(str, self.devices[device_id]["component"]["name"])
+        return cast(str, self.devices[device_id]["device"]["name"])
 
     def get_raw_id(self: Govee2Mqtt, device_id: str) -> str:
         return cast(str, self.states[device_id]["internal"]["raw_id"])
@@ -28,8 +28,8 @@ class TopicsMixin:
         parts = device_id.split("_")
         return cast(dict, self.devices[parts[0]]["modes"][parts[1]])
 
-    def get_component_type(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
-        return cast(dict, self.devices[device_id]["component"]["component_type"])
+    def get_platform(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
+        return cast(dict, self.devices[device_id]["component"]["platform"])
 
     def get_modes(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
         return cast(dict[str, Any], self.devices[device_id].get("modes", {}))
@@ -40,7 +40,7 @@ class TopicsMixin:
     def get_device_state_topic(self: Govee2Mqtt, device_id: str, mode_name: str = "") -> str:
         component = self.get_mode(device_id, mode_name) if mode_name else self.get_component(device_id)
 
-        match component["component_type"]:
+        match component["platform"]:
             case "camera":
                 return cast(str, component["topic"])
             case "image":

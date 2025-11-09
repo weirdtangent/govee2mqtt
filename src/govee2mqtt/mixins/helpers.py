@@ -25,7 +25,7 @@ class ConfigError(ValueError):
 
 
 class HelpersMixin:
-    async def refresh_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] = {}) -> None:
+    async def build_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] = {}) -> None:
         if not data:
             data = await self.get_device(self.get_raw_id(device_id), self.get_device_sku(device_id))
 
@@ -57,16 +57,19 @@ class HelpersMixin:
                     self.upsert_state(
                         device_id,
                         switch={"gradient": "ON" if data[key] == 1 else "OFF"},
+                        light={"light": "ON" if data[key] == 1 else "OFF"},
                     )
                 case "nightlightToggle":
                     self.upsert_state(
                         device_id,
                         switch={"nightlight": "ON" if data[key] == 1 else "OFF"},
+                        light={"light": "ON" if data[key] == 1 else "OFF"},
                     )
                 case "dreamViewToggle":
                     self.upsert_state(
                         device_id,
                         switch={"dreamview": "ON" if data[key] == 1 else "OFF"},
+                        light={"light": "ON" if data[key] == 1 else "OFF"},
                     )
                 case "sensorTemperature":
                     self.upsert_state(device_id, sensor={"temperature": data[key]})
@@ -115,7 +118,9 @@ class HelpersMixin:
                         "value": int(value),
                     }
 
-                case "rgb" | "color":
+                case "rgb_color" | "color":
+                    if isinstance(value, str):
+                        value = list(map(int, value.split(",", 3)))
                     if isinstance(value, list) and len(value) == 3:
                         rgb_val = self.rgb_to_number(value)
                         light["rgb_color"] = value
@@ -235,7 +240,7 @@ class HelpersMixin:
 
             # no need to boost-refresh if we get the state back on the successful command response
             if len(response) > 0:
-                await self.refresh_device_states(device_id, response)
+                await self.build_device_states(device_id, response)
                 self.logger.debug(f"Got response from Govee API: {response}")
                 await self.publish_device_state(device_id)
 
