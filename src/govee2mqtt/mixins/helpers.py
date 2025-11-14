@@ -369,8 +369,8 @@ class HelpersMixin:
         return next((k for k, v in d.items() if v == target), None)
 
     def load_config(self: Govee2Mqtt, config_arg: Any | None = None) -> dict[str, Any]:
-        version = os.getenv("GOVEE2MQTT_VERSION", self.read_file("VERSION"))
-        tier = os.getenv("GOVEE2MQTT_TIER", "prod")
+        version = os.getenv("APP_VERSION", self.read_file("VERSION"))
+        tier = os.getenv("APP_TIER", "prod")
         if tier == "dev":
             version += ":DEV"
 
