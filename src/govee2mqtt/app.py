@@ -5,7 +5,7 @@ import asyncio
 import argparse
 from json_logging import setup_logging, get_logger
 from .mixins.helpers import ConfigError
-from .mixins.mqtt import MqttError
+from mqtt_helper import MqttError
 from .core import Govee2Mqtt
 
 
