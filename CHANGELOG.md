@@ -1,3 +1,10 @@
+## [2.1.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.1.0...v2.1.1) (2025-11-16)
+
+
+### Bug Fixes
+
+* light name; update packages ([cd212cb](https://github.com/weirdtangent/govee2mqtt/commit/cd212cb0e23559cd7a18f6baf89549e46e46ef6c))
+
 # [2.1.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.0.7...v2.1.0) (2025-11-09)
 
 
