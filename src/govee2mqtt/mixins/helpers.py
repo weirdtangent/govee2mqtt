@@ -28,6 +28,7 @@ class HelpersMixin:
     async def build_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] = {}) -> None:
         if not data:
             data = await self.get_device(self.get_raw_id(device_id), self.get_device_sku(device_id))
+        component = self.devices[device_id]["component"]
 
         for key in data:
             if not data[key]:
@@ -52,7 +53,12 @@ class HelpersMixin:
                         },
                     )
                 case "colorTemperatureK":
-                    self.upsert_state(device_id, light={"color_temp": data[key]})
+                    # restrict color_temp to be >= min and <= max
+                    value = data[key]
+                    if isinstance(value, str):
+                        value = int(value)
+                    color = min(max(value, component["cmps"]["light"]["min_kelvin"]), component["cmps"]["light"]["max_kelvin"])
+                    self.upsert_state(device_id, light={"color_temp": color})
                 case "gradientToggle":
                     self.upsert_state(
                         device_id,
@@ -93,6 +99,7 @@ class HelpersMixin:
 
     # convert MQTT attributes to Govee capabilities
     def build_govee_capabilities(self: Govee2Mqtt, device_id: str, attribute: str, payload: Any) -> dict[str, dict]:
+        component = self.devices[device_id]["component"]
         states = self.states[device_id]
         light = states.get("light", {})
         switch = states.get("switch", {})
@@ -136,11 +143,15 @@ class HelpersMixin:
                         self.logger.warning(f"Ignored unknown or invalid attribute: {key} => {value}")
 
                 case "color_temp":
-                    light["color_temp"] = int(value)
+                    # restrict color_temp to be >= min and <= max
+                    if isinstance(value, str):
+                        value = int(value)
+                    color = min(max(value, component["cmps"]["light"]["min_kelvin"]), component["cmps"]["light"]["max_kelvin"])
+                    light["color_temp"] = color
                     capabilities["colorTemperatureK"] = {
                         "type": "devices.capabilities.color_setting",
                         "instance": "colorTemperatureK",
-                        "value": int(value),
+                        "value": color,
                     }
 
                 case "gradient" | "nightlight" | "dreamview":
@@ -451,6 +462,47 @@ class HelpersMixin:
             raise ConfigError("`mqtt port` value is missing, not even the default value")
 
         return config
+
+    # Device properties ---------------------------------------------------------------------------
+
+    def get_device_name(self: Govee2Mqtt, device_id: str) -> str:
+        return cast(str, self.devices[device_id]["device"]["name"])
+
+    def get_raw_id(self: Govee2Mqtt, device_id: str) -> str:
+        return cast(str, self.states[device_id]["internal"]["raw_id"])
+
+    def get_device_sku(self: Govee2Mqtt, device_id: str) -> str:
+        return cast(str, self.states[device_id]["internal"]["sku"])
+
+    def get_component(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
+        if device_id in self.devices:
+            return cast(dict, self.devices[device_id]["component"])
+        if "_" not in device_id:
+            raise ValueError(f"Cannot get_component for {device_id}")
+        parts = device_id.split("_")
+        return cast(dict, self.devices[parts[0]]["cmps"][parts[1]])
+
+    def get_platform(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
+        return cast(dict, self.devices[device_id]["component"]["platform"])
+
+    def get_device_state_topic(self: Govee2Mqtt, device_id: str, mode_name: str = "") -> str:
+        component = self.get_component(device_id)["cmps"][f"{device_id}_{mode_name}"] if mode_name else self.get_component(device_id)
+
+        match component["platform"]:
+            case "camera":
+                return cast(str, component["topic"])
+            case "image":
+                return cast(str, component["image_topic"])
+            case _:
+                return cast(str, component.get("stat_t") or component.get("state_topic"))
+
+    def get_device_image_topic(self: Govee2Mqtt, device_id: str) -> str:
+        component = self.get_component(device_id)
+        return cast(str, component["topic"])
+
+    def get_device_availability_topic(self: Govee2Mqtt, device_id: str) -> str:
+        component = self.get_component(device_id)
+        return cast(str, component.get("avty_t") or component.get("availability_topic"))
 
     # Upsert devices and states -------------------------------------------------------------------
 

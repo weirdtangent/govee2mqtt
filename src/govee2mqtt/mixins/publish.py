@@ -17,7 +17,6 @@ class PublishMixin:
         device_id = "service"
 
         device = {
-            "platform": "mqtt",
             "stat_t": self.mqtt_helper.stat_t(device_id, "service"),
             "cmd_t": self.mqtt_helper.cmd_t(device_id),
             "avty_t": self.mqtt_helper.avty_t(device_id),
@@ -111,8 +110,7 @@ class PublishMixin:
         }
 
         topic = self.mqtt_helper.disc_t("device", device_id)
-        payload = {k: v for k, v in device.items() if k != "platform"}
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(payload), retain=True)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(device), retain=True)
         self.upsert_state(device_id, internal={"discovered": True})
 
         self.logger.debug(f"discovery published for {self.service} ({self.mqtt_helper.service_slug})")
@@ -142,13 +140,12 @@ class PublishMixin:
     # Devices -------------------------------------------------------------------------------------
 
     async def publish_device_discovery(self: Govee2Mqtt, device_id: str) -> None:
-        component = self.get_component(device_id)
-        for slug, mode in self.get_modes(device_id).items():
-            component["cmps"][f"{device_id}_{slug}"] = mode
+        if self.is_discovered(device_id):
+            return
 
         topic = self.mqtt_helper.disc_t("device", device_id)
-        payload = {k: v for k, v in component.items() if k != "platform"}
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(payload), retain=True)
+        component = self.get_component(device_id)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(component), retain=True)
         self.upsert_state(device_id, internal={"discovered": True})
 
     async def publish_device_availability(self: Govee2Mqtt, device_id: str, online: bool = True) -> None:
@@ -171,7 +168,7 @@ class PublishMixin:
                         continue
                     topic = self.mqtt_helper.stat_t(device_id, state, k)
                     if isinstance(v, list):
-                        v = json.dumps(v)
+                        v = ",".join(map(str, v))
                     await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, v, retain=True)
             else:
                 topic = self.mqtt_helper.stat_t(device_id, state)
