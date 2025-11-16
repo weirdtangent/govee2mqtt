@@ -110,13 +110,13 @@ class PublishMixin:
         }
 
         topic = self.mqtt_helper.disc_t("device", device_id)
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(device), retain=True)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(device))
         self.upsert_state(device_id, internal={"discovered": True})
 
         self.logger.debug(f"discovery published for {self.service} ({self.mqtt_helper.service_slug})")
 
     async def publish_service_availability(self: Govee2Mqtt, status: str = "online") -> None:
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, self.mqtt_helper.avty_t("service"), status, qos=self.qos, retain=True)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, self.mqtt_helper.avty_t("service"), status)
 
     async def publish_service_state(self: Govee2Mqtt) -> None:
         service = {
@@ -133,8 +133,6 @@ class PublishMixin:
                 self.mqtt_helper.safe_publish,
                 self.mqtt_helper.stat_t("service", "service", key),
                 json.dumps(value) if isinstance(value, dict) else value,
-                qos=self.mqtt_config["qos"],
-                retain=True,
             )
 
     # Devices -------------------------------------------------------------------------------------
@@ -145,14 +143,14 @@ class PublishMixin:
 
         topic = self.mqtt_helper.disc_t("device", device_id)
         component = self.get_component(device_id)
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(component), retain=True)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(component))
         self.upsert_state(device_id, internal={"discovered": True})
 
     async def publish_device_availability(self: Govee2Mqtt, device_id: str, online: bool = True) -> None:
         payload = "online" if online else "offline"
 
         avty_t = self.get_device_availability_topic(device_id)
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, avty_t, payload, retain=True)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, avty_t, payload)
 
     async def publish_device_state(self: Govee2Mqtt, device_id: str, subject: str = "", sub: str = "") -> None:
         if not self.is_discovered(device_id):
@@ -169,7 +167,7 @@ class PublishMixin:
                     topic = self.mqtt_helper.stat_t(device_id, state, k)
                     if isinstance(v, list):
                         v = ",".join(map(str, v))
-                    await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, v, retain=True)
+                    await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, v)
             else:
                 topic = self.mqtt_helper.stat_t(device_id, state)
-                await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, value, retain=True)
+                await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, value)

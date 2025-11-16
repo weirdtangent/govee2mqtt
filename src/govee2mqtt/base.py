@@ -46,8 +46,9 @@ class Base:
 
         self.service = self.mqtt_config["prefix"]
         self.service_name = f"{self.service} service"
+        self.qos = self.mqtt_config["qos"]
 
-        self.mqtt_helper = MqttHelper(self.service)
+        self.mqtt_helper = MqttHelper(self.service, default_qos=self.qos, default_retain=True)
 
         self.running = False
         self.discovery_complete = False
@@ -63,8 +64,6 @@ class Base:
         self.mqttc: Client
         self.mqtt_connect_time: datetime
         self.client_id = self.mqtt_helper.client_id()
-
-        self.qos = self.mqtt_config["qos"]
 
         self.service = self.mqtt_config["prefix"]
         self.service_name = f"{self.service} service"

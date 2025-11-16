@@ -28,8 +28,10 @@ class MqttError(ValueError):
 
 class MqttMixin:
     async def mqttc_create(self: Govee2Mqtt) -> None:
+        # lets use a new client_id for each connection attempt
+        self.client_id = self.mqtt_helper.client_id()
         self.mqttc = mqtt.Client(
-            client_id=self.mqtt_helper.client_id(),
+            client_id=self.client_id,
             callback_api_version=CallbackAPIVersion.VERSION2,
             reconnect_on_failure=False,
             protocol=mqtt.MQTTv5,
@@ -56,12 +58,12 @@ class MqttMixin:
         self.mqttc.on_log = self._wrap_async(self.mqtt_on_log)
 
         # Define a "last will" message (LWT):
-        self.mqttc.will_set(self.mqtt_helper.avty_t("services"), "offline", qos=1, retain=True)
+        self.mqttc.will_set(self.mqtt_helper.avty_t("service"), "offline", qos=1, retain=True)
 
         try:
             host = self.mqtt_config["host"]
             port = self.mqtt_config["port"]
-            self.logger.info(f"Connecting to MQTT broker at {host}:{port} as {self.client_id}")
+            self.logger.info(f"Connecting to MQTT broker at {host}:{port} as client id: {self.client_id}")
 
             props = Properties(PacketTypes.CONNECT)
             props.SessionExpiryInterval = 0
@@ -122,8 +124,6 @@ class MqttMixin:
             self.logger.info("Closed MQTT connection")
 
         if self.running and (self.mqtt_connect_time is None or datetime.now() > self.mqtt_connect_time + timedelta(seconds=10)):
-            # lets use a new client_id for a reconnect attempt
-            self.client_id = self.mqtt_helper.client_id()
             await self.mqttc_create()
         else:
             self.logger.info("MQTT disconnect — stopping service loop")
