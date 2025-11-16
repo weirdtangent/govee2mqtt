@@ -95,7 +95,7 @@ class HelpersMixin:
                 case "lastUpdate":
                     self.upsert_state(device_id, last_update=data[key].strftime("%Y-%m-%d %H:%M:%S"))
                 case _:
-                    self.logger.warning(f"Unhandled state {key} with value {data[key]} from Govee")
+                    self.logger.warning(f"unhandled state {key} with value {data[key]} from Govee")
 
     # convert MQTT attributes to Govee capabilities
     def build_govee_capabilities(self: Govee2Mqtt, device_id: str, attribute: str, payload: Any) -> dict[str, dict]:
@@ -140,7 +140,7 @@ class HelpersMixin:
                             "value": rgb_val,
                         }
                     else:
-                        self.logger.warning(f"Ignored unknown or invalid attribute: {key} => {value}")
+                        self.logger.warning(f"ignored unknown or invalid attribute: {key} => {value}")
 
                 case "color_temp":
                     # restrict color_temp to be >= min and <= max
@@ -195,7 +195,7 @@ class HelpersMixin:
                     }
 
                 case _:
-                    self.logger.warning(f"Ignored unknown or invalid attribute: {key} => {value}")
+                    self.logger.warning(f"ignored unknown or invalid attribute: {key} => {value}")
 
         # cannot send "turn" with either brightness or color
         if "brightness" in capabilities and "turn" in capabilities:
@@ -231,18 +231,18 @@ class HelpersMixin:
 
     async def send_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         if device_id == "service":
-            self.logger.error(f'Why are you trying to send {command} to the "service"? Ignoring you.')
+            self.logger.error(f'why are you trying to send {command} to the "service"? ignoring you.')
             return
 
         # convert what we received in the command to Govee API capabilities
         capabilities = self.build_govee_capabilities(device_id, attribute, command)
         if not capabilities:
-            self.logger.debug(f"Nothing to send Govee for {device_id} for command {command}")
+            self.logger.debug(f"nothing to send Govee for {device_id} for command {command}")
             return
 
         need_boost = False
         for key in capabilities:
-            self.logger.debug(f"Posting {key} to Govee API: " + ", ".join(f"{k}={v}" for k, v in capabilities[key].items()))
+            self.logger.debug(f"posting {key} to Govee API: " + ", ".join(f"{k}={v}" for k, v in capabilities[key].items()))
             response = await self.post_command(
                 self.get_raw_id(device_id),
                 self.get_device_sku(device_id),
@@ -255,14 +255,14 @@ class HelpersMixin:
             # no need to boost-refresh if we get the state back on the successful command response
             if len(response) > 0:
                 await self.build_device_states(device_id, response)
-                self.logger.debug(f"Got response from Govee API: {response}")
+                self.logger.debug(f"got response from Govee API: {response}")
                 await self.publish_device_state(device_id)
 
                 # remove from boosted list (if there), since we got a change
                 if device_id in self.boosted:
                     self.boosted.remove(device_id)
             else:
-                self.logger.debug(f"No details in response from Govee API: {response}")
+                self.logger.debug(f"no details in response from Govee API: {response}")
                 need_boost = True
 
         # if we send a command and did not get a state change back on the response
@@ -282,7 +282,7 @@ class HelpersMixin:
                 self.device_boost_interval = int(message)
                 self.logger.info(f"boost_interval updated to be {message}")
             case _:
-                self.logger.error(f"Unrecognized message to {self.mqtt_helper.service_slug}: {handler} with {message}")
+                self.logger.error(f"unrecognized message to {self.mqtt_helper.service_slug}: {handler} with {message}")
                 return
         await self.publish_service_state()
 
@@ -303,12 +303,12 @@ class HelpersMixin:
         # Try saving state before timer kicks in
         try:
             self.save_state()
-            self.logger.info("State saved after signal")
+            self.logger.info("state saved after signal")
         except Exception as e:
-            self.logger.warning(f"Failed to save state on signal: {e}")
+            self.logger.warning(f"failed to save state on signal: {e}")
 
         def _force_exit() -> None:
-            self.logger.warning("Force-exiting process after signal")
+            self.logger.warning("force-exiting process after signal")
             os._exit(0)
 
         threading.Timer(5.0, _force_exit).start()

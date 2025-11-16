@@ -14,7 +14,7 @@ class RefreshMixin:
         while not self.discovery_complete and self.running:
             await asyncio.sleep(1)
 
-        self.logger.info(f"Refreshing all devices from Govee (every {self.device_interval} sec)")
+        self.logger.info(f"refreshing all devices from Govee (every {self.device_interval} sec)")
 
         tasks = [self.build_device_states(device_id) for device_id in self.devices if device_id not in self.boosted]
         await asyncio.gather(*tasks)
@@ -27,7 +27,7 @@ class RefreshMixin:
             await asyncio.sleep(1)
 
         if len(self.boosted) > 0:
-            self.logger.info(f"Refreshing {len(self.boosted)} boosted devices from Govee")
+            self.logger.info(f"refreshing {len(self.boosted)} boosted devices from Govee")
 
             tasks = []
             for device_id in self.boosted:

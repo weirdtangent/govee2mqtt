@@ -43,12 +43,12 @@ class MqttMixin(BaseMqttMixin):
         if components[0] == self.mqtt_helper.service_slug:
             return await self.handle_device_topic(components, payload)
 
-        self.logger.debug(f"Did not process message on MQTT topic: {topic} with {payload}")
+        self.logger.debug(f"did not process message on MQTT topic: {topic} with {payload}")
 
     async def handle_homeassistant_message(self: Govee2Mqtt, payload: str) -> None:
         if payload == "online":
             await self.rediscover_all()
-            self.logger.info("Home Assistant came online — rediscovering devices")
+            self.logger.info("home assistant came online — rediscovering devices")
 
     async def handle_device_topic(self: Govee2Mqtt, components: list[str], payload: Any) -> None:
         parsed = self._parse_device_topic(components)
@@ -57,16 +57,16 @@ class MqttMixin(BaseMqttMixin):
 
         (vendor, device_id, attribute) = parsed
         if not vendor or not vendor.startswith(self.mqtt_helper.service_slug):
-            self.logger.error(f"Ignoring non-Govee device command, got vendor {vendor}")
+            self.logger.error(f"ignoring non-Govee device command, got vendor {vendor}")
             return
         if not device_id or not attribute:
-            self.logger.error(f"Failed to parse device_id and/or payload from mqtt topic components: {components}")
+            self.logger.error(f"failed to parse device_id and/or payload from mqtt topic components: {components}")
             return
         if not self.devices.get(device_id, None):
-            self.logger.warning(f"Got MQTT message for unknown device: {device_id}")
+            self.logger.warning(f"got MQTT message for unknown device: {device_id}")
             return
 
-        self.logger.info(f"Got message for {device_id}: {payload}")
+        self.logger.info(f"got message for {device_id}: {payload}")
         await self.send_command(device_id, attribute, payload)
 
     def _parse_device_topic(self: Govee2Mqtt, components: list[str]) -> list[str | None] | None:
@@ -86,7 +86,7 @@ class MqttMixin(BaseMqttMixin):
             return [vendor, device_id, attribute]
 
         except Exception as e:
-            self.logger.warning(f"Malformed device topic: {components} ({e})")
+            self.logger.warning(f"malformed device topic: {components} ({e})")
             return None
 
     def safe_split_device(self: Govee2Mqtt, topic: str, segment: str) -> list[str]:
@@ -94,7 +94,7 @@ class MqttMixin(BaseMqttMixin):
         try:
             return segment.split("-", 1)
         except ValueError:
-            self.logger.warning(f"Ignoring malformed topic: {topic}")
+            self.logger.warning(f"ignoring malformed topic: {topic}")
             return []
 
     def is_discovered(self: Govee2Mqtt, device_id: str) -> bool:

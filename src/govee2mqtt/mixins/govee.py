@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 class GoveeMixin:
     async def refresh_device_list(self: Govee2Mqtt) -> None:
-        self.logger.info(f"Refreshing device list from Govee (every {self.device_list_interval} sec)")
+        self.logger.info(f"refreshing device list from Govee (every {self.device_list_interval} sec)")
 
         govee_devices = await self.get_device_list()
         if not govee_devices:
@@ -35,13 +35,13 @@ class GoveeMixin:
         missing_devices = set(self.devices.keys()) - seen_devices
         for device_id in missing_devices:
             await self.publish_device_availability(device_id, online=False)
-            self.logger.warning(f"Device {device_id} not seen in Govee API list — marked offline")
+            self.logger.warning(f"device {device_id} not seen in Govee API list — marked offline")
 
         # Handle first discovery completion
         if not self.discovery_complete:
             await asyncio.sleep(5)
             await self.rediscover_all()
-            self.logger.info("First-time device setup and discovery is done")
+            self.logger.info("first-time device setup and discovery is done")
             self.discovery_complete = True
 
     # convert Govee device capabilities into MQTT components
@@ -68,7 +68,7 @@ class GoveeMixin:
         device_name = device.get("deviceName", "Unknown Device")
         device_id = device.get("device", "Unknown ID")
 
-        self.logger.debug(f'Unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
+        self.logger.debug(f'unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
 
         return ""
 
@@ -231,14 +231,14 @@ class GoveeMixin:
             ]
         ]
         if unsupported:
-            self.logger.debug(f'Unhandled light capabilities for {light["deviceName"]}: {unsupported}')
+                    self.logger.debug(f'unhandled light capabilities for {light["deviceName"]}: {unsupported}')
 
         self.upsert_device(device_id, component=device, cmps={k: v for k, v in device["cmps"].items()})
         self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku", None)})
         await self.build_device_states(device_id)
 
         if not self.is_discovered(device_id):
-            self.logger.info(f'Added new light: "{light["deviceName"]}" [Govee {light["sku"]}] ({device_id})')
+                    self.logger.info(f'added new light: "{light["deviceName"]}" [Govee {light["sku"]}] ({device_id})')
 
         await self.publish_device_discovery(device_id)
         await self.publish_device_availability(device_id, online=True)
@@ -328,7 +328,7 @@ class GoveeMixin:
                 await self.build_device_states(device_id)
 
                 if not self.is_discovered(device_id):
-                    self.logger.info(f'Added new sensor: "{sensor["deviceName"]}" [Govee {sensor["sku"]}] ({device_id})')
+                    self.logger.info(f'added new sensor: "{sensor["deviceName"]}" [Govee {sensor["sku"]}] ({device_id})')
 
                 await self.publish_device_discovery(device_id)
                 await self.publish_device_availability(device_id, online=True)

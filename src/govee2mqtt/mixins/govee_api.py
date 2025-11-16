@@ -29,7 +29,7 @@ class GoveeAPIMixin:
     def reset_api_call_count(self: Govee2Mqtt) -> None:
         self.api_calls = 0
         self.last_call_date = datetime.now(tz=ZoneInfo(self.timezone)).date()
-        self.logger.debug("Reset api call count for new day")
+        self.logger.debug("reset api call count for new day")
 
     def get_api_calls(self: Govee2Mqtt) -> int:
         return self.api_calls
@@ -50,23 +50,23 @@ class GoveeAPIMixin:
                 self.rate_limited = r.status == 429
                 if r.status != 200:
                     if r.status == 429:
-                        self.logger.warning("Rate-limited by Govee getting device list")
+                        self.logger.warning("rate-limited by Govee getting device list")
                     else:
-                        self.logger.error(f"Error ({r.status}) getting device list")
+                        self.logger.error(f"error ({r.status}) getting device list")
                     return []
 
                 data = await r.json()
 
         except ClientError:
-            self.logger.error("Request error communicating with Govee for device list")
+            self.logger.error("request error communicating with Govee for device list")
             return []
         except Exception:
-            self.logger.error("Error communicating with Govee for device list")
+            self.logger.error("error communicating with Govee for device list")
             return []
 
         result = data.get("data", [])
         if not isinstance(result, list):
-            self.logger.error(f"Unexpected response type from Govee: {type(result).__name__}")
+            self.logger.error(f"unexpected response type from Govee: {type(result).__name__}")
             return []
         return result
 
@@ -87,18 +87,18 @@ class GoveeAPIMixin:
 
                 if r.status != 200:
                     if r.status == 429:
-                        self.logger.error(f"Rate-limited by Govee getting device ({device_id})")
+                        self.logger.error(f"rate-limited by Govee getting device ({device_id})")
                     else:
-                        self.logger.error(f"Error ({r.status}) getting device ({device_id})")
+                        self.logger.error(f"error ({r.status}) getting device ({device_id})")
                     return {}
 
                 data = await r.json()
 
         except aiohttp.ClientError as e:
-            self.logger.error(f"Request error communicating with Govee for device ({device_id}): {e}")
+            self.logger.error(f"request error communicating with Govee for device ({device_id}): {e}")
             return {}
         except Exception as e:
-            self.logger.error(f"Error communicating with Govee for device ({device_id}): {e}")
+            self.logger.error(f"error communicating with Govee for device ({device_id}): {e}")
             return {}
 
         new_capabilities: dict[str, Any] = {}
@@ -133,19 +133,19 @@ class GoveeAPIMixin:
                 self.rate_limited = r.status == 429
                 if r.status != 200:
                     if r.status == 429:
-                        self.logger.error(f"Rate-limited by Govee sending command to device ({device_id})")
+                        self.logger.error(f"rate-limited by Govee sending command to device ({device_id})")
                     else:
-                        self.logger.error(f"Error ({r.status}) sending command to device ({device_id})")
+                        self.logger.error(f"error ({r.status}) sending command to device ({device_id})")
                     return {}
 
                 data = await r.json()
-                self.logger.debug(f"Raw response from Govee: {data}")
+                self.logger.debug(f"raw response from Govee: {data}")
 
         except ClientError:
-            self.logger.error(f"Request error communicating with Govee sending command to device ({device_id})")
+            self.logger.error(f"request error communicating with Govee sending command to device ({device_id})")
             return {}
         except Exception:
-            self.logger.error(f"Error communicating with Govee sending command to device ({device_id})")
+            self.logger.error(f"error communicating with Govee sending command to device ({device_id})")
             return {}
 
         new_capabilities = {}
@@ -161,7 +161,7 @@ class GoveeAPIMixin:
                 # only if we got any `capabilties` back from Govee will we update the `last_update`
                 new_capabilities["lastUpdate"] = datetime.now(ZoneInfo(self.timezone))
         except Exception:
-            self.logger.error(f"Failed to process response sending command to device ({device_id})")
+            self.logger.error(f"failed to process response sending command to device ({device_id})")
             return {}
 
         return new_capabilities

@@ -116,16 +116,16 @@ class Base:
                 await cast(Any, self).publish_service_availability("offline")
                 cast(Any, self).mqttc.loop_stop()
             except Exception as e:
-                self.logger.debug(f"MQTT loop_stop failed: {e}")
+                self.logger.debug(f"mqtt loop_stop failed: {e}")
 
             if cast(Any, self).mqttc.is_connected():
                 try:
                     cast(Any, self).mqttc.disconnect()
-                    self.logger.info("Disconnected from MQTT broker")
+                    self.logger.info("disconnected from MQTT broker")
                 except Exception as e:
-                    self.logger.warning(f"Error during MQTT disconnect: {e}")
+                    self.logger.warning(f"error during MQTT disconnect: {e}")
 
-        self.logger.info("Exiting gracefully")
+        self.logger.info("exiting gracefully")
 
     def save_state(self: Govee2Mqtt) -> None:
         data_file = Path(self.config["config_path"]) / "govee2mqtt.dat"
@@ -135,7 +135,7 @@ class Base:
         }
         with open(data_file, "w", encoding="utf-8") as file:
             json.dump(state, file, indent=4)
-        self.logger.info(f"Saved state to {data_file}")
+        self.logger.info(f"saved state to {data_file}")
 
     def restore_state(self: Govee2Mqtt) -> None:
         data_file = Path(self.config["config_path"]) / "govee2mqtt.dat"
@@ -143,4 +143,4 @@ class Base:
             with open(data_file, "r") as file:
                 state = json.loads(file.read())
                 self.restore_state_values(state["api_calls"], state["last_call_date"])
-            self.logger.info(f"Restored state from {data_file}")
+            self.logger.info(f"restored state from {data_file}")
