@@ -96,7 +96,7 @@ class GoveeMixin:
             "cmps": {
                 "light": {
                     "platform": "light",
-                    "name": light["deviceName"],
+                    "name": "Light",
                     "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
                     "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
                     "avty_t": self.mqtt_helper.avty_t(device_id),
