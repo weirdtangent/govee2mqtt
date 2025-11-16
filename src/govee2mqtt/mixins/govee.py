@@ -231,14 +231,14 @@ class GoveeMixin:
             ]
         ]
         if unsupported:
-                    self.logger.debug(f'unhandled light capabilities for {light["deviceName"]}: {unsupported}')
+            self.logger.debug(f'unhandled light capabilities for {light["deviceName"]}: {unsupported}')
 
         self.upsert_device(device_id, component=device, cmps={k: v for k, v in device["cmps"].items()})
         self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku", None)})
         await self.build_device_states(device_id)
 
         if not self.is_discovered(device_id):
-                    self.logger.info(f'added new light: "{light["deviceName"]}" [Govee {light["sku"]}] ({device_id})')
+            self.logger.info(f'added new light: "{light["deviceName"]}" [Govee {light["sku"]}] ({device_id})')
 
         await self.publish_device_discovery(device_id)
         await self.publish_device_availability(device_id, online=True)
