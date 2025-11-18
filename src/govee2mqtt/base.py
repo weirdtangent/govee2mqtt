@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Jeff CulverhouseA
+# Copyright (c) 2025 Jeff Culverhouse
 import aiohttp
 import argparse
 import asyncio
@@ -56,17 +56,12 @@ class Base:
         self.devices: dict[str, Any] = {}
         self.states: dict[str, Any] = {}
         self.boosted: list[str] = []
-        self.events: list[str] = []
-
-        self.running = False
-        self.discovery_complete = False
 
         self.mqttc: Client
         self.mqtt_connect_time: datetime
         self.client_id = self.mqtt_helper.client_id()
 
-        self.service = self.mqtt_config["prefix"]
-        self.service_name = f"{self.service} service"
+        self.qos = self.mqtt_config["qos"]
 
         self.device_interval = self.config["govee"].get("device_interval", 30)
         self.device_boost_interval = self.config["govee"].get("device_boost_interval", 5)
@@ -75,7 +70,7 @@ class Base:
         self.api_key = self.config["govee"]["api_key"]
         self.rate_limited = False
         self.api_calls = 0
-        self.last_call_date = datetime.now().date()
+        self.last_call_date = datetime.now()
         self.timezone = self.config["timezone"]
 
     async def __aenter__(self: Self) -> Govee2Mqtt:
@@ -121,9 +116,9 @@ class Base:
             if cast(Any, self).mqttc.is_connected():
                 try:
                     cast(Any, self).mqttc.disconnect()
-                    self.logger.info("disconnected from MQTT broker")
+                    self.logger.info("disconnected from mqtt broker")
                 except Exception as e:
-                    self.logger.warning(f"error during MQTT disconnect: {e}")
+                    self.logger.warning(f"error during mqtt disconnect: {e}")
 
         self.logger.info("exiting gracefully")
 

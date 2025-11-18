@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
 import asyncio
+from datetime import timezone
 import json
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -36,7 +36,7 @@ class PublishMixin:
             "qos": self.qos,
             "cmps": {
                 "server": {
-                    "platform": "binary_sensor",
+                    "p": "binary_sensor",
                     "name": self.service_name,
                     "uniq_id": self.mqtt_helper.svc_unique_id("server"),
                     "stat_t": self.mqtt_helper.stat_t(device_id, "service", "server"),
@@ -47,7 +47,7 @@ class PublishMixin:
                     "icon": "mdi:server",
                 },
                 "api_calls": {
-                    "platform": "sensor",
+                    "p": "sensor",
                     "name": "API calls today",
                     "uniq_id": self.mqtt_helper.svc_unique_id("api_calls"),
                     "stat_t": self.mqtt_helper.stat_t(device_id, "service", "api_calls"),
@@ -57,7 +57,7 @@ class PublishMixin:
                     "icon": "mdi:api",
                 },
                 "rate_limited": {
-                    "platform": "binary_sensor",
+                    "p": "binary_sensor",
                     "name": "Rate limited",
                     "uniq_id": self.mqtt_helper.svc_unique_id("rate_limited"),
                     "stat_t": self.mqtt_helper.stat_t(device_id, "service", "rate_limited"),
@@ -68,7 +68,7 @@ class PublishMixin:
                     "icon": "mdi:speedometer-slow",
                 },
                 "refresh_interval": {
-                    "platform": "number",
+                    "p": "number",
                     "name": "Refresh Interval",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_refresh_interval",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "refresh_interval"),
@@ -81,7 +81,7 @@ class PublishMixin:
                     "mode": "box",
                 },
                 "rescan_interval": {
-                    "platform": "number",
+                    "p": "number",
                     "name": "Rescan Interval",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_rescan_interval",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "rescan_interval"),
@@ -94,7 +94,7 @@ class PublishMixin:
                     "mode": "box",
                 },
                 "boost_interval": {
-                    "platform": "number",
+                    "p": "number",
                     "name": "Boost Interval",
                     "uniq_id": f"{self.mqtt_helper.service_slug}_boost_interval",
                     "stat_t": self.mqtt_helper.stat_t("service", "service", "boost_interval"),
@@ -110,7 +110,8 @@ class PublishMixin:
         }
 
         topic = self.mqtt_helper.disc_t("device", device_id)
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(device))
+        payload = {k: v for k, v in device.items() if k != "p"}
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(payload), retain=True)
         self.upsert_state(device_id, internal={"discovered": True})
 
         self.logger.debug(f"discovery published for {self.service} ({self.mqtt_helper.service_slug})")
@@ -119,10 +120,17 @@ class PublishMixin:
         await asyncio.to_thread(self.mqtt_helper.safe_publish, self.mqtt_helper.avty_t("service"), status)
 
     async def publish_service_state(self: Govee2Mqtt) -> None:
+        # we keep last_call_date in localtime so it rolls-over the api call counter
+        # at the right time (midnight, local) but we want to send last_call_date
+        # to HomeAssistant as UTC
+        last_call_date = self.last_call_date
+        local_tz = last_call_date.astimezone().tzinfo
+
         service = {
-            "api_calls": self.get_api_calls(),
-            "last_api_call": str(self.last_call_date),
-            "rate_limited": "YES" if self.is_rate_limited() else "NO",
+            "server": "online",
+            "api_calls": self.api_calls,
+            "last_api_call": last_call_date.replace(tzinfo=local_tz).astimezone(timezone.utc).isoformat(),
+            "rate_limited": "YES" if self.rate_limited else "NO",
             "refresh_interval": self.device_interval,
             "rescan_interval": self.device_list_interval,
             "boost_interval": self.device_boost_interval,
@@ -138,36 +146,37 @@ class PublishMixin:
     # Devices -------------------------------------------------------------------------------------
 
     async def publish_device_discovery(self: Govee2Mqtt, device_id: str) -> None:
-        if self.is_discovered(device_id):
-            return
-
         topic = self.mqtt_helper.disc_t("device", device_id)
-        component = self.get_component(device_id)
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(component))
+        payload = json.dumps(self.devices[device_id]["component"])
+
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, payload, retain=True)
         self.upsert_state(device_id, internal={"discovered": True})
 
     async def publish_device_availability(self: Govee2Mqtt, device_id: str, online: bool = True) -> None:
+        topic = self.mqtt_helper.avty_t(device_id)
         payload = "online" if online else "offline"
 
-        avty_t = self.get_device_availability_topic(device_id)
-        await asyncio.to_thread(self.mqtt_helper.safe_publish, avty_t, payload)
+        await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, payload, retain=True)
 
     async def publish_device_state(self: Govee2Mqtt, device_id: str, subject: str = "", sub: str = "") -> None:
-        if not self.is_discovered(device_id):
-            self.logger.debug(f"discovery not complete for {device_id} yet, holding off on sending state")
-            return
-
         for state, value in self.states[device_id].items():
             if subject and state != subject:
                 continue
-            if isinstance(value, dict):
+            # Attributes need to be published as a single JSON object to the attributes topic
+            if state == "attributes" and isinstance(value, dict):
+                topic = self.mqtt_helper.stat_t(device_id, "attributes")
+                await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, json.dumps(value), retain=True)
+            # otherwise, if it's a dict, publish each key/value pair separately
+            elif isinstance(value, dict):
                 for k, v in value.items():
                     if sub and k != sub:
                         continue
                     topic = self.mqtt_helper.stat_t(device_id, state, k)
+                    # if it's a list, convert to JSON
                     if isinstance(v, list):
-                        v = ",".join(map(str, v))
-                    await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, v)
+                        v = json.dumps(v)
+                    await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, v, retain=True)
+            # otherwise, publish the value as is
             else:
                 topic = self.mqtt_helper.stat_t(device_id, state)
                 await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, value)

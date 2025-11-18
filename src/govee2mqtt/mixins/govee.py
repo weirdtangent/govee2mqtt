@@ -3,7 +3,7 @@
 import asyncio
 import re
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
@@ -16,7 +16,6 @@ class GoveeMixin:
         govee_devices = await self.get_device_list()
         if not govee_devices:
             return
-        await self.publish_service_state()
 
         seen_devices: set[str] = set()
 
@@ -64,16 +63,15 @@ class GoveeMixin:
         if re.compile(r"^H5\d{3,}$").match(sku):
             return "sensor"
 
-        # If we reach here, it's unsupported — log details for future handling
-        device_name = device.get("deviceName", "Unknown Device")
-        device_id = device.get("device", "Unknown ID")
-
-        self.logger.debug(f'unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
-
+        # If we reach here, it's unsupported — log details (the first time)for future handling
+        if not self.discovery_complete:
+            device_name = device.get("deviceName", "Unknown Device")
+            device_id = device.get("device", "Unknown ID")
+            self.logger.debug(f'unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
         return ""
 
     async def build_light(self: Govee2Mqtt, light: dict[str, Any]) -> str:
-        raw_id = cast(str, light["device"])
+        raw_id = str(light["device"])
         device_id = raw_id.replace(":", "").upper()
 
         device = {
@@ -95,8 +93,8 @@ class GoveeMixin:
             "qos": self.qos,
             "cmps": {
                 "light": {
-                    "platform": "light",
-                    "name": "Light",
+                    "p": "light",
+                    "name": light["deviceName"],
                     "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
                     "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
                     "avty_t": self.mqtt_helper.avty_t(device_id),
@@ -131,7 +129,7 @@ class GoveeMixin:
                     device["cmps"]["light"]["max_kelvin"] = cap["parameters"]["range"]["max"] or 9000
                 case "gradientToggle":
                     device["cmps"]["gradient"] = {
-                        "platform": "switch",
+                        "p": "switch",
                         "name": "Gradient",
                         "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "gradient"),
                         "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "gradient"),
@@ -140,7 +138,7 @@ class GoveeMixin:
                     }
                 case "nightlightToggle":
                     device["cmps"]["nightlight"] = {
-                        "platform": "switch",
+                        "p": "switch",
                         "name": "Nightlight",
                         "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "nightlight"),
                         "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "nightlight"),
@@ -149,7 +147,7 @@ class GoveeMixin:
                     }
                 case "dreamViewToggle":
                     device["cmps"]["dreamview"] = {
-                        "platform": "switch",
+                        "p": "switch",
                         "name": "Dreamview",
                         "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "dreamview"),
                         "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "dreamview"),
@@ -210,9 +208,7 @@ class GoveeMixin:
             cmpset.discard("brightness")
             device["cmps"]["light"].pop("brightness_scale", None)
             device["cmps"]["light"].pop("brightness_state_topic", None)
-            device["cmps"]["light"].pop("brightness_value_template", None)
             device["cmps"]["light"].pop("brightness_command_topic", None)
-            device["cmps"]["light"].pop("brightness_command_template", None)
         device["cmps"]["light"]["supported_color_modes"] = list(cmpset)
 
         # watch for capabilities we don't handle
@@ -230,17 +226,17 @@ class GoveeMixin:
                 "dreamViewToggle",
             ]
         ]
-        if unsupported:
+        if unsupported and not self.discovery_complete:
             self.logger.debug(f'unhandled light capabilities for {light["deviceName"]}: {unsupported}')
 
-        self.upsert_device(device_id, component=device, cmps={k: v for k, v in device["cmps"].items()})
+        self.upsert_device(device_id, component=device)
         self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku", None)})
         await self.build_device_states(device_id)
 
         if not self.is_discovered(device_id):
             self.logger.info(f'added new light: "{light["deviceName"]}" [Govee {light["sku"]}] ({device_id})')
+            await self.publish_device_discovery(device_id)
 
-        await self.publish_device_discovery(device_id)
         await self.publish_device_availability(device_id, online=True)
         await self.publish_device_state(device_id)
 
@@ -274,16 +270,14 @@ class GoveeMixin:
                         "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
                         "qos": self.qos,
                         "cmps": {
-                            "temperature": {
-                                "platform": "sensor",
-                                "name": "Temperature",
-                                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
-                                "stat_t": self.mqtt_helper.stat_t(parent, "temperature"),
-                                "device_class": "temperature",
-                                "state_class": "measurement",
-                                "unit_of_measurement": "°F",
-                                "icon": "mdi:thermometer",
-                            },
+                            "p": "sensor",
+                            "name": "Temperature",
+                            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
+                            "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                            "device_class": "temperature",
+                            "state_class": "measurement",
+                            "unit_of_measurement": "°F",
+                            "icon": "mdi:thermometer",
                         },
                     }
 
@@ -307,16 +301,14 @@ class GoveeMixin:
                         "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
                         "qos": self.qos,
                         "cmps": {
-                            "humidity": {
-                                "platform": "sensor",
-                                "name": "Humidity",
-                                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
-                                "stat_t": self.mqtt_helper.stat_t(parent, "humidity"),
-                                "device_class": "humidity",
-                                "state_class": "measurement",
-                                "unit_of_measurement": "%",
-                                "icon": "mdi:water-percent",
-                            },
+                            "p": "sensor",
+                            "name": "Humidity",
+                            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
+                            "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                            "device_class": "humidity",
+                            "state_class": "measurement",
+                            "unit_of_measurement": "%",
+                            "icon": "mdi:water-percent",
                         },
                     }
                 case _:

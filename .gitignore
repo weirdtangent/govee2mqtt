@@ -41,7 +41,6 @@ config.yaml
 config.local.yaml
 govee2mqtt.dat
 NOTES
-tools/
 
 # -----------------------------------------------------------------------------
 # 🐋 Docker, runtime, and app data

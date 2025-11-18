@@ -205,33 +205,11 @@ class HelpersMixin:
 
         return capabilities
 
-    def _extract_scalar(self: Govee2Mqtt, val: Any) -> Any:
-        """Try to get a representative scalar from arbitrary API data."""
-        # direct primitive
-        if isinstance(val, (int, float, str, bool)):
-            return val
-
-        # dict: look for a likely scalar value
-        if isinstance(val, dict):
-            for v in val.values():
-                if isinstance(v, (int, float, str, bool)):
-                    return v
-            return None
-
-        # list: prefer first simple element
-        if isinstance(val, list) and val:
-            for v in val:
-                if isinstance(v, (int, float, str, bool)):
-                    return v
-            return None
-
-        return None
-
     # send command to Govee -----------------------------------------------------------------------
 
     async def send_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         if device_id == "service":
-            self.logger.error(f'why are you trying to send {command} to the "service"? ignoring you.')
+            self.logger.error(f'why are you trying to send {command} to the "service"? Ignoring you.')
             return
 
         # convert what we received in the command to Govee API capabilities
@@ -266,7 +244,7 @@ class HelpersMixin:
                 need_boost = True
 
         # if we send a command and did not get a state change back on the response
-        # lets boost this device to refresh it, just in case
+        # lets boost this device to refresh it soon, just in case
         if need_boost and device_id not in self.boosted:
             self.boosted.append(device_id)
 
@@ -473,37 +451,6 @@ class HelpersMixin:
 
     def get_device_sku(self: Govee2Mqtt, device_id: str) -> str:
         return cast(str, self.states[device_id]["internal"]["sku"])
-
-    def get_component(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
-        if device_id in self.devices:
-            return cast(dict, self.devices[device_id]["component"])
-        if "_" not in device_id:
-            raise ValueError(f"Cannot get_component for {device_id}")
-        parts = device_id.split("_")
-        return cast(dict, self.devices[parts[0]]["cmps"][parts[1]])
-
-    def get_platform(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
-        return cast(dict, self.devices[device_id]["component"]["platform"])
-
-    def get_device_state_topic(self: Govee2Mqtt, device_id: str, mode_name: str = "") -> str:
-        component = self.get_component(device_id)["cmps"][f"{device_id}_{mode_name}"] if mode_name else self.get_component(device_id)
-
-        match component["platform"]:
-            case "camera":
-                return cast(str, component["topic"])
-            case "image":
-                return cast(str, component["image_topic"])
-            case _:
-                return cast(str, component.get("stat_t") or component.get("state_topic"))
-
-    def get_device_image_topic(self: Govee2Mqtt, device_id: str) -> str:
-        component = self.get_component(device_id)
-        return cast(str, component["topic"])
-
-    def get_device_availability_topic(self: Govee2Mqtt, device_id: str) -> str:
-        component = self.get_component(device_id)
-        return cast(str, component.get("avty_t") or component.get("availability_topic"))
-
     # Upsert devices and states -------------------------------------------------------------------
 
     def _assert_no_tuples(self: Govee2Mqtt, data: Any, path: str = "root") -> None:

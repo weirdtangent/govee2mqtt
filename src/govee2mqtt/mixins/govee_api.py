@@ -19,23 +19,18 @@ COMMAND_URL = "https://openapi.api.govee.com/router/api/v1/device/control"
 class GoveeAPIMixin:
     def restore_state_values(self: Govee2Mqtt, api_calls: int, last_call_date: str) -> None:
         self.api_calls = api_calls
-        self.last_call_date = datetime.strptime(last_call_date, "%Y-%m-%d").date()
+        self.last_call_date = datetime.strptime(last_call_date, "%Y-%m-%d %H:%M:%S.%f")
 
     def increase_api_calls(self: Govee2Mqtt) -> None:
-        if not self.last_call_date or self.last_call_date != datetime.now(tz=ZoneInfo(self.timezone)).date():
-            self.reset_api_call_count()
+        if not self.last_call_date or self.last_call_date.date() != datetime.now().date():
+            self.api_calls = 0
+        self.last_call_date = datetime.now()
         self.api_calls += 1
 
-    def reset_api_call_count(self: Govee2Mqtt) -> None:
-        self.api_calls = 0
-        self.last_call_date = datetime.now(tz=ZoneInfo(self.timezone)).date()
-        self.logger.debug("reset api call count for new day")
-
-    def get_api_calls(self: Govee2Mqtt) -> int:
-        return self.api_calls
-
-    def is_rate_limited(self: Govee2Mqtt) -> bool:
-        return self.rate_limited
+    def set_if_rate_limited(self: Govee2Mqtt, status: int) -> None:
+        self.rate_limited = status == 429
+        if self.rate_limited:
+            self.logger.warning("request rate-limited by Govee")
 
     def get_headers(self: Govee2Mqtt) -> dict[str, str]:
         return {"Content-Type": "application/json", "Govee-API-Key": self.api_key}
@@ -46,13 +41,10 @@ class GoveeAPIMixin:
         try:
             async with self.session.get(DEVICE_LIST_URL, headers=headers) as r:
                 self.increase_api_calls()
+                self.set_if_rate_limited(r.status)
 
-                self.rate_limited = r.status == 429
                 if r.status != 200:
-                    if r.status == 429:
-                        self.logger.warning("rate-limited by Govee getting device list")
-                    else:
-                        self.logger.error(f"error ({r.status}) getting device list")
+                    self.logger.error(f"error ({r.status}) getting device list")
                     return []
 
                 data = await r.json()
@@ -83,13 +75,9 @@ class GoveeAPIMixin:
         try:
             async with self.session.post(DEVICE_URL, headers=headers, json=body) as r:
                 self.increase_api_calls()
-                self.rate_limited = r.status == 429
+                self.set_if_rate_limited(r.status)
 
                 if r.status != 200:
-                    if r.status == 429:
-                        self.logger.error(f"rate-limited by Govee getting device ({device_id})")
-                    else:
-                        self.logger.error(f"error ({r.status}) getting device ({device_id})")
                     return {}
 
                 data = await r.json()
@@ -129,17 +117,12 @@ class GoveeAPIMixin:
         try:
             async with self.session.post(COMMAND_URL, headers=headers, json=body) as r:
                 self.increase_api_calls()
+                self.set_if_rate_limited(r.status)
 
-                self.rate_limited = r.status == 429
                 if r.status != 200:
-                    if r.status == 429:
-                        self.logger.error(f"rate-limited by Govee sending command to device ({device_id})")
-                    else:
-                        self.logger.error(f"error ({r.status}) sending command to device ({device_id})")
                     return {}
 
                 data = await r.json()
-                self.logger.debug(f"raw response from Govee: {data}")
 
         except ClientError:
             self.logger.error(f"request error communicating with Govee sending command to device ({device_id})")
