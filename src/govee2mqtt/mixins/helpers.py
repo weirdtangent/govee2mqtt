@@ -451,6 +451,7 @@ class HelpersMixin:
 
     def get_device_sku(self: Govee2Mqtt, device_id: str) -> str:
         return cast(str, self.states[device_id]["internal"]["sku"])
+
     # Upsert devices and states -------------------------------------------------------------------
 
     def _assert_no_tuples(self: Govee2Mqtt, data: Any, path: str = "root") -> None:
