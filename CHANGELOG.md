@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.1.1...v2.2.0) (2025-11-20)
+
+
+### Features
+
+* add humidifier support ([b1a74d2](https://github.com/weirdtangent/govee2mqtt/commit/b1a74d21ca7dd254b5fa673c99097586791d6636))
+
 ## [2.1.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.1.0...v2.1.1) (2025-11-16)
 
 
