@@ -128,7 +128,7 @@ class GoveeMixin:
         return device_id
 
     async def build_humidifier(self: Govee2Mqtt, humidifier: dict[str, Any]) -> str:
-        raw_id = humidifier["device"]
+        raw_id = str(humidifier["device"])
         device_id = raw_id.replace(":", "").upper()
 
         min_humidity = 0
