@@ -51,11 +51,40 @@ class GoveeMixin:
                 return await self.build_light(device)
             case "sensor":
                 return await self.build_sensor(device)
-        return ""
+            # case "fan":
+            #     return await self.build_fan(device)
+            # case "air_purifier":
+            #     return await self.build_air_purifier(device)
+            case "humidifier":
+                return await self.build_humidifier(device)
+            # case "dehumidifier":
+            #     return await self.build_dehumidifier(device)
+            # case "aroma_diffuser":
+            case _:
+                if device_class:
+                    self.logger.debug(
+                        f'recognized Govee device class "{device_class}" but not handled yet, for device "{device["deviceName"]}" [{device["sku"]}] ({device["device"]})'
+                    )
+                return ""
 
     def classify_device(self: Govee2Mqtt, device: dict[str, Any]) -> str:
         sku = device["sku"]
 
+        # fans are H710x
+        if re.compile(r"^H710\d{1,}$").match(sku):
+            return "fan"
+        # air purifiers are H712x
+        if re.compile(r"^H712\d{1,}$").match(sku):
+            return "air_purifier"
+        # humidifiers are H714x
+        if re.compile(r"^H714\d{1,}$").match(sku):
+            return "humidifier"
+        # dehumidifiers are H715x
+        if re.compile(r"^H715\d{1,}$").match(sku):
+            return "dehumidifier"
+        # aroma diffusers are H716x
+        if re.compile(r"^H716\d{1,}$").match(sku):
+            return "aroma_diffuser"
         # lights are H6xxx, H7xxx, H8xxx
         if re.compile(r"^H[678]\d{3,}$").match(sku):
             return "light"
@@ -91,44 +120,300 @@ class GoveeMixin:
             },
             "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
             "qos": self.qos,
-            "cmps": {
-                "light": {
-                    "p": "light",
-                    "name": light["deviceName"],
-                    "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
-                    "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
-                    "avty_t": self.mqtt_helper.avty_t(device_id),
-                    "cmd_t": self.mqtt_helper.cmd_t(device_id, "light"),
-                    "supported_color_modes": ["onoff"],
-                },
+            "cmps": self.build_light_components(device_id, light),
+        }
+
+        self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku")})
+        await self.prepare_device(device, raw_id, device_id, "light")
+        return device_id
+
+    async def build_humidifier(self: Govee2Mqtt, humidifier: dict[str, Any]) -> str:
+        raw_id = humidifier["device"]
+        device_id = raw_id.replace(":", "").upper()
+
+        min_humidity = 0
+        max_humidity = 100
+        nightlight_options = ["Off"]
+        nightlight_scene_labels: dict[int, str] = {0: "Off"}
+        work_mode_options: list[str] = []
+        manual_level_values: list[int] = []
+        work_mode_value_labels: dict[int, str] = {}
+        manual_level_labels: dict[int, str] = {}
+        device_has: dict[str, bool] = {}
+
+        for cap in humidifier.get("capabilities", []):
+            device_has[cap["instance"]] = True
+            match cap["instance"]:
+                case "humidity":
+                    min_humidity = cap.get("parameters", {}).get("range", {}).get("min", 0)
+                    max_humidity = cap.get("parameters", {}).get("range", {}).get("max", 100)
+                case "nightlightScene":
+                    for option in cap.get("parameters", {}).get("options", []):
+                        name = option.get("name")
+                        value = option.get("value")
+                        if not name:
+                            continue
+                        if isinstance(value, int):
+                            nightlight_scene_labels[value] = name
+                        if name not in nightlight_options:
+                            nightlight_options.append(name)
+                case "workMode":
+                    fields = cap.get("parameters", {}).get("fields", [])
+                    mode_field = next((f for f in fields if f.get("fieldName") == "workMode"), None)
+                    mode_value_field = next((f for f in fields if f.get("fieldName") == "modeValue"), None)
+
+                    if mode_value_field:
+                        for option in mode_value_field.get("options", []):
+                            if option.get("name", "").lower() != "manual":
+                                continue
+                            for value in option.get("options", []):
+                                level = value.get("value")
+                                if isinstance(level, int):
+                                    manual_level_values.append(level)
+                                    manual_level_labels[level] = manual_level_labels.get(level, f"Mist Level {level}")
+
+                    if mode_field:
+                        for option in mode_field.get("options", []):
+                            name = option.get("name")
+                            value = option.get("value")
+                            if not name:
+                                continue
+                            if isinstance(value, int):
+                                work_mode_value_labels[value] = name
+                            if name.lower() == "manual" and manual_level_values:
+                                for level in sorted(set(manual_level_values)):
+                                    label = manual_level_labels.get(level, f"Mist Level {level}")
+                                    if label not in work_mode_options:
+                                        work_mode_options.append(label)
+                            elif name not in work_mode_options:
+                                work_mode_options.append(name)
+
+        cmps: dict[str, dict[str, Any]] = {}
+
+        cmps["power"] = {
+            "p": "switch",
+            "name": "Power",
+            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidifier"),
+            "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
+            "cmd_t": self.mqtt_helper.cmd_t(device_id, "power"),
+            "device_class": "switch",
+            "icon": "mdi:power",
+        }
+        self.upsert_state(device_id, switch={"power": "OFF"})
+
+        if device_has.get("brightness", False) or device_has.get("colorRgb", False):
+            cmps.update(self.build_light_components(device_id, humidifier))
+            self.upsert_state(device_id, light={"state": "OFF"})
+
+        if device_has.get("humidity", False):
+            cmps["humidity"] = {
+                "p": "number",
+                "name": "Humidity",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "number", "humidity"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "number", "humidity"),
+                "min": min_humidity,
+                "max": max_humidity,
+                "step": 1,
+                "unit_of_measurement": "%",
+                "state_class": "measurement",
+                "device_class": "humidity",
+                "entity_category": "config",
+                "icon": "mdi:water-percent",
+            }
+            self.upsert_state(device_id, number={"humidity": 50})
+
+        if device_has.get("warmMistToggle", False):
+            cmps["warm_mist"] = {
+                "p": "switch",
+                "name": "Warm Mist",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "switch"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "warm_mist"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "warm_mist"),
+                "device_class": "switch",
+                "icon": "mdi:heat-wave",
+            }
+            self.upsert_state(device_id, switch={"warm_mist": "OFF"})
+
+        if device_has.get("workMode", False) and work_mode_options:
+            cmps["work_mode"] = {
+                "p": "select",
+                "name": "Work Mode",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "work_mode"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "select", "work_mode"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "select", "work_mode"),
+                "options": work_mode_options,
+                "icon": "mdi:water-pump",
+            }
+            default_work_mode = "Auto" if "Auto" in work_mode_options else work_mode_options[0]
+            self.upsert_state(device_id, select={"work_mode": default_work_mode})
+
+        if device_has.get("nightlightToggle", False) and nightlight_options:
+            cmps["night_light"] = {
+                "p": "select",
+                "name": "Nightlight Scene",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "nightlight_scene"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "select", "nightlight_scene"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "light", "nightlight_scene"),
+                "options": nightlight_options,
+                "icon": "mdi:weather-night",
+            }
+            self.upsert_state(device_id, select={"nightlight_scene": nightlight_options[0]})
+
+        device = {
+            "stat_t": self.mqtt_helper.stat_t(device_id, "humidifier"),
+            "avty_t": self.mqtt_helper.avty_t(device_id),
+            "device": {
+                "name": humidifier["deviceName"],
+                "identifiers": [
+                    self.mqtt_helper.device_slug(device_id),
+                ],
+                "manufacturer": "Govee",
+                "model": humidifier["sku"],
+                "connections": [
+                    ["mac", humidifier["device"]],
+                ],
+                "via_device": self.service,
+            },
+            "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
+            "qos": self.qos,
+            "cmps": cmps,
+        }
+
+        internal: dict[str, Any] = {"raw_id": raw_id, "sku": humidifier.get("sku")}
+        if work_mode_value_labels:
+            internal["work_mode_value_labels"] = work_mode_value_labels
+        if manual_level_labels:
+            internal["manual_level_labels"] = manual_level_labels
+        if nightlight_scene_labels:
+            internal["nightlight_scene_labels"] = nightlight_scene_labels
+        self.upsert_state(device_id, internal=internal)
+
+        await self.prepare_device(device, raw_id, device_id, "humidifier")
+        return device_id
+
+    async def build_sensor(self: Govee2Mqtt, sensor: dict[str, Any]) -> str:
+        raw_id = sensor["device"]
+        parent = raw_id.replace(":", "").upper()
+
+        for cap in sensor["capabilities"]:
+            device_id = None
+            device = None
+            match cap["instance"]:
+                case "sensorTemperature":
+                    device_id = f"{parent}_temp"
+                    device = {
+                        "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                        "avty_t": self.mqtt_helper.avty_t(parent, "sensor"),
+                        "device": {
+                            "name": sensor["deviceName"],
+                            "identifiers": [
+                                self.mqtt_helper.device_slug(device_id),
+                            ],
+                            "manufacturer": "Govee",
+                            "model": sensor["sku"],
+                            "connections": [
+                                ["mac", sensor["device"]],
+                            ],
+                            "via_device": self.service,
+                        },
+                        "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
+                        "qos": self.qos,
+                        "cmps": {
+                            "temperature": {
+                                "p": "sensor",
+                                "name": "Temperature",
+                                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
+                                "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                                "device_class": "temperature",
+                                "state_class": "measurement",
+                                "unit_of_measurement": "°F",
+                                "icon": "mdi:thermometer",
+                            }
+                        },
+                    }
+
+                case "sensorHumidity":
+                    device_id = f"{parent}_hmdy"
+                    device = {
+                        "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                        "avty_t": self.mqtt_helper.avty_t(parent, "sensor"),
+                        "device": {
+                            "name": sensor["deviceName"],
+                            "identifiers": [
+                                self.mqtt_helper.device_slug(device_id),
+                            ],
+                            "manufacturer": "Govee",
+                            "model": sensor["sku"],
+                            "connections": [
+                                ["mac", sensor["device"]],
+                            ],
+                            "via_device": self.service,
+                        },
+                        "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
+                        "qos": self.qos,
+                        "cmps": {
+                            "humidity": {
+                                "p": "sensor",
+                                "name": "Humidity",
+                                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
+                                "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                                "device_class": "humidity",
+                                "state_class": "measurement",
+                                "unit_of_measurement": "%",
+                                "icon": "mdi:water-percent",
+                            }
+                        },
+                    }
+                case _:
+                    continue
+
+            if device_id:
+                self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": sensor.get("sku")})
+                await self.prepare_device(device, raw_id, device_id, sensor["deviceName"])
+                return device_id
+
+        return ""
+
+    def build_light_components(self: Govee2Mqtt, device_id: str, light: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        light_is_nightlight = False
+
+        components: dict[str, dict[str, Any]] = {
+            "light": {
+                "p": "light",
+                "name": "Light",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
+                "avty_t": self.mqtt_helper.avty_t(device_id),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "light"),
+                "supported_color_modes": ["onoff"],
             },
         }
-        self.upsert_state(device_id, light={"state": "OFF"})
 
         # adjust our light component based on what this Govee light can support
         for cap in light["capabilities"]:
             match cap["instance"]:
                 case "brightness":
-                    device["cmps"]["light"]["supported_color_modes"].append("brightness")
-                    device["cmps"]["light"]["brightness_scale"] = cap["parameters"]["range"]["max"]
-                    device["cmps"]["light"]["brightness_state_topic"] = self.mqtt_helper.stat_t(device_id, "light", "brightness")
-                    device["cmps"]["light"]["brightness_command_topic"] = self.mqtt_helper.cmd_t(device_id, "light", "brightness")
+                    components["light"]["supported_color_modes"].append("brightness")
+                    components["light"]["brightness_scale"] = cap["parameters"]["range"]["max"]
+                    components["light"]["brightness_state_topic"] = self.mqtt_helper.stat_t(device_id, "light", "brightness")
+                    components["light"]["brightness_command_topic"] = self.mqtt_helper.cmd_t(device_id, "light", "brightness")
                 case "powerSwitch":
-                    device["cmps"]["light"]["supported_color_modes"].append("onoff")
+                    components["light"]["supported_color_modes"].append("onoff")
                 case "colorRgb":
-                    device["cmps"]["light"]["supported_color_modes"].append("rgb")
-                    device["cmps"]["light"]["rgb_state_topic"] = self.mqtt_helper.stat_t(device_id, "light", "rgb_color")
-                    device["cmps"]["light"]["rgb_command_topic"] = self.mqtt_helper.cmd_t(device_id, "light", "rgb_color")
+                    components["light"]["supported_color_modes"].append("rgb")
+                    components["light"]["rgb_state_topic"] = self.mqtt_helper.stat_t(device_id, "light", "rgb_color")
+                    components["light"]["rgb_command_topic"] = self.mqtt_helper.cmd_t(device_id, "light", "rgb_color")
                     self.upsert_state(device_id, light={"rgb_max": cap["parameters"]["range"]["max"] or 16777215})
                 case "colorTemperatureK":
-                    device["cmps"]["light"]["supported_color_modes"].append("color_temp")
-                    device["cmps"]["light"]["color_temp_kelvin"] = True
-                    device["cmps"]["light"]["color_temp_state_topic"] = self.mqtt_helper.stat_t(device_id, "light", "color_temp")
-                    device["cmps"]["light"]["color_temp_command_topic"] = self.mqtt_helper.cmd_t(device_id, "light", "color_temp")
-                    device["cmps"]["light"]["min_kelvin"] = cap["parameters"]["range"]["min"] or 2000
-                    device["cmps"]["light"]["max_kelvin"] = cap["parameters"]["range"]["max"] or 9000
+                    components["light"]["supported_color_modes"].append("color_temp")
+                    components["light"]["color_temp_kelvin"] = True
+                    components["light"]["color_temp_state_topic"] = self.mqtt_helper.stat_t(device_id, "light", "color_temp")
+                    components["light"]["color_temp_command_topic"] = self.mqtt_helper.cmd_t(device_id, "light", "color_temp")
+                    components["light"]["min_kelvin"] = cap["parameters"]["range"]["min"] or 2000
+                    components["light"]["max_kelvin"] = cap["parameters"]["range"]["max"] or 9000
                 case "gradientToggle":
-                    device["cmps"]["gradient"] = {
+                    components["gradient"] = {
                         "p": "switch",
                         "name": "Gradient",
                         "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "gradient"),
@@ -137,16 +422,9 @@ class GoveeMixin:
                         "icon": ("mdi:gradient-horizontal" if light["sku"] == "H6042" else "mdi:gradient-vertical"),
                     }
                 case "nightlightToggle":
-                    device["cmps"]["nightlight"] = {
-                        "p": "switch",
-                        "name": "Nightlight",
-                        "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "nightlight"),
-                        "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "nightlight"),
-                        "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "nightlight"),
-                        "icon": "mdi:weather-night",
-                    }
+                    light_is_nightlight = True
                 case "dreamViewToggle":
-                    device["cmps"]["dreamview"] = {
+                    components["dreamview"] = {
                         "p": "switch",
                         "name": "Dreamview",
                         "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "dreamview"),
@@ -201,131 +479,33 @@ class GoveeMixin:
                 #         'unique_id': self.mqtt_helper.device_slug(device_id, 'music_sensitivity'),
                 #     }
 
-        # If a color mode (rgb or color_temp) is supported, drop simpler cmps
-        cmpset = set(device["cmps"]["light"]["supported_color_modes"])
+        # If a light supports a color mode (rgb or color_temp), drop simpler light components
+        cmpset = set(components["light"]["supported_color_modes"])
         if "rgb" in cmpset or "color_temp" in cmpset:
             cmpset.discard("onoff")
             cmpset.discard("brightness")
-            device["cmps"]["light"].pop("brightness_scale", None)
-            device["cmps"]["light"].pop("brightness_state_topic", None)
-            device["cmps"]["light"].pop("brightness_command_topic", None)
-        device["cmps"]["light"]["supported_color_modes"] = list(cmpset)
+            components["light"].pop("brightness_scale", None)
+            components["light"].pop("brightness_state_topic", None)
+            components["light"].pop("brightness_command_topic", None)
+        components["light"]["supported_color_modes"] = list(cmpset)
 
-        # watch for capabilities we don't handle
-        unsupported = [
-            cap["instance"]
-            for cap in light["capabilities"]
-            if cap["instance"]
-            not in [
-                "brightness",
-                "powerSwitch",
-                "colorRgb",
-                "colorTemperatureK",
-                "gradientToggle",
-                "nightlightToggle",
-                "dreamViewToggle",
-            ]
-        ]
-        if unsupported and not self.discovery_complete:
-            self.logger.debug(f'unhandled light capabilities for {light["deviceName"]}: {unsupported}')
+        # if light really is a nightlight, rename it and move it to the nightlight component
+        if light_is_nightlight:
+            components["light"]["name"] = "Nightlight"
+            components["light"]["uniq_id"] = self.mqtt_helper.dev_unique_id(device_id, "nightlight")
+            components["nightlight"] = components.pop("light")
 
+        return components
+
+    async def prepare_device(self: Govee2Mqtt, device: dict[str, Any], raw_id: str, device_id: str, type: str) -> None:
         self.upsert_device(device_id, component=device)
-        self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku", None)})
+        if "internal" not in self.states.get(device_id, {}):
+            self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": device["device"]["model"]})
         await self.build_device_states(device_id)
 
         if not self.is_discovered(device_id):
-            self.logger.info(f'added new light: "{light["deviceName"]}" [Govee {light["sku"]}] ({device_id})')
+            self.logger.info(f'added new {type}: "{device["device"]["name"]}" [Govee {device["device"]["model"]}] ({device_id})')
             await self.publish_device_discovery(device_id)
 
         await self.publish_device_availability(device_id, online=True)
         await self.publish_device_state(device_id)
-
-        return device_id
-
-    async def build_sensor(self: Govee2Mqtt, sensor: dict[str, Any]) -> str:
-        raw_id = sensor["device"]
-        parent = raw_id.replace(":", "").upper()
-
-        for cap in sensor["capabilities"]:
-            device_id = None
-            device = None
-            match cap["instance"]:
-                case "sensorTemperature":
-                    device_id = f"{parent}_temp"
-                    device = {
-                        "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
-                        "avty_t": self.mqtt_helper.avty_t(parent, "sensor"),
-                        "device": {
-                            "name": sensor["deviceName"],
-                            "identifiers": [
-                                self.mqtt_helper.device_slug(device_id),
-                            ],
-                            "manufacturer": "Govee",
-                            "model": sensor["sku"],
-                            "connections": [
-                                ["mac", sensor["device"]],
-                            ],
-                            "via_device": self.service,
-                        },
-                        "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
-                        "qos": self.qos,
-                        "cmps": {
-                            "p": "sensor",
-                            "name": "Temperature",
-                            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
-                            "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
-                            "device_class": "temperature",
-                            "state_class": "measurement",
-                            "unit_of_measurement": "°F",
-                            "icon": "mdi:thermometer",
-                        },
-                    }
-
-                case "sensorHumidity":
-                    device_id = f"{parent}_hmdy"
-                    device = {
-                        "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
-                        "avty_t": self.mqtt_helper.avty_t(parent, "sensor"),
-                        "device": {
-                            "name": sensor["deviceName"],
-                            "identifiers": [
-                                self.mqtt_helper.device_slug(device_id),
-                            ],
-                            "manufacturer": "Govee",
-                            "model": sensor["sku"],
-                            "connections": [
-                                ["mac", sensor["device"]],
-                            ],
-                            "via_device": self.service,
-                        },
-                        "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
-                        "qos": self.qos,
-                        "cmps": {
-                            "p": "sensor",
-                            "name": "Humidity",
-                            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
-                            "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
-                            "device_class": "humidity",
-                            "state_class": "measurement",
-                            "unit_of_measurement": "%",
-                            "icon": "mdi:water-percent",
-                        },
-                    }
-                case _:
-                    continue
-
-            if device_id:
-                self.upsert_device(device_id, component=device, cmps=device["cmps"])
-                self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": sensor.get("sku", None)})
-                await self.build_device_states(device_id)
-
-                if not self.is_discovered(device_id):
-                    self.logger.info(f'added new sensor: "{sensor["deviceName"]}" [Govee {sensor["sku"]}] ({device_id})')
-
-                await self.publish_device_discovery(device_id)
-                await self.publish_device_availability(device_id, online=True)
-                await self.publish_device_state(device_id)
-
-                return device_id
-
-        return ""

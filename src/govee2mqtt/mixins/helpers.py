@@ -27,19 +27,31 @@ class ConfigError(ValueError):
 class HelpersMixin:
     async def build_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] = {}) -> None:
         if not data:
-            data = await self.get_device(self.get_raw_id(device_id), self.get_device_sku(device_id))
+            data = await self.get_device(device_id)
         component = self.devices[device_id]["component"]
 
         for key in data:
             if not data[key]:
                 continue
+            if device_id == "287E98173C1C9F36":
+                self.logger.warning(f"Update for Humidifier: {key} => {data[key]}")
+
             match key:
                 case "online":
                     self.upsert_state(device_id, availability="online" if data[key] else "offline")
+
                 case "powerSwitch":
-                    self.upsert_state(device_id, light={"state": "ON" if data[key] == 1 else "OFF"})
+                    if "power" in component["cmps"]:
+                        self.upsert_state(device_id, switch={"power": "ON" if data[key] == 1 else "OFF"})
+                    elif "light" in component["cmps"]:
+                        self.upsert_state(device_id, light={"state": "ON" if data[key] == 1 else "OFF"})
+
                 case "brightness":
                     self.upsert_state(device_id, light={"brightness": data[key]})
+
+                case "humidity":
+                    self.upsert_state(device_id, number={"humidity": int(data[key])})
+
                 case "colorRgb":
                     rgb_int = data[key]
                     self.upsert_state(
@@ -52,6 +64,7 @@ class HelpersMixin:
                             ]
                         },
                     )
+
                 case "colorTemperatureK":
                     # restrict color_temp to be >= min and <= max
                     value = data[key]
@@ -59,28 +72,87 @@ class HelpersMixin:
                         value = int(value)
                     color = min(max(value, component["cmps"]["light"]["min_kelvin"]), component["cmps"]["light"]["max_kelvin"])
                     self.upsert_state(device_id, light={"color_temp": color})
+
                 case "gradientToggle":
-                    self.upsert_state(
-                        device_id,
-                        switch={"gradient": "ON" if data[key] == 1 else "OFF"},
-                        light={"light": "ON" if data[key] == 1 else "OFF"},
-                    )
+                    self.upsert_state(device_id, switch={"gradient": "ON" if data[key] == 1 else "OFF"}, light={"state": "ON" if data[key] == 1 else "OFF"})
+
                 case "nightlightToggle":
-                    self.upsert_state(
-                        device_id,
-                        switch={"nightlight": "ON" if data[key] == 1 else "OFF"},
-                        light={"light": "ON" if data[key] == 1 else "OFF"},
-                    )
+                    self.upsert_state(device_id, light={"state": "ON" if data[key] == 1 else "OFF"})
+
+                case "warmMistToggle":
+                    self.upsert_state(device_id, switch={"warm_mist": "ON" if data[key] == 1 else "OFF"})
+
+                case "nightlightScene":
+                    scene_value = data[key]
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    scene_labels = internal.get("nightlight_scene_labels", {})
+                    scene_selection: str | None = None
+                    if isinstance(scene_value, int):
+                        scene_selection = scene_labels.get(scene_value) or scene_labels.get(str(scene_value))
+                    elif isinstance(scene_value, str):
+                        scene_selection = scene_labels.get(scene_value)
+                    if not scene_selection and scene_value is not None:
+                        scene_selection = str(scene_value)
+                    if scene_selection:
+                        self.upsert_state(device_id, select={"nightlight_scene": scene_selection})
+
                 case "dreamViewToggle":
                     self.upsert_state(
                         device_id,
                         switch={"dreamview": "ON" if data[key] == 1 else "OFF"},
                         light={"light": "ON" if data[key] == 1 else "OFF"},
                     )
+
                 case "sensorTemperature":
                     self.upsert_state(device_id, sensor={"temperature": data[key]})
+
                 case "sensorHumidity":
                     self.upsert_state(device_id, sensor={"humidity": data[key]})
+
+                case "workMode":
+                    work_mode_data = data[key]
+                    if not isinstance(work_mode_data, dict):
+                        continue
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    work_mode_labels = internal.get("work_mode_value_labels", {})
+                    manual_level_labels = internal.get("manual_level_labels", {})
+                    selection: str | None = None
+
+                    mode_value = work_mode_data.get("workMode")
+                    if isinstance(mode_value, int):
+                        mode_name = work_mode_labels.get(mode_value) or work_mode_labels.get(str(mode_value))
+                        if isinstance(mode_name, str) and mode_name.lower() == "manual" and manual_level_labels:
+                            manual_value = work_mode_data.get("modeValue")
+                            if isinstance(manual_value, int | float):
+                                manual_value_int = int(manual_value)
+                                selection = (
+                                    manual_level_labels.get(manual_value_int)
+                                    or manual_level_labels.get(str(manual_value_int))
+                                    or f"Mist Level {manual_value_int}"
+                                )
+                        elif isinstance(mode_name, str):
+                            selection = mode_name
+                    elif isinstance(mode_value, str):
+                        selection = mode_value
+
+                    if selection:
+                        self.upsert_state(device_id, select={"work_mode": selection})
+
+                case "modeValue":
+                    if "work_mode" not in component["cmps"]:
+                        continue
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    manual_level_labels = internal.get("manual_level_labels", {})
+                    level_value = data[key]
+                    if isinstance(level_value, str):
+                        if not level_value.isdigit():
+                            continue
+                        level_value = int(level_value)
+                    if not isinstance(level_value, int):
+                        continue
+
+                    selection = manual_level_labels.get(level_value) or manual_level_labels.get(str(level_value)) or f"Mist Level {level_value}"
+                    self.upsert_state(device_id, select={"work_mode": selection})
                 # case "musicMode":
                 #     if isinstance(data[key], dict):
                 #         if data["musicMode"] != "":
@@ -92,10 +164,8 @@ class HelpersMixin:
                 #         )
                 # case "sensitivity":
                 #     states["music"]["sensitivity"] = data[key]
-                case "lastUpdate":
-                    self.upsert_state(device_id, last_update=data[key].strftime("%Y-%m-%d %H:%M:%S"))
                 case _:
-                    self.logger.warning(f"unhandled state {key} with value {data[key]} from Govee")
+                    self.logger.warning(f"Govee update for device {device_id} [{device_id}], unhandled state {key} => {data[key]}")
 
     # convert MQTT attributes to Govee capabilities
     def build_govee_capabilities(self: Govee2Mqtt, device_id: str, attribute: str, payload: Any) -> dict[str, dict]:
@@ -111,8 +181,8 @@ class HelpersMixin:
         for key, value in payload.items():
 
             match key:
-                case "state" | "light" | "value":
-                    state_on = str(value).lower() == "on"
+                case "state" | "light" | "value" | "power":
+                    state_on = str(value).upper() == "ON"
                     light["state"] = "ON" if state_on else "OFF"
                     capabilities["powerSwitch"] = {
                         "type": "devices.capabilities.on_off",
@@ -178,6 +248,59 @@ class HelpersMixin:
                             "sensitivity": value,
                         },
                     }
+
+                case "nightlight_scene":
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    scene_labels = internal.get("nightlight_scene_labels", {})
+                    scene_value: int | None = None
+                    if scene_labels:
+                        scene_value = self.find_key_by_value(scene_labels, value)
+                    if scene_value is None:
+                        if isinstance(value, str) and value.isdigit():
+                            scene_value = int(value)
+                        elif isinstance(value, int):
+                            scene_value = value
+                    if scene_value is not None:
+                        capabilities["nightlightScene"] = {
+                            "type": "devices.capabilities.select_setting",
+                            "instance": "nightlightScene",
+                            "value": int(scene_value),
+                        }
+
+                case "work_mode":
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    work_mode_labels = internal.get("work_mode_value_labels", {})
+                    if not work_mode_labels:
+                        continue
+
+                    manual_level_labels = internal.get("manual_level_labels", {})
+                    selection = str(value)
+                    work_mode_value = self.find_key_by_value(work_mode_labels, selection)
+                    manual_mode_value = self.find_key_by_value(work_mode_labels, "Manual")
+
+                    payload_value: dict[str, int] = {}
+
+                    if work_mode_value is not None and (manual_mode_value is None or work_mode_value != manual_mode_value):
+                        payload_value["workMode"] = int(work_mode_value)
+                    else:
+                        manual_level_value = self.find_key_by_value(manual_level_labels, selection)
+                        if manual_level_value is None and isinstance(selection, str):
+                            digits = "".join(ch for ch in selection if ch.isdigit())
+                            if digits:
+                                try:
+                                    manual_level_value = int(digits)
+                                except ValueError:
+                                    manual_level_value = None
+                        if manual_mode_value is not None:
+                            payload_value["workMode"] = int(manual_mode_value)
+                            if manual_level_value is not None:
+                                payload_value["modeValue"] = int(manual_level_value)
+                    if payload_value:
+                        capabilities["workMode"] = {
+                            "type": "devices.capabilities.work_mode",
+                            "instance": "workMode",
+                            "value": payload_value,
+                        }
 
                 case "music_mode":
                     mode = states["music"]["options"][value]
@@ -444,7 +567,7 @@ class HelpersMixin:
     # Device properties ---------------------------------------------------------------------------
 
     def get_device_name(self: Govee2Mqtt, device_id: str) -> str:
-        return cast(str, self.devices[device_id]["device"]["name"])
+        return cast(str, self.devices[device_id]["component"]["device"]["name"])
 
     def get_raw_id(self: Govee2Mqtt, device_id: str) -> str:
         return cast(str, self.states[device_id]["internal"]["raw_id"])

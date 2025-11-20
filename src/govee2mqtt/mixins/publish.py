@@ -160,7 +160,7 @@ class PublishMixin:
 
     async def publish_device_state(self: Govee2Mqtt, device_id: str, subject: str = "", sub: str = "") -> None:
         for state, value in self.states[device_id].items():
-            if subject and state != subject:
+            if state == "internal" or (subject and state != subject):
                 continue
             # Attributes need to be published as a single JSON object to the attributes topic
             if state == "attributes" and isinstance(value, dict):

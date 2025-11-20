@@ -108,6 +108,8 @@ class MqttMixin:
         client.subscribe(f"{self.mqtt_helper.service_slug}/+/light/set")
         client.subscribe(f"{self.mqtt_helper.service_slug}/+/light/+/set")
         client.subscribe(f"{self.mqtt_helper.service_slug}/+/switch/+/set")
+        client.subscribe(f"{self.mqtt_helper.service_slug}/+/select/+/set")
+        client.subscribe(f"{self.mqtt_helper.service_slug}/+/number/+/set")
 
     async def mqtt_on_disconnect(
         self: Govee2Mqtt, client: Client, userdata: Any, flags: DisconnectFlags, reason_code: ReasonCode, properties: Properties | None
