@@ -33,8 +33,6 @@ class HelpersMixin:
         for key in data:
             if not data[key]:
                 continue
-            if device_id == "287E98173C1C9F36":
-                self.logger.warning(f"Update for Humidifier: {key} => {data[key]}")
 
             match key:
                 case "online":
