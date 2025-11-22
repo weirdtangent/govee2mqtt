@@ -1,3 +1,10 @@
+## [2.3.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.0...v2.3.1) (2025-11-22)
+
+
+### Bug Fixes
+
+* special case for rgb_color in light state ([39d07cc](https://github.com/weirdtangent/govee2mqtt/commit/39d07cc1ca04e83dda5bec376a9685f92149e347))
+
 # [2.3.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.2.0...v2.3.0) (2025-11-22)
 
 
