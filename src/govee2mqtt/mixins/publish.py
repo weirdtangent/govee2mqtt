@@ -174,7 +174,13 @@ class PublishMixin:
                     topic = self.mqtt_helper.stat_t(device_id, state, k)
                     # if it's a list, convert to JSON
                     if isinstance(v, list):
-                        v = json.dumps(v)
+                        if state == "light" and k == "rgb_color" and v:
+                            try:
+                                v = ",".join(str(int(channel)) for channel in v[:3])
+                            except (TypeError, ValueError):
+                                v = json.dumps(v)
+                        else:
+                            v = json.dumps(v)
                     await asyncio.to_thread(self.mqtt_helper.safe_publish, topic, v, retain=True)
             # otherwise, publish the value as is
             else:
