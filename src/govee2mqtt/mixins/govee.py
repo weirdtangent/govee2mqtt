@@ -9,6 +9,17 @@ if TYPE_CHECKING:
     from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
 
 
+SKU_CLASS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^H710\d+$"), "fan"),
+    (re.compile(r"^H712\d+$"), "air_purifier"),
+    (re.compile(r"^H714\d+$"), "humidifier"),
+    (re.compile(r"^H715\d+$"), "dehumidifier"),
+    (re.compile(r"^H716\d+$"), "aroma_diffuser"),
+    (re.compile(r"^H[678]\d{3,}$"), "light"),
+    (re.compile(r"^H5\d{3,}$"), "sensor"),
+]
+
+
 class GoveeMixin:
     async def refresh_device_list(self: Govee2Mqtt) -> None:
         self.logger.info(f"refreshing device list from Govee (every {self.device_list_interval} sec)")
@@ -53,8 +64,8 @@ class GoveeMixin:
                 return await self.build_sensor(device)
             # case "fan":
             #     return await self.build_fan(device)
-            # case "air_purifier":
-            #     return await self.build_air_purifier(device)
+            case "air_purifier":
+                return await self.build_air_purifier(device)
             case "humidifier":
                 return await self.build_humidifier(device)
             # case "dehumidifier":
@@ -70,27 +81,9 @@ class GoveeMixin:
     def classify_device(self: Govee2Mqtt, device: dict[str, Any]) -> str:
         sku = device["sku"]
 
-        # fans are H710x
-        if re.compile(r"^H710\d{1,}$").match(sku):
-            return "fan"
-        # air purifiers are H712x
-        if re.compile(r"^H712\d{1,}$").match(sku):
-            return "air_purifier"
-        # humidifiers are H714x
-        if re.compile(r"^H714\d{1,}$").match(sku):
-            return "humidifier"
-        # dehumidifiers are H715x
-        if re.compile(r"^H715\d{1,}$").match(sku):
-            return "dehumidifier"
-        # aroma diffusers are H716x
-        if re.compile(r"^H716\d{1,}$").match(sku):
-            return "aroma_diffuser"
-        # lights are H6xxx, H7xxx, H8xxx
-        if re.compile(r"^H[678]\d{3,}$").match(sku):
-            return "light"
-        # sensors are H5xxx
-        if re.compile(r"^H5\d{3,}$").match(sku):
-            return "sensor"
+        for pattern, device_class in SKU_CLASS_PATTERNS:
+            if pattern.match(sku):
+                return device_class
 
         # If we reach here, it's unsupported — log details (the first time)for future handling
         if not self.discovery_complete:
@@ -103,28 +96,123 @@ class GoveeMixin:
         raw_id = str(light["device"])
         device_id = raw_id.replace(":", "").upper()
 
-        device = {
-            "stat_t": self.mqtt_helper.stat_t(device_id, "light"),
-            "avty_t": self.mqtt_helper.avty_t(device_id),
-            "device": {
-                "name": light["deviceName"],
-                "identifiers": [
-                    self.mqtt_helper.device_slug(device_id),
-                ],
-                "manufacturer": "Govee",
-                "model": light["sku"],
-                "connections": [
-                    ["mac", light["device"]],
-                ],
-                "via_device": self.service,
-            },
-            "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
-            "qos": self.qos,
-            "cmps": self.build_light_components(device_id, light),
-        }
+        components = self.build_light_components(device_id, light)
+        device = _build_device_payload(self, device_id, light, "light", components)
 
         self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku")})
         await self.prepare_device(device, raw_id, device_id, "light")
+        return device_id
+
+    async def build_air_purifier(self: Govee2Mqtt, air_purifier: dict[str, Any]) -> str:
+        raw_id = str(air_purifier["device"])
+        device_id = raw_id.replace(":", "").upper()
+
+        work_mode_options: list[str] = []
+        gear_mode_values: list[int] = []
+        work_mode_value_labels: dict[int, str] = {}
+        gear_mode_labels: dict[int, str] = {}
+        device_has: dict[str, bool] = {}
+
+        for cap in air_purifier.get("capabilities", []):
+            device_has[cap["instance"]] = True
+            match cap["instance"]:
+                case "workMode":
+                    fields = cap.get("parameters", {}).get("fields", [])
+                    mode_field = next((f for f in fields if f.get("fieldName") == "workMode"), None)
+                    mode_value_field = next((f for f in fields if f.get("fieldName") == "modeValue"), None)
+
+                    if mode_value_field:
+                        for option in mode_value_field.get("options", []):
+                            name = option.get("name")
+                            if not isinstance(name, str) or name.lower() != "gearmode":
+                                continue
+                            for value in option.get("options", []):
+                                level = value.get("value")
+                                if isinstance(level, int):
+                                    gear_mode_values.append(level)
+                                    gear_mode_labels[level] = value.get("name") or f"Gear Level {level}"
+
+                    if mode_field:
+                        base_mode_names: list[str] = []
+                        gear_mode_present = False
+                        for option in mode_field.get("options", []):
+                            name = option.get("name")
+                            value = option.get("value")
+                            if not name:
+                                continue
+                            if isinstance(value, int):
+                                work_mode_value_labels[value] = name
+                            if isinstance(name, str) and name.lower() == "gearmode":
+                                gear_mode_present = True
+                                continue
+                            if name not in work_mode_options and name not in base_mode_names:
+                                base_mode_names.append(name)
+                        for base in base_mode_names:
+                            work_mode_options.append(base)
+                        if gear_mode_present and gear_mode_values:
+                            for level in sorted(set(gear_mode_values)):
+                                label = gear_mode_labels.get(level, f"Gear Level {level}")
+                                if label not in work_mode_options:
+                                    work_mode_options.append(label)
+
+        cmps: dict[str, dict[str, Any]] = {
+            "power": {
+                "p": "switch",
+                "name": "Power",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "air_purifier"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "power"),
+                "device_class": "switch",
+                "icon": "mdi:power",
+            }
+        }
+        self.upsert_state(device_id, switch={"power": "OFF"})
+
+        if device_has.get("workMode", False) and work_mode_options:
+            cmps["work_mode"] = {
+                "p": "select",
+                "name": "Work Mode",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "work_mode"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "select", "work_mode"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "select", "work_mode"),
+                "options": work_mode_options,
+                "icon": "mdi:air-purifier",
+            }
+            default_work_mode = "Auto" if "Auto" in work_mode_options else work_mode_options[0]
+            self.upsert_state(device_id, select={"work_mode": default_work_mode})
+
+        if device_has.get("filterLifeTime", False):
+            cmps["filter_life"] = {
+                "p": "sensor",
+                "name": "Filter Life",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "filter_life"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "filter_life"),
+                "unit_of_measurement": "%",
+                "state_class": "measurement",
+                "entity_category": "diagnostic",
+                "icon": "mdi:air-filter",
+            }
+
+        if device_has.get("airQuality", False):
+            cmps["air_quality"] = {
+                "p": "sensor",
+                "name": "Air Quality",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "air_quality"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "air_quality"),
+                "device_class": "aqi",
+                "icon": "mdi:air-purifier",
+            }
+
+        device = _build_device_payload(self, device_id, air_purifier, "air_purifier", cmps)
+
+        internal: dict[str, Any] = {"raw_id": raw_id, "sku": air_purifier.get("sku")}
+        if work_mode_value_labels:
+            internal["work_mode_value_labels"] = work_mode_value_labels
+        if gear_mode_labels:
+            internal["gear_mode_labels"] = gear_mode_labels
+        self.upsert_state(device_id, internal=internal)
+
+        await self.prepare_device(device, raw_id, device_id, "air_purifier")
         return device_id
 
     async def build_humidifier(self: Govee2Mqtt, humidifier: dict[str, Any]) -> str:
@@ -260,25 +348,7 @@ class GoveeMixin:
             }
             self.upsert_state(device_id, select={"nightlight_scene": nightlight_options[0]})
 
-        device = {
-            "stat_t": self.mqtt_helper.stat_t(device_id, "humidifier"),
-            "avty_t": self.mqtt_helper.avty_t(device_id),
-            "device": {
-                "name": humidifier["deviceName"],
-                "identifiers": [
-                    self.mqtt_helper.device_slug(device_id),
-                ],
-                "manufacturer": "Govee",
-                "model": humidifier["sku"],
-                "connections": [
-                    ["mac", humidifier["device"]],
-                ],
-                "via_device": self.service,
-            },
-            "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
-            "qos": self.qos,
-            "cmps": cmps,
-        }
+        device = _build_device_payload(self, device_id, humidifier, "humidifier", cmps)
 
         internal: dict[str, Any] = {"raw_id": raw_id, "sku": humidifier.get("sku")}
         if work_mode_value_labels:
@@ -390,6 +460,21 @@ class GoveeMixin:
             },
         }
 
+        dynamic_scene_caps: dict[str, dict[str, Any]] = {}
+        segment_range: dict[str, int] | None = None
+        segment_brightness_range: dict[str, int] | None = None
+        segment_color_range: dict[str, int] | None = None
+        has_segment_brightness = False
+        has_segment_color = False
+
+        music_mode_options: list[str] = []
+        music_mode_values: dict[str, int] = {}
+        music_sensitivity_range = {"min": 0, "max": 100, "step": 1}
+        music_auto_color_values: dict[str, int] = {}
+        music_rgb_range = {"min": 0, "max": 16777215}
+        music_rgb_supported = False
+        has_music_capability = False
+
         # adjust our light component based on what this Govee light can support
         for cap in light["capabilities"]:
             match cap["instance"]:
@@ -421,6 +506,7 @@ class GoveeMixin:
                         "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "gradient"),
                         "icon": ("mdi:gradient-horizontal" if light["sku"] == "H6042" else "mdi:gradient-vertical"),
                     }
+                    self.upsert_state(device_id, switch={"gradient": "OFF"})
                 case "nightlightToggle":
                     light_is_nightlight = True
                 case "dreamViewToggle":
@@ -432,52 +518,89 @@ class GoveeMixin:
                         "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "dreamview"),
                         "icon": "mdi:creation",
                     }
-
-                # case 'musicMode':
-                #     # setup to store state
-                #     device_states['music'] = { 'mode': 'Off', 'sensitivity': 100 }
-
-                #     music_options = [ 'Off' ]
-                #     device_states['music']['options'] = { 'Off': 0 }
-
-                #     for field in cap['parameters']['fields']:
-                #         match field['fieldName']:
-                #             case "musicMode":
-                #                 for option in field["options"]:
-                #                     music_options.append(option["name"])
-                #                     device_states["music"]["options"][
-                #                         option["name"]
-                #                     ] = option["value"]
-                #             case 'sensitivity':
-                #                 music_min = field['range']['min']
-                #                 music_max = field['range']['max']
-                #                 music_step = field['range']['precision']
-                #                 device_states['music']['sensitivity'] = 100
-
-                #     components[self.mqtt_helper.device_slug(device_id, 'music_mode')] = {
-                #         'name': 'Music Mode',
-                #         'platform': 'sensor',
-                #         'device_class': 'enum',
-                #         'options': music_options,
-                #         'state_topic': music_topic,
-                #         'availability_topic': availability_topic,
-                #         'command_topic': self.mqtt_helper.cmd_t(device_id, 'music_mode'),
-                #         'value_template': '{{ value_json.mode }}',
-                #         'unique_id': self.mqtt_helper.device_slug(device_id, 'music_mode'),
-                #     }
-                #     components[self.mqtt_helper.device_slug(device_id, 'music_sensitivity')] = {
-                #         'name': 'Music Sensitivity',
-                #         'platform': 'number',
-                #         'icon': 'mdi:numeric',
-                #         'min': music_min,
-                #         'max': music_max,
-                #         'step': music_step,
-                #         'state_topic': music_topic,
-                #         'availability_topic': availability_topic,
-                #         'command_topic': self.mqtt_helper.cmd_t(device_id, 'music_sensitivity'),
-                #         'value_template': '{{ value_json.sensitivity }}',
-                #         'unique_id': self.mqtt_helper.device_slug(device_id, 'music_sensitivity'),
-                #     }
+                    self.upsert_state(device_id, switch={"dreamview": "OFF"})
+                case "dynamic_scene":
+                    instance = cap.get("instance")
+                    if not instance:
+                        continue
+                    scene_options: list[str] = []
+                    scene_labels: dict[Any, str] = {}
+                    for option in cap.get("parameters", {}).get("options", []):
+                        name = option.get("name")
+                        value = option.get("value")
+                        if not name:
+                            continue
+                        scene_options.append(name)
+                        if value is not None:
+                            scene_labels[value] = name
+                    dynamic_scene_caps[instance] = {"options": scene_options, "labels": scene_labels}
+                case "segmentedBrightness":
+                    has_segment_brightness = True
+                    for field in cap.get("parameters", {}).get("fields", []):
+                        match field.get("fieldName"):
+                            case "segment":
+                                elem_range = field.get("elementRange", {})
+                                segment_range = {
+                                    "min": elem_range.get("min", 0) or 0,
+                                    "max": elem_range.get("max", 0) or 0,
+                                }
+                            case "brightness":
+                                rng = field.get("range", {})
+                                segment_brightness_range = {
+                                    "min": rng.get("min", 0) or 0,
+                                    "max": rng.get("max", 100) or 100,
+                                    "step": rng.get("precision", 1) or 1,
+                                }
+                case "segmentedColorRgb":
+                    has_segment_color = True
+                    for field in cap.get("parameters", {}).get("fields", []):
+                        match field.get("fieldName"):
+                            case "segment":
+                                elem_range = field.get("elementRange", {})
+                                segment_range = {
+                                    "min": elem_range.get("min", 0) or 0,
+                                    "max": elem_range.get("max", 0) or 0,
+                                }
+                            case "rgb":
+                                rng = field.get("range", {})
+                                segment_color_range = {
+                                    "min": rng.get("min", 0) or 0,
+                                    "max": rng.get("max", 16777215) or 16777215,
+                                }
+                case "musicMode":
+                    has_music_capability = True
+                    fields = cap.get("parameters", {}).get("fields", [])
+                    for field in fields:
+                        field_name = field.get("fieldName")
+                        match field_name:
+                            case "musicMode":
+                                for option in field.get("options", []):
+                                    name = option.get("name")
+                                    value = option.get("value")
+                                    if isinstance(name, str) and isinstance(value, int):
+                                        if name not in music_mode_options:
+                                            music_mode_options.append(name)
+                                        music_mode_values[name] = value
+                            case "sensitivity":
+                                rng = field.get("range", {})
+                                music_sensitivity_range = {
+                                    "min": rng.get("min", 0) or 0,
+                                    "max": rng.get("max", 100) or 100,
+                                    "step": rng.get("precision", 1) or 1,
+                                }
+                            case "autoColor":
+                                for option in field.get("options", []):
+                                    name = option.get("name")
+                                    value = option.get("value")
+                                    if isinstance(name, str) and isinstance(value, int):
+                                        music_auto_color_values[name.lower()] = value
+                            case "rgb":
+                                rng = field.get("range", {})
+                                music_rgb_supported = True
+                                music_rgb_range = {
+                                    "min": rng.get("min", 0) or 0,
+                                    "max": rng.get("max", 16777215) or 16777215,
+                                }
 
         # If a light supports a color mode (rgb or color_temp), drop simpler light components
         cmpset = set(components["light"]["supported_color_modes"])
@@ -495,6 +618,208 @@ class GoveeMixin:
             components["light"]["uniq_id"] = self.mqtt_helper.dev_unique_id(device_id, "nightlight")
             components["nightlight"] = components.pop("light")
 
+        dynamic_scene_labels_internal: dict[str, dict[Any, str]] = {}
+        dynamic_scene_instances_map: dict[str, str] = {}
+        dynamic_scene_components_map: dict[str, str] = {}
+        existing_select_state = self.states.get(device_id, {}).get("select", {})
+
+        for instance, scene_data in dynamic_scene_caps.items():
+            if not instance:
+                continue
+            options_list = scene_data.get("options", [])
+            if not options_list:
+                continue
+            scene_key = self._scene_component_key(instance)
+            scene_name = re.sub(r"(?<!^)(?=[A-Z])", " ", instance).title()
+            default_scene = existing_select_state.get(scene_key)
+            if default_scene not in options_list:
+                default_scene = options_list[0]
+            components[scene_key] = {
+                "p": "select",
+                "name": scene_name,
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, scene_key),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "select", scene_key),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "select", scene_key),
+                "options": options_list,
+                "icon": "mdi:movie-open-outline",
+            }
+            self.upsert_state(device_id, select={scene_key: default_scene})
+            dynamic_scene_labels_internal[instance] = scene_data.get("labels", {})
+            dynamic_scene_instances_map[instance] = scene_key
+            dynamic_scene_components_map[scene_key] = instance
+
+        existing_segment_state = self.states.get(device_id, {}).get("segments", {})
+        if segment_range and (has_segment_brightness or has_segment_color):
+            min_segment = int(segment_range.get("min", 0))
+            max_segment = int(segment_range.get("max", min_segment))
+            segment_options = [self._segment_option_label(i) for i in range(min_segment, max_segment + 1)]
+            default_segment = existing_segment_state.get("selected_segment", min_segment)
+            if default_segment < min_segment or default_segment > max_segment:
+                default_segment = min_segment
+
+            components["segment_index"] = {
+                "p": "select",
+                "name": "Segment",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "segment_index"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "select", "segment_index"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "select", "segment_index"),
+                "options": segment_options,
+                "icon": "mdi:animation-outline",
+            }
+            self.upsert_state(device_id, select={"segment_index": self._segment_option_label(default_segment)})
+
+            segments_state: dict[str, Any] = {
+                "range": segment_range,
+                "selected_segment": default_segment,
+            }
+
+            if has_segment_brightness and segment_brightness_range:
+                brightness_min = int(segment_brightness_range.get("min", 0))
+                brightness_max = int(segment_brightness_range.get("max", 100))
+                brightness_step = segment_brightness_range.get("step", 1) or 1
+                default_brightness = existing_segment_state.get("brightness", brightness_max)
+                if default_brightness < brightness_min or default_brightness > brightness_max:
+                    default_brightness = brightness_max
+                components["segment_brightness"] = {
+                    "p": "number",
+                    "name": "Segment Brightness",
+                    "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "segment_brightness"),
+                    "stat_t": self.mqtt_helper.stat_t(device_id, "number", "segment_brightness"),
+                    "cmd_t": self.mqtt_helper.cmd_t(device_id, "number", "segment_brightness"),
+                    "min": brightness_min,
+                    "max": brightness_max,
+                    "step": brightness_step,
+                    "mode": "slider",
+                    "entity_category": "config",
+                    "icon": "mdi:brightness-6",
+                }
+                self.upsert_state(device_id, number={"segment_brightness": default_brightness})
+                segments_state["brightness"] = default_brightness
+                segments_state["brightness_range"] = segment_brightness_range
+
+            if has_segment_color and segment_color_range:
+                color_min = int(segment_color_range.get("min", 0))
+                color_max = int(segment_color_range.get("max", 16777215))
+                default_rgb = existing_segment_state.get("rgb_value", color_min)
+                if default_rgb < color_min or default_rgb > color_max:
+                    default_rgb = color_min
+                components["segment_rgb"] = {
+                    "p": "number",
+                    "name": "Segment RGB",
+                    "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "segment_rgb"),
+                    "stat_t": self.mqtt_helper.stat_t(device_id, "number", "segment_rgb"),
+                    "cmd_t": self.mqtt_helper.cmd_t(device_id, "number", "segment_rgb"),
+                    "min": color_min,
+                    "max": color_max,
+                    "step": 1,
+                    "entity_category": "config",
+                    "icon": "mdi:palette-outline",
+                }
+                self.upsert_state(device_id, number={"segment_rgb": default_rgb})
+                segments_state["rgb_value"] = default_rgb
+                segments_state["color_range"] = segment_color_range
+                segments_state["rgb_max"] = color_max
+
+            self.upsert_state(device_id, segments=segments_state)
+
+        if has_music_capability and music_mode_options:
+            default_music_mode = music_mode_options[0]
+            components["music_mode"] = {
+                "p": "select",
+                "name": "Music Mode",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "music_mode"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "select", "music_mode"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "music_mode"),
+                "options": music_mode_options,
+                "icon": "mdi:music-note",
+            }
+
+            sensitivity_min = music_sensitivity_range["min"]
+            sensitivity_max = music_sensitivity_range["max"]
+            sensitivity_step = music_sensitivity_range["step"]
+            default_sensitivity = min(max(80, sensitivity_min), sensitivity_max)
+
+            components["music_sensitivity"] = {
+                "p": "number",
+                "name": "Music Sensitivity",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "music_sensitivity"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "number", "music_sensitivity"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "music_sensitivity"),
+                "min": sensitivity_min,
+                "max": sensitivity_max,
+                "step": sensitivity_step,
+                "mode": "slider",
+                "entity_category": "config",
+                "icon": "mdi:music-note-plus",
+            }
+
+            if music_auto_color_values:
+                components["music_auto_color"] = {
+                    "p": "switch",
+                    "name": "Music Auto Color",
+                    "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "music_auto_color"),
+                    "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "music_auto_color"),
+                    "cmd_t": self.mqtt_helper.cmd_t(device_id, "music_auto_color"),
+                    "icon": "mdi:palette",
+                }
+
+            if music_rgb_supported:
+                components["music_rgb"] = {
+                    "p": "number",
+                    "name": "Music RGB Value",
+                    "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "music_rgb"),
+                    "stat_t": self.mqtt_helper.stat_t(device_id, "number", "music_rgb"),
+                    "cmd_t": self.mqtt_helper.cmd_t(device_id, "music_rgb"),
+                    "min": music_rgb_range["min"],
+                    "max": music_rgb_range["max"],
+                    "step": 1,
+                    "entity_category": "config",
+                    "icon": "mdi:led-strip-variant",
+                }
+
+            existing_music_state = self.states.get(device_id, {}).get("music", {})
+            auto_color_default_state = existing_music_state.get("auto_color_state")
+            if auto_color_default_state is None:
+                auto_color_default_state = False
+
+            mode_initial = existing_music_state.get("mode", default_music_mode)
+            sensitivity_initial = existing_music_state.get("sensitivity", default_sensitivity)
+            rgb_initial = existing_music_state.get("rgb_value", music_rgb_range["min"] if music_rgb_supported else None)
+
+            music_state: dict[str, Any] = {
+                "options": music_mode_values,
+                "mode": mode_initial,
+                "sensitivity": sensitivity_initial,
+                "sensitivity_range": music_sensitivity_range,
+                "auto_color_values": music_auto_color_values,
+                "auto_color_state": auto_color_default_state,
+                "rgb_value": rgb_initial,
+                "rgb_max": music_rgb_range["max"] if music_rgb_supported else None,
+            }
+            if music_rgb_supported and music_state["rgb_value"] is None:
+                music_state["rgb_value"] = music_rgb_range["min"]
+
+            self.upsert_state(device_id, music=music_state)
+
+            if "music_mode" not in self.states.get(device_id, {}).get("select", {}):
+                self.upsert_state(device_id, select={"music_mode": music_state["mode"]})
+            if "music_sensitivity" not in self.states.get(device_id, {}).get("number", {}):
+                self.upsert_state(device_id, number={"music_sensitivity": music_state["sensitivity"]})
+            if music_auto_color_values and "music_auto_color" not in self.states.get(device_id, {}).get("switch", {}):
+                self.upsert_state(device_id, switch={"music_auto_color": "ON" if music_state["auto_color_state"] else "OFF"})
+            if music_rgb_supported and "music_rgb" not in self.states.get(device_id, {}).get("number", {}):
+                self.upsert_state(device_id, number={"music_rgb": music_state["rgb_value"]})
+
+        internal_updates: dict[str, Any] = {}
+        if dynamic_scene_labels_internal:
+            internal_updates["dynamic_scene_labels"] = dynamic_scene_labels_internal
+        if dynamic_scene_instances_map:
+            internal_updates["dynamic_scene_instances"] = dynamic_scene_instances_map
+        if dynamic_scene_components_map:
+            internal_updates["dynamic_scene_components"] = dynamic_scene_components_map
+        if internal_updates:
+            self.upsert_state(device_id, internal=internal_updates)
+
         return components
 
     async def prepare_device(self: Govee2Mqtt, device: dict[str, Any], raw_id: str, device_id: str, type: str) -> None:
@@ -509,3 +834,29 @@ class GoveeMixin:
 
         await self.publish_device_availability(device_id, online=True)
         await self.publish_device_state(device_id)
+
+
+def _build_device_payload(service: "Govee2Mqtt", device_id: str, source: dict[str, Any], domain: str, components: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "stat_t": service.mqtt_helper.stat_t(device_id, domain),
+        "avty_t": service.mqtt_helper.avty_t(device_id),
+        "device": {
+            "name": source["deviceName"],
+            "identifiers": [
+                service.mqtt_helper.device_slug(device_id),
+            ],
+            "manufacturer": "Govee",
+            "model": source["sku"],
+            "connections": [
+                ["mac", source["device"]],
+            ],
+            "via_device": service.service,
+        },
+        "origin": {
+            "name": service.service_name,
+            "sw": service.config["version"],
+            "support_url": "https://github.com/weirdTangent/govee2mqtt",
+        },
+        "qos": service.qos,
+        "cmps": components,
+    }

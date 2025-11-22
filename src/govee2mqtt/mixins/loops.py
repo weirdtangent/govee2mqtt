@@ -12,39 +12,43 @@ if TYPE_CHECKING:
 class LoopsMixin:
     async def device_list_loop(self: Govee2Mqtt) -> None:
         while self.running:
-            await self.refresh_device_list()
             try:
                 await asyncio.sleep(self.device_list_interval)
             except asyncio.CancelledError:
                 self.logger.debug("device_list_loop cancelled during sleep")
                 break
+            if self.running:
+                await self.refresh_device_list()
 
     async def device_loop(self: Govee2Mqtt) -> None:
         while self.running:
-            await self.refresh_all_devices()
             try:
                 await asyncio.sleep(self.device_interval)
             except asyncio.CancelledError:
                 self.logger.debug("device_loop cancelled during sleep")
                 break
+            if self.running:
+                await self.refresh_all_devices()
 
     async def device_boosted_loop(self: Govee2Mqtt) -> None:
         while self.running:
-            await self.refresh_boosted_devices()
             try:
                 await asyncio.sleep(self.device_boost_interval)
             except asyncio.CancelledError:
                 self.logger.debug("device_boost_loop cancelled during sleep")
                 break
+            if self.running:
+                await self.refresh_boosted_devices()
 
     async def heartbeat(self: Govee2Mqtt) -> None:
         while self.running:
-            self.heartbeat_ready()
             try:
                 await asyncio.sleep(60)
             except asyncio.CancelledError:
                 self.logger.debug("heartbeat cancelled during sleep")
                 break
+            if self.running:
+                self.heartbeat_ready()
 
     # main loop
     async def main_loop(self: Govee2Mqtt) -> None:

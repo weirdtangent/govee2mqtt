@@ -5,12 +5,13 @@ from deepmerge.merger import Merger
 import logging
 import os
 import pathlib
+import re
 import signal
 import threading
 from types import FrameType
 import yaml
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Mapping, cast
 
 if TYPE_CHECKING:
     from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
@@ -107,6 +108,28 @@ class HelpersMixin:
                 case "sensorHumidity":
                     self.upsert_state(device_id, sensor={"humidity": data[key]})
 
+                case "filterLifeTime":
+                    lifetime_value: Any = data[key]
+                    if isinstance(lifetime_value, dict):
+                        lifetime_value = lifetime_value.get("value") or lifetime_value.get("percent")
+                    if isinstance(lifetime_value, str):
+                        stripped = lifetime_value.strip()
+                        if stripped.replace(".", "", 1).isdigit():
+                            lifetime_value = float(stripped) if "." in stripped else int(stripped)
+                        else:
+                            lifetime_value = stripped
+                    if lifetime_value is not None:
+                        self.upsert_state(device_id, sensor={"filter_life": lifetime_value})
+
+                case "airQuality":
+                    air_quality_value: Any = data[key]
+                    if isinstance(air_quality_value, dict):
+                        air_quality_value = air_quality_value.get("value") or air_quality_value.get("level") or air_quality_value.get("name")
+                    if isinstance(air_quality_value, str):
+                        air_quality_value = air_quality_value.strip()
+                    if air_quality_value is not None:
+                        self.upsert_state(device_id, sensor={"air_quality": air_quality_value})
+
                 case "workMode":
                     work_mode_data = data[key]
                     if not isinstance(work_mode_data, dict):
@@ -114,54 +137,190 @@ class HelpersMixin:
                     internal = self.states.get(device_id, {}).get("internal", {})
                     work_mode_labels = internal.get("work_mode_value_labels", {})
                     manual_level_labels = internal.get("manual_level_labels", {})
-                    selection: str | None = None
+                    gear_mode_labels = internal.get("gear_mode_labels", {})
+                    work_mode_selection: str | None = None
 
                     mode_value = work_mode_data.get("workMode")
                     if isinstance(mode_value, int):
                         mode_name = work_mode_labels.get(mode_value) or work_mode_labels.get(str(mode_value))
-                        if isinstance(mode_name, str) and mode_name.lower() == "manual" and manual_level_labels:
-                            manual_value = work_mode_data.get("modeValue")
-                            if isinstance(manual_value, int | float):
-                                manual_value_int = int(manual_value)
-                                selection = (
-                                    manual_level_labels.get(manual_value_int)
-                                    or manual_level_labels.get(str(manual_value_int))
-                                    or f"Mist Level {manual_value_int}"
-                                )
-                        elif isinstance(mode_name, str):
-                            selection = mode_name
+                        if isinstance(mode_name, str):
+                            mode_name_lower = mode_name.lower()
+                            requires_submode = mode_name_lower in {"manual", "gearmode"}
+                            label_lookup: dict[int | str, str] | None = None
+                            if mode_name_lower == "manual" and manual_level_labels:
+                                label_lookup = manual_level_labels
+                            elif mode_name_lower == "gearmode" and gear_mode_labels:
+                                label_lookup = gear_mode_labels
+                            if requires_submode and label_lookup:
+                                raw_mode_value = work_mode_data.get("modeValue")
+                                mode_specific_value_int = self._normalize_mode_numeric_value(raw_mode_value)
+                                if mode_specific_value_int is None and isinstance(raw_mode_value, str):
+                                    reverse_lookup = self.find_key_by_value(label_lookup, raw_mode_value)
+                                    if reverse_lookup is not None:
+                                        try:
+                                            mode_specific_value_int = int(reverse_lookup)
+                                        except (TypeError, ValueError):
+                                            mode_specific_value_int = None
+                                if mode_specific_value_int is not None:
+                                    fallback = (
+                                        f"Mist Level {mode_specific_value_int}" if mode_name_lower == "manual" else f"Gear Level {mode_specific_value_int}"
+                                    )
+                                    work_mode_selection = (
+                                        label_lookup.get(mode_specific_value_int) or label_lookup.get(str(mode_specific_value_int)) or fallback
+                                    )
+                                elif isinstance(raw_mode_value, str):
+                                    work_mode_selection = raw_mode_value
+                            elif not requires_submode:
+                                work_mode_selection = mode_name
                     elif isinstance(mode_value, str):
-                        selection = mode_value
+                        work_mode_selection = mode_value
 
-                    if selection:
-                        self.upsert_state(device_id, select={"work_mode": selection})
+                    if work_mode_selection:
+                        self.upsert_state(device_id, select={"work_mode": work_mode_selection})
 
                 case "modeValue":
                     if "work_mode" not in component["cmps"]:
                         continue
                     internal = self.states.get(device_id, {}).get("internal", {})
                     manual_level_labels = internal.get("manual_level_labels", {})
-                    level_value = data[key]
-                    if isinstance(level_value, str):
-                        if not level_value.isdigit():
-                            continue
-                        level_value = int(level_value)
-                    if not isinstance(level_value, int):
+                    gear_mode_labels = internal.get("gear_mode_labels", {})
+                    level_value = self._normalize_mode_numeric_value(data[key])
+                    if level_value is None:
                         continue
 
-                    selection = manual_level_labels.get(level_value) or manual_level_labels.get(str(level_value)) or f"Mist Level {level_value}"
-                    self.upsert_state(device_id, select={"work_mode": selection})
-                # case "musicMode":
-                #     if isinstance(data[key], dict):
-                #         if data["musicMode"] != "":
-                #             states["music"]["mode"] = data["musicMode"]
-                #         states["music"]["sensitivity"] = data["sensitivity"]
-                #     elif data[key] != "":
-                #         states["music"]["mode"] = self.find_key_by_value(
-                #             states["music"]["options"], data[key]
-                #         )
-                # case "sensitivity":
-                #     states["music"]["sensitivity"] = data[key]
+                    level_selection = manual_level_labels.get(level_value) or manual_level_labels.get(str(level_value))
+                    if not level_selection and gear_mode_labels:
+                        level_selection = gear_mode_labels.get(level_value) or gear_mode_labels.get(str(level_value))
+                    if not level_selection:
+                        if manual_level_labels and not gear_mode_labels:
+                            level_selection = f"Mist Level {level_value}"
+                        elif gear_mode_labels and not manual_level_labels:
+                            level_selection = f"Gear Level {level_value}"
+                        elif manual_level_labels:
+                            level_selection = f"Mist Level {level_value}"
+                        elif gear_mode_labels:
+                            level_selection = f"Gear Level {level_value}"
+                        else:
+                            level_selection = str(level_value)
+                    self.upsert_state(device_id, select={"work_mode": level_selection})
+                case key if key in {"lightScene", "diyScene", "snapshot"}:
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    scene_instances = internal.get("dynamic_scene_instances", {})
+                    scene_labels_root = internal.get("dynamic_scene_labels", {})
+                    component_key = scene_instances.get(key)
+                    if not component_key:
+                        continue
+                    scene_labels = scene_labels_root.get(key, {})
+                    value = data[key]
+                    dynamic_scene_selection: str | None = None
+                    if isinstance(value, int):
+                        dynamic_scene_selection = scene_labels.get(value) or scene_labels.get(str(value))
+                    elif isinstance(value, str):
+                        dynamic_scene_selection = scene_labels.get(value) or value
+                    if not dynamic_scene_selection and value is not None:
+                        dynamic_scene_selection = str(value)
+                    if dynamic_scene_selection:
+                        self.upsert_state(device_id, select={component_key: dynamic_scene_selection})
+                case "segmentedBrightness":
+                    value = data[key]
+                    if not isinstance(value, dict):
+                        continue
+                    segments = value.get("segment")
+                    brightness_value = value.get("brightness")
+                    if not isinstance(segments, list) or not segments:
+                        continue
+                    try:
+                        segment_id = int(segments[0])
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(brightness_value, (int, float)):
+                        brightness_int = int(brightness_value)
+                    else:
+                        continue
+                    segment_label = self._segment_option_label(segment_id)
+                    self.upsert_state(
+                        device_id,
+                        segments={"selected_segment": segment_id, "brightness": brightness_int},
+                        select={"segment_index": segment_label},
+                        number={"segment_brightness": brightness_int},
+                    )
+                case "segmentedColorRgb":
+                    value = data[key]
+                    if not isinstance(value, dict):
+                        continue
+                    segments = value.get("segment")
+                    rgb_value = value.get("rgb")
+                    if not isinstance(segments, list) or not segments:
+                        continue
+                    try:
+                        segment_id = int(segments[0])
+                    except (TypeError, ValueError):
+                        continue
+                    rgb_int = self._normalize_music_rgb(rgb_value)
+                    if rgb_int is None:
+                        continue
+                    segment_label = self._segment_option_label(segment_id)
+                    self.upsert_state(
+                        device_id,
+                        segments={"selected_segment": segment_id, "rgb_value": rgb_int},
+                        select={"segment_index": segment_label},
+                        number={"segment_rgb": rgb_int},
+                    )
+                case "musicMode":
+                    music_data = data[key]
+                    if not isinstance(music_data, dict):
+                        continue
+                    component_music = component["cmps"]
+                    music_state = self.states.get(device_id, {}).get("music", {})
+                    if not music_state:
+                        continue
+
+                    music_updates: dict[str, Any] = {}
+                    select_updates: dict[str, str] = {}
+                    number_updates: dict[str, int] = {}
+                    switch_updates: dict[str, str] = {}
+
+                    options = music_state.get("options", {})
+                    mode_value = music_data.get("musicMode")
+                    music_mode_name: str | None = None
+                    if isinstance(mode_value, int):
+                        music_mode_name = self.find_key_by_value(options, mode_value)
+                    elif isinstance(mode_value, str):
+                        music_mode_name = mode_value
+                    if music_mode_name:
+                        music_updates["mode"] = music_mode_name
+                        if "music_mode" in component_music:
+                            select_updates["music_mode"] = music_mode_name
+
+                    sensitivity_value = music_data.get("sensitivity")
+                    if isinstance(sensitivity_value, (int, float)):
+                        sensitivity_int = int(sensitivity_value)
+                        music_updates["sensitivity"] = sensitivity_int
+                        if "music_sensitivity" in component_music:
+                            number_updates["music_sensitivity"] = sensitivity_int
+
+                    auto_color_value = music_data.get("autoColor")
+                    auto_color_state = self._normalize_music_auto_color_state(auto_color_value, music_state.get("auto_color_values", {}))
+                    if auto_color_state is not None:
+                        music_updates["auto_color_state"] = auto_color_state
+                        if "music_auto_color" in component_music:
+                            switch_updates["music_auto_color"] = "ON" if auto_color_state else "OFF"
+
+                    rgb_value = music_data.get("rgb")
+                    rgb_int = self._normalize_music_rgb(rgb_value, music_state.get("rgb_max"))
+                    if rgb_int is not None:
+                        music_updates["rgb_value"] = rgb_int
+                        if "music_rgb" in component_music:
+                            number_updates["music_rgb"] = rgb_int
+
+                    if music_updates:
+                        self.upsert_state(device_id, music=music_updates)
+                    if select_updates:
+                        self.upsert_state(device_id, select=select_updates)
+                    if number_updates:
+                        self.upsert_state(device_id, number=number_updates)
+                    if switch_updates:
+                        self.upsert_state(device_id, switch=switch_updates)
                 case _:
                     self.logger.warning(f"Govee update for device {device_id} [{device_id}], unhandled state {key} => {data[key]}")
 
@@ -176,6 +335,7 @@ class HelpersMixin:
             payload = {attribute: payload}
 
         capabilities: dict[str, Any] = {}
+        music_overrides: dict[str, Any] | None = None
         for key, value in payload.items():
 
             match key:
@@ -234,19 +394,6 @@ class HelpersMixin:
                         "value": 1 if state_on else 0,
                     }
 
-                case "music_sensitivity":
-                    mode = states["music"]["options"][states["music"]["mode"]]
-                    if isinstance(payload, dict) and "music_mode" in payload:
-                        mode = states["music"]["options"][payload["music_mode"]]
-                    capabilities["musicMode"] = {
-                        "type": "devices.capabilities.music_setting",
-                        "instance": "musicMode",
-                        "value": {
-                            "musicMode": mode,
-                            "sensitivity": value,
-                        },
-                    }
-
                 case "nightlight_scene":
                     internal = self.states.get(device_id, {}).get("internal", {})
                     scene_labels = internal.get("nightlight_scene_labels", {})
@@ -264,6 +411,82 @@ class HelpersMixin:
                             "instance": "nightlightScene",
                             "value": int(scene_value),
                         }
+                case key if key.endswith("_scene"):
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    component_map = internal.get("dynamic_scene_components", {})
+                    scene_instance = component_map.get(key)
+                    if not scene_instance:
+                        continue
+                    scene_labels = internal.get("dynamic_scene_labels", {}).get(scene_instance, {})
+                    selection = str(value)
+                    scene_value = self.find_key_by_value(scene_labels, selection)
+                    if scene_value is None and selection.isdigit():
+                        scene_value = int(selection)
+                    if scene_value is None:
+                        continue
+                    try:
+                        numeric_value = int(scene_value)
+                    except (TypeError, ValueError):
+                        continue
+                    capabilities[scene_instance] = {
+                        "type": "devices.capabilities.dynamic_scene",
+                        "instance": scene_instance,
+                        "value": numeric_value,
+                    }
+                case "segment_index":
+                    segments_state = self.states.get(device_id, {}).get("segments", {})
+                    if not segments_state:
+                        continue
+                    segment_value = self._parse_segment_selection(value, segments_state.get("range"))
+                    if segment_value is None:
+                        continue
+                    segment_label = self._segment_option_label(segment_value)
+                    segments_state["selected_segment"] = segment_value
+                    self.upsert_state(device_id, segments=segments_state, select={"segment_index": segment_label})
+                case "segment_brightness":
+                    segments_state = self.states.get(device_id, {}).get("segments", {})
+                    if not segments_state:
+                        continue
+                    selected_segment = segments_state.get("selected_segment")
+                    if selected_segment is None:
+                        continue
+                    brightness_range = segments_state.get("brightness_range") or {"min": 0, "max": 100}
+                    brightness_value = self._coerce_int_in_range(value, brightness_range["min"], brightness_range["max"])
+                    if brightness_value is None:
+                        continue
+                    segments_state["brightness"] = brightness_value
+                    self.upsert_state(device_id, segments=segments_state, number={"segment_brightness": brightness_value})
+                    capabilities["segmentedBrightness"] = {
+                        "type": "devices.capabilities.segment_color_setting",
+                        "instance": "segmentedBrightness",
+                        "value": {
+                            "segment": [int(selected_segment)],
+                            "brightness": int(brightness_value),
+                        },
+                    }
+                case "segment_rgb":
+                    segments_state = self.states.get(device_id, {}).get("segments", {})
+                    if not segments_state:
+                        continue
+                    selected_segment = segments_state.get("selected_segment")
+                    if selected_segment is None:
+                        continue
+                    rgb_range = segments_state.get("color_range") or {"min": 0, "max": segments_state.get("rgb_max", 16777215)}
+                    rgb_int = self._normalize_music_rgb(value, rgb_range.get("max"))
+                    if rgb_int is None:
+                        continue
+                    if rgb_int < rgb_range.get("min", 0):
+                        rgb_int = rgb_range.get("min", 0)
+                    segments_state["rgb_value"] = rgb_int
+                    self.upsert_state(device_id, segments=segments_state, number={"segment_rgb": rgb_int})
+                    capabilities["segmentedColorRgb"] = {
+                        "type": "devices.capabilities.segment_color_setting",
+                        "instance": "segmentedColorRgb",
+                        "value": {
+                            "segment": [int(selected_segment)],
+                            "rgb": int(rgb_int),
+                        },
+                    }
 
                 case "work_mode":
                     internal = self.states.get(device_id, {}).get("internal", {})
@@ -272,27 +495,67 @@ class HelpersMixin:
                         continue
 
                     manual_level_labels = internal.get("manual_level_labels", {})
+                    gear_mode_labels = internal.get("gear_mode_labels", {})
                     selection = str(value)
-                    work_mode_value = self.find_key_by_value(work_mode_labels, selection)
-                    manual_mode_value = self.find_key_by_value(work_mode_labels, "Manual")
+                    selection_lower = selection.lower()
+                    special_modes: list[tuple[str, dict[int | str, str]]] = []
+                    if manual_level_labels:
+                        special_modes.append(("manual", manual_level_labels))
+                    if gear_mode_labels:
+                        special_modes.append(("gearmode", gear_mode_labels))
+
+                    def find_mode_key_by_name(name: str) -> int | None:
+                        name_lower = name.lower()
+                        for key, label in work_mode_labels.items():
+                            if isinstance(label, str) and label.lower() == name_lower:
+                                try:
+                                    return int(key)
+                                except (TypeError, ValueError):
+                                    return None
+                        return None
+
+                    special_mode_names = {mode for mode, _ in special_modes}
+                    work_mode_value = None
+                    if selection_lower not in special_mode_names:
+                        work_mode_value = self.find_key_by_value(work_mode_labels, selection)
 
                     payload_value: dict[str, int] = {}
 
-                    if work_mode_value is not None and (manual_mode_value is None or work_mode_value != manual_mode_value):
+                    if work_mode_value is not None:
                         payload_value["workMode"] = int(work_mode_value)
                     else:
-                        manual_level_value = self.find_key_by_value(manual_level_labels, selection)
-                        if manual_level_value is None and isinstance(selection, str):
-                            digits = "".join(ch for ch in selection if ch.isdigit())
-                            if digits:
-                                try:
-                                    manual_level_value = int(digits)
-                                except ValueError:
-                                    manual_level_value = None
-                        if manual_mode_value is not None:
-                            payload_value["workMode"] = int(manual_mode_value)
-                            if manual_level_value is not None:
-                                payload_value["modeValue"] = int(manual_level_value)
+                        matched = False
+                        for mode_name, labels in special_modes:
+                            if not labels:
+                                continue
+                            selection_value = self.find_key_by_value(labels, selection)
+                            if selection_value is None:
+                                continue
+                            try:
+                                selection_value_int = int(selection_value)
+                            except (TypeError, ValueError):
+                                continue
+                            mode_key = find_mode_key_by_name(mode_name)
+                            if mode_key is None:
+                                continue
+                            payload_value["workMode"] = int(mode_key)
+                            payload_value["modeValue"] = selection_value_int
+                            matched = True
+                            break
+
+                        if not matched:
+                            fallback_value = self._normalize_mode_numeric_value(selection)
+                            if fallback_value is not None:
+                                for mode_name, labels in special_modes:
+                                    if fallback_value in labels or str(fallback_value) in labels:
+                                        mode_key = find_mode_key_by_name(mode_name)
+                                        if mode_key is None:
+                                            continue
+                                        payload_value["workMode"] = int(mode_key)
+                                        payload_value["modeValue"] = int(fallback_value)
+                                        matched = True
+                                        break
+
                     if payload_value:
                         capabilities["workMode"] = {
                             "type": "devices.capabilities.work_mode",
@@ -301,19 +564,20 @@ class HelpersMixin:
                         }
 
                 case "music_mode":
-                    mode = states["music"]["options"][value]
-                    sensitivity = payload.get(
-                        "music_sensitivity",
-                        states["music"]["sensitivity"],
-                    )
-                    capabilities["musicMode"] = {
-                        "type": "devices.capabilities.music_setting",
-                        "instance": "musicMode",
-                        "value": {
-                            "musicMode": mode,
-                            "sensitivity": sensitivity,
-                        },
-                    }
+                    music_overrides = music_overrides or {}
+                    music_overrides["mode"] = str(value)
+
+                case "music_sensitivity":
+                    music_overrides = music_overrides or {}
+                    music_overrides["sensitivity"] = value
+
+                case "music_auto_color":
+                    music_overrides = music_overrides or {}
+                    music_overrides["auto_color"] = value
+
+                case "music_rgb":
+                    music_overrides = music_overrides or {}
+                    music_overrides["rgb"] = value
 
                 case _:
                     self.logger.warning(f"ignored unknown or invalid attribute: {key} => {value}")
@@ -323,6 +587,15 @@ class HelpersMixin:
             del capabilities["turn"]
         if "color" in capabilities and "turn" in capabilities:
             del capabilities["turn"]
+
+        if music_overrides:
+            music_value = self._build_music_capability_value(device_id, music_overrides)
+            if music_value:
+                capabilities["musicMode"] = {
+                    "type": "devices.capabilities.music_setting",
+                    "instance": "musicMode",
+                    "value": music_value,
+                }
 
         return capabilities
 
@@ -475,7 +748,224 @@ class HelpersMixin:
         except Exception as e:
             raise ValueError(f"Invalid RGB value: {rgb!r}") from e
 
-    def find_key_by_value(self: Govee2Mqtt, d: dict[str, Any], target: str) -> Any:
+    def _normalize_mode_numeric_value(self: Govee2Mqtt, value: Any) -> int | None:
+        if isinstance(value, dict):
+            for key in ("value", "level", "code"):
+                if key in value and value[key] is not None:
+                    value = value[key]
+                    break
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.isdigit():
+                return int(stripped)
+            digits = "".join(ch for ch in stripped if ch.isdigit())
+            if digits:
+                try:
+                    return int(digits)
+                except ValueError:
+                    return None
+        return None
+
+    def _normalize_music_auto_color_state(self: Govee2Mqtt, value: Any, mapping: Mapping[str, int]) -> bool | None:
+        if value is None:
+            return None
+        normalized_value = value
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"on", "off", "true", "false"}:
+                return lowered in {"on", "true"}
+            if lowered in mapping:
+                return lowered == "on"
+            if lowered.startswith("0x") or lowered.startswith("#"):
+                return None
+            if lowered.isdigit():
+                normalized_value = int(lowered)
+            else:
+                return None
+        if isinstance(normalized_value, bool):
+            return normalized_value
+        if isinstance(normalized_value, (int, float)):
+            normalized_int = int(normalized_value)
+            for name, mapped_value in mapping.items():
+                if mapped_value == normalized_int:
+                    return name.lower() == "on"
+            return normalized_int > 0
+        return None
+
+    def _normalize_music_rgb(self: Govee2Mqtt, value: Any, rgb_max: int | None = None) -> int | None:
+        if value is None:
+            return None
+        rgb_int: int | None = None
+        if isinstance(value, (int, float)):
+            rgb_int = int(value)
+        elif isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            if stripped.startswith("#"):
+                try:
+                    rgb_int = int(stripped[1:], 16)
+                except ValueError:
+                    return None
+            elif stripped.lower().startswith("0x"):
+                try:
+                    rgb_int = int(stripped, 16)
+                except ValueError:
+                    return None
+            elif "," in stripped:
+                parts = stripped.split(",", 3)
+                try:
+                    rgb_values = [int(part.strip()) for part in parts[:3]]
+                except ValueError:
+                    return None
+                if len(rgb_values) == 3:
+                    try:
+                        rgb_int = self.rgb_to_number(rgb_values)
+                    except ValueError:
+                        return None
+            elif stripped.isdigit():
+                rgb_int = int(stripped)
+        elif isinstance(value, (list, tuple)):
+            if len(value) == 3:
+                try:
+                    rgb_values = [int(value[0]), int(value[1]), int(value[2])]
+                except (TypeError, ValueError):
+                    rgb_values = None
+                if rgb_values is not None:
+                    try:
+                        rgb_int = self.rgb_to_number(rgb_values)
+                    except ValueError:
+                        rgb_int = None
+        elif isinstance(value, dict):
+            try:
+
+                def _channel(primary: str, alternate: str) -> int:
+                    raw = value.get(primary)
+                    if raw is None:
+                        raw = value.get(alternate)
+                    if raw is None:
+                        raw = 0
+                    try:
+                        return int(raw)
+                    except (TypeError, ValueError):
+                        return 0
+
+                rgb_values = [
+                    _channel("r", "red"),
+                    _channel("g", "green"),
+                    _channel("b", "blue"),
+                ]
+                rgb_int = self.rgb_to_number(rgb_values)
+            except (TypeError, ValueError):
+                rgb_int = None
+
+        if rgb_int is None:
+            return None
+        if rgb_int < 0:
+            rgb_int = 0
+        if rgb_max is not None:
+            rgb_int = min(rgb_int, rgb_max)
+        return rgb_int
+
+    def _coerce_int_in_range(self: Govee2Mqtt, value: Any, minimum: int, maximum: int) -> int | None:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return max(min(parsed, int(maximum)), int(minimum))
+
+    def _segment_option_label(self: Govee2Mqtt, segment_id: int) -> str:
+        return f"Segment {segment_id}"
+
+    def _parse_segment_selection(self: Govee2Mqtt, selection: Any, segment_range: Mapping[str, int] | None = None) -> int | None:
+        if isinstance(selection, (int, float)):
+            segment = int(selection)
+        elif isinstance(selection, str):
+            digits = "".join(ch for ch in selection if ch.isdigit())
+            if not digits:
+                return None
+            segment = int(digits)
+        else:
+            return None
+        if segment_range:
+            minimum = int(segment_range.get("min", segment))
+            maximum = int(segment_range.get("max", segment))
+            if segment < minimum or segment > maximum:
+                segment = max(min(segment, maximum), minimum)
+        return segment
+
+    def _scene_component_key(self: Govee2Mqtt, instance: str) -> str:
+        key = re.sub(r"(?<!^)(?=[A-Z])", "_", instance).lower()
+        if not key.endswith("_scene"):
+            key = f"{key}_scene"
+        return key
+
+    def _scene_instance_from_key(self: Govee2Mqtt, key: str) -> str:
+        base = key[:-6] if key.endswith("_scene") else key
+        parts = base.split("_")
+        if not parts:
+            return base
+        instance = parts[0]
+        if len(parts) > 1:
+            instance += "".join(word.capitalize() for word in parts[1:])
+        return instance
+
+    def _build_music_capability_value(self: Govee2Mqtt, device_id: str, overrides: Mapping[str, Any]) -> dict[str, int] | None:
+        music_state = self.states.get(device_id, {}).get("music", {})
+        if not music_state:
+            return None
+        options = music_state.get("options", {})
+        if not options:
+            return None
+
+        mode_name = overrides.get("mode") or music_state.get("mode")
+        if not mode_name:
+            return None
+        if not isinstance(mode_name, str):
+            mode_name = str(mode_name)
+
+        mode_value = options.get(mode_name)
+        if mode_value is None:
+            mode_value = self.find_key_by_value(options, mode_name)
+        if mode_value is None:
+            return None
+
+        payload: dict[str, int] = {"musicMode": int(mode_value)}
+
+        sensitivity = overrides.get("sensitivity", music_state.get("sensitivity"))
+        if isinstance(sensitivity, str):
+            if sensitivity.isdigit():
+                sensitivity = int(sensitivity)
+            else:
+                sensitivity = music_state.get("sensitivity")
+        if isinstance(sensitivity, (int, float)):
+            payload["sensitivity"] = int(sensitivity)
+        else:
+            payload["sensitivity"] = int(music_state.get("sensitivity", 100))
+
+        auto_color_override = overrides.get("auto_color")
+        auto_color_state = (
+            self._normalize_music_auto_color_state(auto_color_override, music_state.get("auto_color_values", {}))
+            if auto_color_override is not None
+            else music_state.get("auto_color_state")
+        )
+        auto_color_values = music_state.get("auto_color_values", {})
+        if auto_color_state is not None and auto_color_values:
+            key = "on" if auto_color_state else "off"
+            auto_color_value = auto_color_values.get(key)
+            if auto_color_value is not None:
+                payload["autoColor"] = int(auto_color_value)
+
+        rgb_override = overrides.get("rgb")
+        rgb_int = self._normalize_music_rgb(rgb_override, music_state.get("rgb_max")) if rgb_override is not None else music_state.get("rgb_value")
+        if rgb_int is not None:
+            payload["rgb"] = int(rgb_int)
+
+        return payload
+
+    def find_key_by_value(self: Govee2Mqtt, d: Mapping[Any, Any], target: Any) -> Any:
         return next((k for k, v in d.items() if v == target), None)
 
     def load_config(self: Govee2Mqtt, config_arg: Any | None = None) -> dict[str, Any]:
