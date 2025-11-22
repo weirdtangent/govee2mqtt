@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.2.0...v2.3.0) (2025-11-22)
+
+
+### Features
+
+* add air purifier support; update dependencies; optimize code ([a074b3c](https://github.com/weirdtangent/govee2mqtt/commit/a074b3c43c83477ba040424607a2fc8fc5ad57e7))
+
 # [2.2.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.1.1...v2.2.0) (2025-11-20)
 
 
