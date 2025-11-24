@@ -1,3 +1,10 @@
+## [2.3.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.2...v2.3.3) (2025-11-24)
+
+
+### Bug Fixes
+
+* make sure all device_names logged are in quotes ([5212dcf](https://github.com/weirdtangent/govee2mqtt/commit/5212dcf975554cc99c810c457b60368b374b2c8a))
+
 ## [2.3.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.1...v2.3.2) (2025-11-24)
 
 
