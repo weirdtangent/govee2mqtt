@@ -178,10 +178,10 @@ class MqttMixin:
             self.logger.error(f"failed to parse device_id and/or payload from mqtt topic components: {components}")
             return
         if not self.devices.get(device_id, None):
-            self.logger.warning(f"got mqtt message for unknown device: {device_id}")
+            self.logger.warning(f"got mqtt message for unknown device: ({device_id})")
             return
 
-        self.logger.info(f"got message for {self.get_device_name(device_id)}: {payload}")
+        self.logger.info(f"got message for '{self.get_device_name(device_id)}': {payload}")
         await self.send_command(device_id, attribute, payload)
 
     def _parse_device_topic(self: Govee2Mqtt, components: list[str]) -> list[str | None] | None:

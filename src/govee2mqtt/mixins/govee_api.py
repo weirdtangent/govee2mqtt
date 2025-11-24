@@ -62,7 +62,7 @@ class GoveeAPIMixin:
         return result
 
     async def get_device(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
-        self.logger.debug(f"getting device {self.get_device_name(device_id)} ({device_id}) from Govee")
+        self.logger.debug(f"getting device '{self.get_device_name(device_id)}' ({device_id}) from Govee")
 
         headers = self.get_headers()
         body = {
@@ -79,16 +79,16 @@ class GoveeAPIMixin:
                 self.set_if_rate_limited(r.status)
 
                 if r.status != 200:
-                    self.logger.error(f"error ({r.status}) getting device ({self.get_device_name(device_id)})")
+                    self.logger.error(f"error ({r.status}) getting device '{self.get_device_name(device_id)}'")
                     return {}
 
                 data = await r.json()
 
         except aiohttp.ClientError as err:
-            self.logger.error(f"request error communicating with Govee for device ({self.get_device_name(device_id)}): {err}")
+            self.logger.error(f"request error communicating with Govee for device '{self.get_device_name(device_id)}': {err}")
             return {}
         except Exception as err:
-            self.logger.error(f"error communicating with Govee for device ({self.get_device_name(device_id)}): {err}")
+            self.logger.error(f"error communicating with Govee for device '{self.get_device_name(device_id)}': {err}")
             return {}
 
         new_capabilities: dict[str, Any] = {}
@@ -123,10 +123,10 @@ class GoveeAPIMixin:
                 data = await r.json()
 
         except ClientError:
-            self.logger.error(f"request error communicating with Govee sending command to device ({self.get_device_name(device_id)})")
+            self.logger.error(f"request error communicating with Govee sending command to device '{self.get_device_name(device_id)}'")
             return {}
         except Exception:
-            self.logger.error(f"error communicating with Govee sending command to device ({self.get_device_name(device_id)})")
+            self.logger.error(f"error communicating with Govee sending command to device '{self.get_device_name(device_id)}'")
             return {}
 
         new_capabilities = {}
@@ -139,7 +139,7 @@ class GoveeAPIMixin:
                 else:
                     new_capabilities[capability["instance"]] = capability["value"]
         except Exception:
-            self.logger.error(f"failed to process response sending command to device ({self.get_device_name(device_id)})")
+            self.logger.error(f"failed to process response sending command to device '{self.get_device_name(device_id)}'")
             return {}
 
         return new_capabilities
