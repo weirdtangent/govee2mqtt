@@ -1,3 +1,10 @@
+## [2.3.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.1...v2.3.2) (2025-11-24)
+
+
+### Bug Fixes
+
+* always try to log device_name in preference to device_id ([a7e055c](https://github.com/weirdtangent/govee2mqtt/commit/a7e055c24ef2613867170c326d249636fb2d38de))
+
 ## [2.3.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.0...v2.3.1) (2025-11-22)
 
 
