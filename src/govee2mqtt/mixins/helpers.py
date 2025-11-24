@@ -322,7 +322,7 @@ class HelpersMixin:
                     if switch_updates:
                         self.upsert_state(device_id, switch=switch_updates)
                 case _:
-                    self.logger.warning(f"Govee update for device {device_id} [{device_id}], unhandled state {key} => {data[key]}")
+                    self.logger.warning(f"Govee update for device {self.get_device_name(device_id)} [{device_id}], unhandled state {key} => {data[key]}")
 
     # convert MQTT attributes to Govee capabilities
     def build_govee_capabilities(self: Govee2Mqtt, device_id: str, attribute: str, payload: Any) -> dict[str, dict]:
@@ -609,7 +609,7 @@ class HelpersMixin:
         # convert what we received in the command to Govee API capabilities
         capabilities = self.build_govee_capabilities(device_id, attribute, command)
         if not capabilities:
-            self.logger.debug(f"nothing to send Govee for {device_id} for command {command}")
+            self.logger.debug(f"nothing to send Govee for {self.get_device_name(device_id)} for command {command}")
             return
 
         need_boost = False

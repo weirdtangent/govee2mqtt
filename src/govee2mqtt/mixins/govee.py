@@ -45,7 +45,7 @@ class GoveeMixin:
         missing_devices = set(self.devices.keys()) - seen_devices
         for device_id in missing_devices:
             await self.publish_device_availability(device_id, online=False)
-            self.logger.warning(f"device {device_id} not seen in Govee API list — marked offline")
+            self.logger.warning(f"device {self.get_device_name(device_id)} not seen in Govee API list — marked offline")
 
         # Handle first discovery completion
         if not self.discovery_complete:
@@ -829,7 +829,7 @@ class GoveeMixin:
         await self.build_device_states(device_id)
 
         if not self.is_discovered(device_id):
-            self.logger.info(f'added new {type}: "{device["device"]["name"]}" [Govee {device["device"]["model"]}] ({device_id})')
+            self.logger.info(f'added new {type}: "{device["device"]["name"]}" [Govee {device["device"]["model"]}] ({self.get_device_name(device_id)})')
             await self.publish_device_discovery(device_id)
 
         await self.publish_device_availability(device_id, online=True)
