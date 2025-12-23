@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.3...v2.4.0) (2025-12-23)
+
+
+### Features
+
+* add security workflow features ([eef54b7](https://github.com/weirdtangent/govee2mqtt/commit/eef54b72bd0fc6968b392d8a3b9a64f3ed6ea943))
+
 ## [2.3.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.2...v2.3.3) (2025-11-24)
 
 
