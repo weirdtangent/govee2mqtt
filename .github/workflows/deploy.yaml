@@ -183,11 +183,6 @@ jobs:
         run: |
           cosign sign --yes "graystorm/govee2mqtt@${DIGEST}"
 
-  trivy:
-    name: Trivy Vulnerability Scan
-    needs: [docker]
-    runs-on: ubuntu-latest
-    steps:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
