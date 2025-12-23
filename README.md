@@ -147,3 +147,10 @@ A few people have kindly requested a way to donate a small amount of money. If y
 ![Docker Image Version](https://img.shields.io/docker/v/graystorm/govee2mqtt?sort=semver&logo=docker)
 ![Docker Pulls](https://img.shields.io/docker/pulls/graystorm/govee2mqtt?logo=docker)
 ![License](https://img.shields.io/github/license/weirdtangent/govee2mqtt)
+
+### Security
+
+![Trivy Scan](https://img.shields.io/github/actions/workflow/status/weirdtangent/govee2mqtt/deploy.yaml?branch=main&label=trivy%20scan&logo=aquasecurity)
+![Cosign](https://img.shields.io/badge/cosign-signed-blue?logo=sigstore)
+![SBOM](https://img.shields.io/badge/SBOM-included-green)
+![Provenance](https://img.shields.io/badge/provenance-attested-green)
