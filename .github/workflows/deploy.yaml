@@ -58,6 +58,7 @@ jobs:
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [lint]
     outputs:
       published: ${{ steps.semrel.outputs.new_release_published }}
