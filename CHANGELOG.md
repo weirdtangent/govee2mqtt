@@ -1,3 +1,10 @@
+## [2.5.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.0...v2.5.1) (2025-12-26)
+
+
+### Bug Fixes
+
+* Sort light scene options alphabetically ([94766c4](https://github.com/weirdtangent/govee2mqtt/commit/94766c46d6598c95883316d783d3383ae3395b58))
+
 # [2.5.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.4.0...v2.5.0) (2025-12-26)
 
 
