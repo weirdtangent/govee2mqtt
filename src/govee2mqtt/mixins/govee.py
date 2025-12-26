@@ -96,10 +96,15 @@ class GoveeMixin:
         raw_id = str(light["device"])
         device_id = raw_id.replace(":", "").upper()
 
-        components = self.build_light_components(device_id, light)
+        # Store internal state first so get_device_scenes can access sku/raw_id
+        self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku")})
+
+        # Fetch available light scenes from the Govee API
+        scenes = await self.get_device_scenes(device_id)
+
+        components = self.build_light_components(device_id, light, scenes=scenes)
         device = _build_device_payload(self, device_id, light, "light", components)
 
-        self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku")})
         await self.prepare_device(device, raw_id, device_id, "light")
         return device_id
 
@@ -445,7 +450,9 @@ class GoveeMixin:
 
         return ""
 
-    def build_light_components(self: Govee2Mqtt, device_id: str, light: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    def build_light_components(
+        self: Govee2Mqtt, device_id: str, light: dict[str, Any], scenes: list[dict[str, Any]] | None = None
+    ) -> dict[str, dict[str, Any]]:
         light_is_nightlight = False
 
         components: dict[str, dict[str, Any]] = {
@@ -817,6 +824,36 @@ class GoveeMixin:
             internal_updates["dynamic_scene_instances"] = dynamic_scene_instances_map
         if dynamic_scene_components_map:
             internal_updates["dynamic_scene_components"] = dynamic_scene_components_map
+
+        # Add light_scene select component if scenes were fetched from the API
+        if scenes:
+            api_scene_options: list[str] = []
+            api_scene_values: dict[str, dict[str, Any]] = {}  # name -> {paramId, id} or numeric value
+            for scene in scenes:
+                name = scene.get("name")
+                value = scene.get("value")
+                if name and value is not None:
+                    api_scene_options.append(name)
+                    api_scene_values[name] = value
+
+            if api_scene_options:
+                existing_select_state = self.states.get(device_id, {}).get("select", {})
+                default_scene = existing_select_state.get("light_scene")
+                if default_scene not in api_scene_options:
+                    default_scene = api_scene_options[0]
+
+                components["light_scene"] = {
+                    "p": "select",
+                    "name": "Light Scene",
+                    "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light_scene"),
+                    "stat_t": self.mqtt_helper.stat_t(device_id, "select", "light_scene"),
+                    "cmd_t": self.mqtt_helper.cmd_t(device_id, "select", "light_scene"),
+                    "options": api_scene_options,
+                    "icon": "mdi:palette",
+                }
+                self.upsert_state(device_id, select={"light_scene": default_scene})
+                internal_updates["light_scene_values"] = api_scene_values
+
         if internal_updates:
             self.upsert_state(device_id, internal=internal_updates)
 

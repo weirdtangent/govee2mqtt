@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 DEVICE_URL = "https://openapi.api.govee.com/router/api/v1/device/state"
 DEVICE_LIST_URL = "https://openapi.api.govee.com/router/api/v1/user/devices"
 COMMAND_URL = "https://openapi.api.govee.com/router/api/v1/device/control"
+SCENES_URL = "https://openapi.api.govee.com/router/api/v1/device/scenes"
 
 
 class GoveeAPIMixin:
@@ -96,6 +97,48 @@ class GoveeAPIMixin:
             new_capabilities[capability["instance"]] = capability["state"]["value"]
 
         return new_capabilities
+
+    async def get_device_scenes(self: Govee2Mqtt, device_id: str) -> list[dict[str, Any]]:
+        """Fetch available light scenes for a device from the Govee API."""
+        self.logger.debug(f"getting light scenes for device ({device_id}) from Govee")
+
+        headers = self.get_headers()
+        body = {
+            "requestId": str(uuid.uuid4()),
+            "payload": {
+                "sku": self.get_device_sku(device_id),
+                "device": self.get_raw_id(device_id),
+            },
+        }
+
+        try:
+            async with self.session.post(SCENES_URL, headers=headers, json=body) as r:
+                self.increase_api_calls()
+                self.set_if_rate_limited(r.status)
+
+                if r.status != 200:
+                    self.logger.debug(f"error ({r.status}) getting scenes for device ({device_id})")
+                    return []
+
+                data = await r.json()
+
+        except aiohttp.ClientError as err:
+            self.logger.debug(f"request error getting scenes for device ({device_id}): {err}")
+            return []
+        except Exception as err:
+            self.logger.debug(f"error getting scenes for device ({device_id}): {err}")
+            return []
+
+        # Extract scene options from the response
+        scenes: list[dict[str, Any]] = []
+        for capability in data.get("payload", {}).get("capabilities", []):
+            if capability.get("instance") == "lightScene":
+                for option in capability.get("parameters", {}).get("options", []):
+                    name = option.get("name")
+                    value = option.get("value")
+                    if name and value is not None:
+                        scenes.append({"name": name, "value": value})
+        return scenes
 
     async def post_command(self: Govee2Mqtt, device_id: str, sku: str, capability: dict[str, Any], instance: str, value: str) -> dict[str, Any]:
         headers = self.get_headers()
