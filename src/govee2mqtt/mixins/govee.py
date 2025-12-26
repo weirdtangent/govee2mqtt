@@ -827,15 +827,14 @@ class GoveeMixin:
 
         # Add light_scene select component if scenes were fetched from the API
         if scenes:
-            api_scene_options: list[str] = []
             api_scene_values: dict[str, dict[str, Any]] = {}  # name -> {paramId, id} or numeric value
             for scene in scenes:
                 name = scene.get("name")
                 value = scene.get("value")
-                if name and value is not None:
-                    api_scene_options.append(name)
+                if isinstance(name, str) and value is not None:
                     api_scene_values[name] = value
 
+            api_scene_options = sorted(api_scene_values, key=str.casefold)
             if api_scene_options:
                 existing_select_state = self.states.get(device_id, {}).get("select", {})
                 default_scene = existing_select_state.get("light_scene")
