@@ -205,13 +205,48 @@ class HelpersMixin:
                     self.upsert_state(device_id, select={"work_mode": level_selection})
                 case key if key in {"lightScene", "diyScene", "snapshot"}:
                     internal = self.states.get(device_id, {}).get("internal", {})
+                    value = data[key]
+                    api_scene_handled = False
+
+                    # Handle API-fetched light scenes (stored in light_scene_values)
+                    if key == "lightScene":
+                        light_scene_values = internal.get("light_scene_values", {})
+                        if light_scene_values:
+                            # Find scene name by matching the value (which could be {paramId, id} dict or int)
+                            light_scene_selection: str | None = None
+                            for scene_name, scene_value in light_scene_values.items():
+                                if scene_value == value:
+                                    light_scene_selection = scene_name
+                                    break
+                                # Check if both are dicts with matching id
+                                if isinstance(value, dict) and isinstance(scene_value, dict):
+                                    if value.get("id") == scene_value.get("id"):
+                                        light_scene_selection = scene_name
+                                        break
+                                # Check if value is an int matching the id in a stored dict
+                                if isinstance(value, int) and isinstance(scene_value, dict):
+                                    if value == scene_value.get("id"):
+                                        light_scene_selection = scene_name
+                                        break
+                                # Check if value is a dict with id matching a stored int
+                                if isinstance(value, dict) and isinstance(scene_value, int):
+                                    if value.get("id") == scene_value:
+                                        light_scene_selection = scene_name
+                                        break
+                            if light_scene_selection:
+                                self.upsert_state(device_id, select={"light_scene": light_scene_selection})
+                                api_scene_handled = True
+
+                    # Handle dynamic scenes from device capabilities (existing flow)
+                    # Skip for lightScene if API scenes were already handled to avoid overwriting
+                    if key == "lightScene" and api_scene_handled:
+                        continue
                     scene_instances = internal.get("dynamic_scene_instances", {})
                     scene_labels_root = internal.get("dynamic_scene_labels", {})
                     component_key = scene_instances.get(key)
                     if not component_key:
                         continue
                     scene_labels = scene_labels_root.get(key, {})
-                    value = data[key]
                     dynamic_scene_selection: str | None = None
                     if isinstance(value, int):
                         dynamic_scene_selection = scene_labels.get(value) or scene_labels.get(str(value))
@@ -413,6 +448,25 @@ class HelpersMixin:
                         }
                 case key if key.endswith("_scene"):
                     internal = self.states.get(device_id, {}).get("internal", {})
+
+                    # First, try API-fetched light scenes (for light_scene specifically)
+                    if key == "light_scene":
+                        light_scene_values = internal.get("light_scene_values", {})
+                        if light_scene_values:
+                            selection = str(value)
+                            scene_value_data = light_scene_values.get(selection)
+                            if scene_value_data is not None:
+                                # Update local state
+                                self.upsert_state(device_id, select={"light_scene": selection})
+                                # The value can be a dict {paramId, id} or a simple numeric value
+                                capabilities["lightScene"] = {
+                                    "type": "devices.capabilities.dynamic_scene",
+                                    "instance": "lightScene",
+                                    "value": scene_value_data,
+                                }
+                                continue
+
+                    # Fall back to dynamic_scene_components (from device capabilities)
                     component_map = internal.get("dynamic_scene_components", {})
                     scene_instance = component_map.get(key)
                     if not scene_instance:
