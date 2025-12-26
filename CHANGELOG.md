@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.4.0...v2.5.0) (2025-12-26)
+
+
+### Features
+
+* add light scene support for Govee lights ([3c6e4af](https://github.com/weirdtangent/govee2mqtt/commit/3c6e4af6cef72212234c9c04a486742e2310e964))
+
 # [2.4.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.3.3...v2.4.0) (2025-12-23)
 
 
