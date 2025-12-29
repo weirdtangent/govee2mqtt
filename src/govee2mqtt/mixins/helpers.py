@@ -762,9 +762,22 @@ class HelpersMixin:
                         # The max channel value represents the brightness level (0-255).
                         if "brightness" not in pending:
                             rgb = pending.get("rgb_color")
+                            rgb_values: list[int] | None = None
+                            # Handle both list/tuple and string formats (e.g., "255,128,0")
                             if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
                                 try:
-                                    inferred_brightness = max(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+                                    rgb_values = [int(rgb[0]), int(rgb[1]), int(rgb[2])]
+                                except (TypeError, ValueError):
+                                    rgb_values = None
+                            elif isinstance(rgb, str) and "," in rgb:
+                                try:
+                                    parts = rgb.split(",", 3)
+                                    rgb_values = [int(parts[0]), int(parts[1]), int(parts[2])]
+                                except (TypeError, ValueError, IndexError):
+                                    rgb_values = None
+                            if rgb_values:
+                                try:
+                                    inferred_brightness = max(rgb_values)
                                     if inferred_brightness > 0:
                                         # Scale from 0-255 to 0-100 for Govee API
                                         pending["brightness"] = round(inferred_brightness * 100 / 255)
@@ -781,9 +794,11 @@ class HelpersMixin:
                 batched_command = dict(pending)
                 pending.clear()
 
-            # Phase 4: Send the batched command (lock NOT held during API call)
-            if batched_command:
-                await self._send_single_command(device_id, attribute, batched_command)
+                # Phase 4: Send the batched command (lock held to maintain ordering)
+                # This ensures commands complete in the order they were batched,
+                # preventing race conditions where a slow API call completes after a fast one.
+                if batched_command:
+                    await self._send_single_command(device_id, attribute, batched_command)
         except asyncio.CancelledError:
             # If cancelled, still clear pending to prevent stuck commands
             async with lock:
