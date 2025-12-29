@@ -673,6 +673,13 @@ class HelpersMixin:
             self._pending_commands[device_id] = {}
         return self._pending_commands[device_id]
 
+    def _normalize_color_key(self: Govee2Mqtt, key: str) -> str:
+        """Normalize RGB color key aliases to 'rgb_color' for consistent conflict detection."""
+        # build_govee_capabilities treats "rgb_color", "rgb", and "color" as equivalent
+        if key in ("rgb", "color"):
+            return "rgb_color"
+        return key
+
     async def send_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         """Batch commands for the same device to handle conflicting color modes.
 
@@ -685,7 +692,7 @@ class HelpersMixin:
             return
 
         # Normalize the attribute name for batching
-        normalized_attr = attribute.lower()
+        normalized_attr = self._normalize_color_key(attribute.lower())
 
         # Get the per-device lock
         lock = self._get_device_lock(device_id)
@@ -705,11 +712,13 @@ class HelpersMixin:
             # Store the command
             if isinstance(command, dict):
                 for key, value in command.items():
-                    pending[key] = value
+                    # Normalize RGB key aliases for consistent conflict detection
+                    normalized_key = self._normalize_color_key(key)
+                    pending[normalized_key] = value
                     # Track arrival order for color modes
-                    if key in ("rgb_color", "color_temp"):
-                        pending[order_key] = [a for a in pending[order_key] if a != key]
-                        pending[order_key].append(key)
+                    if normalized_key in ("rgb_color", "color_temp"):
+                        pending[order_key] = [a for a in pending[order_key] if a != normalized_key]
+                        pending[order_key].append(normalized_key)
             else:
                 pending[normalized_attr] = command
                 # Track arrival order for color modes
@@ -725,47 +734,55 @@ class HelpersMixin:
         await asyncio.sleep(COLOR_MODE_BATCH_WINDOW)
 
         # Phase 3: Process and send the batched commands (hold lock)
+        batched_command: dict[str, Any] = {}
         async with lock:
             pending = self._get_pending_commands(device_id)
 
-            # Check if there are still pending commands
-            order_key = "_order"
-            if not pending or pending == {order_key: []}:
-                return
+            try:
+                # Check if there are still pending commands
+                order_key = "_order"
+                if not pending or pending == {order_key: []}:
+                    return
 
-            # Extract arrival order and remove the tracking key
-            arrival_order = pending.pop(order_key, [])
+                # Extract arrival order and remove the tracking key
+                arrival_order = pending.pop(order_key, [])
 
-            # If both rgb_color and color_temp are present, keep only the LAST one
-            has_rgb = "rgb_color" in pending
-            has_color_temp = "color_temp" in pending
-            if has_rgb and has_color_temp:
-                # Determine which arrived last
-                last_color_mode = arrival_order[-1] if arrival_order else "color_temp"
-                if last_color_mode == "color_temp":
-                    # Extract brightness from rgb_color before dropping it.
-                    # HA embeds brightness in the RGB values (e.g., dim orange [76,30,0] vs bright [255,127,0]).
-                    # The max channel value represents the brightness level (0-255).
-                    if "brightness" not in pending:
-                        rgb = pending["rgb_color"]
-                        if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
-                            inferred_brightness = max(int(rgb[0]), int(rgb[1]), int(rgb[2]))
-                            if inferred_brightness > 0:
-                                # Scale from 0-255 to 0-100 for Govee API
-                                pending["brightness"] = round(inferred_brightness * 100 / 255)
-                                self.logger.debug(f"inferred brightness={pending['brightness']} from rgb_color {rgb} for {device_id}")
-                    del pending["rgb_color"]
-                    self.logger.debug(f"dropping rgb_color in favor of color_temp (arrived last) for {device_id}")
-                else:
-                    del pending["color_temp"]
-                    self.logger.debug(f"dropping color_temp in favor of rgb_color (arrived last) for {device_id}")
+                # If both rgb_color and color_temp are present, keep only the LAST one
+                has_rgb = "rgb_color" in pending
+                has_color_temp = "color_temp" in pending
+                if has_rgb and has_color_temp:
+                    # Determine which arrived last
+                    last_color_mode = arrival_order[-1] if arrival_order else "color_temp"
+                    if last_color_mode == "color_temp":
+                        # Extract brightness from rgb_color before dropping it.
+                        # HA embeds brightness in the RGB values (e.g., dim orange [76,30,0] vs bright [255,127,0]).
+                        # The max channel value represents the brightness level (0-255).
+                        if "brightness" not in pending:
+                            rgb = pending.get("rgb_color")
+                            if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
+                                try:
+                                    inferred_brightness = max(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+                                    if inferred_brightness > 0:
+                                        # Scale from 0-255 to 0-100 for Govee API
+                                        pending["brightness"] = round(inferred_brightness * 100 / 255)
+                                        self.logger.debug(f"inferred brightness={pending['brightness']} from rgb_color {rgb} for {device_id}")
+                                except (TypeError, ValueError) as e:
+                                    self.logger.warning(f"failed to infer brightness from rgb_color {rgb}: {e}")
+                        pending.pop("rgb_color", None)
+                        self.logger.debug(f"dropping rgb_color in favor of color_temp (arrived last) for {device_id}")
+                    else:
+                        pending.pop("color_temp", None)
+                        self.logger.debug(f"dropping color_temp in favor of rgb_color (arrived last) for {device_id}")
 
-            # Take ownership of pending commands and clear them
-            batched_command = dict(pending)
-            pending.clear()
+                # Take ownership of pending commands
+                batched_command = dict(pending)
+            finally:
+                # Always clear pending to prevent corruption on exception
+                pending.clear()
 
         # Phase 4: Send the batched command (lock NOT held during API call)
-        await self._send_single_command(device_id, attribute, batched_command)
+        if batched_command:
+            await self._send_single_command(device_id, attribute, batched_command)
 
     async def _send_single_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         """Send a single (possibly batched) command to the Govee API."""
