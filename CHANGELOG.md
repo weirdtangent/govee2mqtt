@@ -1,3 +1,14 @@
+## [2.5.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.2...v2.5.3) (2025-12-29)
+
+
+### Bug Fixes
+
+* add exception safety and normalize RGB key aliases ([50002e8](https://github.com/weirdtangent/govee2mqtt/commit/50002e8e870d8318cbd38b336c5804e6c446b0e3))
+* batch color mode commands and infer brightness from rgb_color ([c64fa00](https://github.com/weirdtangent/govee2mqtt/commit/c64fa003bd8e14a1bdac129cacd532c90e5eb8ae))
+* clear pending on cancellation during sleep to prevent stuck commands ([91fd471](https://github.com/weirdtangent/govee2mqtt/commit/91fd471897a01a1de9828f13dd0d1d4132bda163))
+* hold lock during API call and handle string RGB values ([9461519](https://github.com/weirdtangent/govee2mqtt/commit/9461519b7d6798082a03363c90b2e433ebd89be7))
+* release lock during batch window to allow command collection ([fe70986](https://github.com/weirdtangent/govee2mqtt/commit/fe7098697da5cfc78c20bf2fb9732be6bd8a07dd))
+
 ## [2.5.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.1...v2.5.2) (2025-12-29)
 
 
