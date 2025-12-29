@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
+import asyncio
 import colorsys
 from deepmerge.merger import Merger
 import logging
@@ -655,46 +656,57 @@ class HelpersMixin:
 
     # send command to Govee -----------------------------------------------------------------------
 
+    def _get_device_lock(self: Govee2Mqtt, device_id: str) -> asyncio.Lock:
+        """Get or create a per-device lock to serialize commands to the same device."""
+        if device_id not in self.command_locks:
+            self.command_locks[device_id] = asyncio.Lock()
+        return self.command_locks[device_id]
+
     async def send_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         if device_id == "service":
             self.logger.error(f'why are you trying to send {command} to the "service"? Ignoring you.')
             return
 
-        # convert what we received in the command to Govee API capabilities
-        capabilities = self.build_govee_capabilities(device_id, attribute, command)
-        if not capabilities:
-            self.logger.debug(f"nothing to send Govee for '{self.get_device_name(device_id)}' for command {command}")
-            return
+        # Use a per-device lock to serialize commands to the same device.
+        # This prevents race conditions when Home Assistant sends multiple
+        # attribute commands (e.g., brightness + color_temp) nearly simultaneously.
+        lock = self._get_device_lock(device_id)
+        async with lock:
+            # convert what we received in the command to Govee API capabilities
+            capabilities = self.build_govee_capabilities(device_id, attribute, command)
+            if not capabilities:
+                self.logger.debug(f"nothing to send Govee for '{self.get_device_name(device_id)}' for command {command}")
+                return
 
-        need_boost = False
-        for key in capabilities:
-            self.logger.debug(f"posting {key} to Govee API: " + ", ".join(f"{k}={v}" for k, v in capabilities[key].items()))
-            response = await self.post_command(
-                self.get_raw_id(device_id),
-                self.get_device_sku(device_id),
-                capabilities[key]["type"],
-                capabilities[key]["instance"],
-                capabilities[key]["value"],
-            )
-            await self.publish_service_state()
+            need_boost = False
+            for key in capabilities:
+                self.logger.debug(f"posting {key} to Govee API: " + ", ".join(f"{k}={v}" for k, v in capabilities[key].items()))
+                response = await self.post_command(
+                    self.get_raw_id(device_id),
+                    self.get_device_sku(device_id),
+                    capabilities[key]["type"],
+                    capabilities[key]["instance"],
+                    capabilities[key]["value"],
+                )
+                await self.publish_service_state()
 
-            # no need to boost-refresh if we get the state back on the successful command response
-            if len(response) > 0:
-                await self.build_device_states(device_id, response)
-                self.logger.debug(f"got response from Govee API: {response}")
-                await self.publish_device_state(device_id)
+                # no need to boost-refresh if we get the state back on the successful command response
+                if len(response) > 0:
+                    await self.build_device_states(device_id, response)
+                    self.logger.debug(f"got response from Govee API: {response}")
+                    await self.publish_device_state(device_id)
 
-                # remove from boosted list (if there), since we got a change
-                if device_id in self.boosted:
-                    self.boosted.remove(device_id)
-            else:
-                self.logger.debug(f"no details in response from Govee API: {response}")
-                need_boost = True
+                    # remove from boosted list (if there), since we got a change
+                    if device_id in self.boosted:
+                        self.boosted.remove(device_id)
+                else:
+                    self.logger.debug(f"no details in response from Govee API: {response}")
+                    need_boost = True
 
-        # if we send a command and did not get a state change back on the response
-        # lets boost this device to refresh it soon, just in case
-        if need_boost and device_id not in self.boosted:
-            self.boosted.append(device_id)
+            # if we send a command and did not get a state change back on the response
+            # lets boost this device to refresh it soon, just in case
+            if need_boost and device_id not in self.boosted:
+                self.boosted.append(device_id)
 
     async def handle_service_message(self: Govee2Mqtt, handler: str, message: Any) -> None:
         match handler:

@@ -1,4 +1,5 @@
 import aiohttp
+import asyncio
 from argparse import Namespace
 from asyncio import AbstractEventLoop
 from datetime import datetime
@@ -19,6 +20,7 @@ class GoveeServiceProtocol(Protocol):
     args: Namespace | None
     boosted: list[str]
     client_id: str
+    command_locks: dict[str, asyncio.Lock]
     config: dict[str, Any]
     device_interval: int
     device_list_interval: int
@@ -84,6 +86,7 @@ class GoveeServiceProtocol(Protocol):
     async def send_command(self, device_id: str, attribute: str, command: Any) -> None: ...
 
     def _assert_no_tuples(self, data: Any, path: str = "root") -> None: ...
+    def _get_device_lock(self, device_id: str) -> asyncio.Lock: ...
     def _handle_signal(self, signum: int, frame: FrameType | None = None) -> None: ...
     def _parse_device_topic(self, components: list[str]) -> list[str | None] | None: ...
     def _wrap_async(
