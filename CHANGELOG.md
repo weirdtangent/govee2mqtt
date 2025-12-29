@@ -1,3 +1,10 @@
+## [2.5.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.1...v2.5.2) (2025-12-29)
+
+
+### Bug Fixes
+
+* serialize commands per-device to prevent race conditions ([fdf35e9](https://github.com/weirdtangent/govee2mqtt/commit/fdf35e90b84c0d193f8f89b61dfb8f647624b61f))
+
 ## [2.5.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.0...v2.5.1) (2025-12-26)
 
 
