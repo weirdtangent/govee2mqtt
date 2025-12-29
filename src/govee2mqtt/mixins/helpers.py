@@ -687,16 +687,20 @@ class HelpersMixin:
         # Normalize the attribute name for batching
         normalized_attr = attribute.lower()
 
-        # Use a per-device lock to serialize command batches
+        # Get the per-device lock
         lock = self._get_device_lock(device_id)
+
+        # Phase 1: Add command to pending (briefly hold lock)
         async with lock:
-            # Get or create pending commands dict for this device
             pending = self._get_pending_commands(device_id)
 
             # Track arrival order for color mode commands
             order_key = "_order"
             if order_key not in pending:
                 pending[order_key] = []
+
+            # Check if we're the first command in this batch
+            is_first = len(pending) <= 1  # Only _order key present
 
             # Store the command
             if isinstance(command, dict):
@@ -713,10 +717,19 @@ class HelpersMixin:
                     pending[order_key] = [a for a in pending[order_key] if a != normalized_attr]
                     pending[order_key].append(normalized_attr)
 
-            # Wait for more commands to arrive
-            await asyncio.sleep(COLOR_MODE_BATCH_WINDOW)
+        # Only the first caller waits and processes the batch
+        if not is_first:
+            return
 
-            # Check if there are still pending commands (another caller might have processed them)
+        # Phase 2: Wait for more commands to arrive (lock NOT held)
+        await asyncio.sleep(COLOR_MODE_BATCH_WINDOW)
+
+        # Phase 3: Process and send the batched commands (hold lock)
+        async with lock:
+            pending = self._get_pending_commands(device_id)
+
+            # Check if there are still pending commands
+            order_key = "_order"
             if not pending or pending == {order_key: []}:
                 return
 
@@ -751,8 +764,8 @@ class HelpersMixin:
             batched_command = dict(pending)
             pending.clear()
 
-            # Now send the batched command
-            await self._send_single_command(device_id, attribute, batched_command)
+        # Phase 4: Send the batched command (lock NOT held during API call)
+        await self._send_single_command(device_id, attribute, batched_command)
 
     async def _send_single_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         """Send a single (possibly batched) command to the Govee API."""
