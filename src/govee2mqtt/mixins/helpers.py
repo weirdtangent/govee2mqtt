@@ -19,6 +19,11 @@ if TYPE_CHECKING:
 
 READY_FILE = os.getenv("READY_FILE", "/tmp/govee2mqtt.ready")
 
+# Time window (in seconds) to batch commands for the same device.
+# Home Assistant may send rgb_color and color_temp nearly simultaneously;
+# we collect them and keep only the one that arrived last.
+COLOR_MODE_BATCH_WINDOW = 0.1
+
 
 class ConfigError(ValueError):
     """Raised when the configuration file is invalid."""
@@ -662,51 +667,186 @@ class HelpersMixin:
             self.command_locks[device_id] = asyncio.Lock()
         return self.command_locks[device_id]
 
+    def _get_pending_commands(self: Govee2Mqtt, device_id: str) -> dict[str, Any]:
+        """Get or create a pending commands dict for a device."""
+        if device_id not in self._pending_commands:
+            self._pending_commands[device_id] = {}
+        return self._pending_commands[device_id]
+
+    def _normalize_color_key(self: Govee2Mqtt, key: str) -> str:
+        """Normalize RGB color key aliases to 'rgb_color' for consistent conflict detection."""
+        # build_govee_capabilities treats "rgb_color", "rgb", and "color" as equivalent
+        if key in ("rgb", "color"):
+            return "rgb_color"
+        return key
+
     async def send_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
+        """Batch commands for the same device to handle conflicting color modes.
+
+        Home Assistant sends rgb_color and color_temp as separate MQTT messages,
+        but they are mutually exclusive. We collect commands within a short window
+        and keep only the color mode that arrived last.
+        """
         if device_id == "service":
             self.logger.error(f'why are you trying to send {command} to the "service"? Ignoring you.')
             return
 
-        # Use a per-device lock to serialize commands to the same device.
-        # This prevents race conditions when Home Assistant sends multiple
-        # attribute commands (e.g., brightness + color_temp) nearly simultaneously.
+        # Normalize the attribute name for batching
+        normalized_attr = self._normalize_color_key(attribute.lower())
+
+        # Get the per-device lock
         lock = self._get_device_lock(device_id)
+
+        # Phase 1: Add command to pending (briefly hold lock)
         async with lock:
-            # convert what we received in the command to Govee API capabilities
-            capabilities = self.build_govee_capabilities(device_id, attribute, command)
-            if not capabilities:
-                self.logger.debug(f"nothing to send Govee for '{self.get_device_name(device_id)}' for command {command}")
-                return
+            pending = self._get_pending_commands(device_id)
 
-            need_boost = False
-            for key in capabilities:
-                self.logger.debug(f"posting {key} to Govee API: " + ", ".join(f"{k}={v}" for k, v in capabilities[key].items()))
-                response = await self.post_command(
-                    self.get_raw_id(device_id),
-                    self.get_device_sku(device_id),
-                    capabilities[key]["type"],
-                    capabilities[key]["instance"],
-                    capabilities[key]["value"],
-                )
-                await self.publish_service_state()
+            # Track arrival order for color mode commands
+            order_key = "_order"
+            if order_key not in pending:
+                pending[order_key] = []
 
-                # no need to boost-refresh if we get the state back on the successful command response
-                if len(response) > 0:
-                    await self.build_device_states(device_id, response)
-                    self.logger.debug(f"got response from Govee API: {response}")
-                    await self.publish_device_state(device_id)
+            # Check if we're the first command in this batch
+            is_first = len(pending) <= 1  # Only _order key present
 
-                    # remove from boosted list (if there), since we got a change
-                    if device_id in self.boosted:
-                        self.boosted.remove(device_id)
-                else:
-                    self.logger.debug(f"no details in response from Govee API: {response}")
-                    need_boost = True
+            # Store the command
+            if isinstance(command, dict):
+                for key, value in command.items():
+                    # Normalize RGB key aliases for consistent conflict detection
+                    normalized_key = self._normalize_color_key(key)
+                    pending[normalized_key] = value
+                    # Track arrival order for color modes
+                    if normalized_key in ("rgb_color", "color_temp"):
+                        pending[order_key] = [a for a in pending[order_key] if a != normalized_key]
+                        pending[order_key].append(normalized_key)
+            else:
+                pending[normalized_attr] = command
+                # Track arrival order for color modes
+                if normalized_attr in ("rgb_color", "color_temp"):
+                    pending[order_key] = [a for a in pending[order_key] if a != normalized_attr]
+                    pending[order_key].append(normalized_attr)
 
-            # if we send a command and did not get a state change back on the response
-            # lets boost this device to refresh it soon, just in case
-            if need_boost and device_id not in self.boosted:
-                self.boosted.append(device_id)
+        # Only the first caller waits and processes the batch
+        if not is_first:
+            return
+
+        # Wrap entire batch processing in try/finally to ensure pending is cleared
+        # even if cancelled during sleep or any other failure
+        batched_command: dict[str, Any] = {}
+        try:
+            # Phase 2: Wait for more commands to arrive (lock NOT held)
+            await asyncio.sleep(COLOR_MODE_BATCH_WINDOW)
+
+            # Phase 3: Process and send the batched commands (hold lock)
+            async with lock:
+                pending = self._get_pending_commands(device_id)
+
+                # Check if there are still pending commands
+                order_key = "_order"
+                if not pending or pending == {order_key: []}:
+                    pending.clear()
+                    return
+
+                # Extract arrival order and remove the tracking key
+                arrival_order = pending.pop(order_key, [])
+
+                # If both rgb_color and color_temp are present, keep only the LAST one
+                has_rgb = "rgb_color" in pending
+                has_color_temp = "color_temp" in pending
+                if has_rgb and has_color_temp:
+                    # Determine which arrived last
+                    last_color_mode = arrival_order[-1] if arrival_order else "color_temp"
+                    if last_color_mode == "color_temp":
+                        # Extract brightness from rgb_color before dropping it.
+                        # HA embeds brightness in the RGB values (e.g., dim orange [76,30,0] vs bright [255,127,0]).
+                        # The max channel value represents the brightness level (0-255).
+                        if "brightness" not in pending:
+                            rgb = pending.get("rgb_color")
+                            rgb_values: list[int] | None = None
+                            # Handle both list/tuple and string formats (e.g., "255,128,0")
+                            if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
+                                try:
+                                    rgb_values = [int(rgb[0]), int(rgb[1]), int(rgb[2])]
+                                except (TypeError, ValueError):
+                                    rgb_values = None
+                            elif isinstance(rgb, str) and "," in rgb:
+                                try:
+                                    parts = rgb.split(",", 3)
+                                    rgb_values = [int(parts[0]), int(parts[1]), int(parts[2])]
+                                except (TypeError, ValueError, IndexError):
+                                    rgb_values = None
+                            if rgb_values:
+                                try:
+                                    inferred_brightness = max(rgb_values)
+                                    if inferred_brightness > 0:
+                                        # Scale from 0-255 to 0-100 for Govee API
+                                        pending["brightness"] = round(inferred_brightness * 100 / 255)
+                                        self.logger.debug(f"inferred brightness={pending['brightness']} from rgb_color {rgb} for {device_id}")
+                                except (TypeError, ValueError) as e:
+                                    self.logger.warning(f"failed to infer brightness from rgb_color {rgb}: {e}")
+                        pending.pop("rgb_color", None)
+                        self.logger.debug(f"dropping rgb_color in favor of color_temp (arrived last) for {device_id}")
+                    else:
+                        pending.pop("color_temp", None)
+                        self.logger.debug(f"dropping color_temp in favor of rgb_color (arrived last) for {device_id}")
+
+                # Take ownership of pending commands and clear
+                batched_command = dict(pending)
+                pending.clear()
+
+                # Phase 4: Send the batched command (lock held to maintain ordering)
+                # This ensures commands complete in the order they were batched,
+                # preventing race conditions where a slow API call completes after a fast one.
+                if batched_command:
+                    await self._send_single_command(device_id, attribute, batched_command)
+        except asyncio.CancelledError:
+            # If cancelled, still clear pending to prevent stuck commands
+            async with lock:
+                self._get_pending_commands(device_id).clear()
+            raise
+        except Exception:
+            # On any other error, clear pending and re-raise
+            async with lock:
+                self._get_pending_commands(device_id).clear()
+            raise
+
+    async def _send_single_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
+        """Send a single (possibly batched) command to the Govee API."""
+        # convert what we received in the command to Govee API capabilities
+        capabilities = self.build_govee_capabilities(device_id, attribute, command)
+        if not capabilities:
+            self.logger.debug(f"nothing to send Govee for '{self.get_device_name(device_id)}' for command {command}")
+            return
+
+        need_boost = False
+        for key in capabilities:
+            self.logger.debug(f"posting {key} to Govee API: " + ", ".join(f"{k}={v}" for k, v in capabilities[key].items()))
+            response = await self.post_command(
+                self.get_raw_id(device_id),
+                self.get_device_sku(device_id),
+                capabilities[key]["type"],
+                capabilities[key]["instance"],
+                capabilities[key]["value"],
+            )
+            await self.publish_service_state()
+
+            # no need to boost-refresh if we get the state back on the successful command response
+            if len(response) > 0:
+                await self.build_device_states(device_id, response)
+                self.logger.debug(f"got response from Govee API: {response}")
+                await self.publish_device_state(device_id)
+
+                # remove from boosted list (if there), since we got a change
+                if device_id in self.boosted:
+                    self.boosted.remove(device_id)
+            else:
+                self.logger.debug(f"no details in response from Govee API: {response}")
+                need_boost = True
+
+        # if we send a command and did not get a state change back on the response
+        # lets boost this device to refresh it soon, just in case
+        if need_boost and device_id not in self.boosted:
+            self.boosted.append(device_id)
 
     async def handle_service_message(self: Govee2Mqtt, handler: str, message: Any) -> None:
         match handler:
