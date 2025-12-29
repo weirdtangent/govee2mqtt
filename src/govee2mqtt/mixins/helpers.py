@@ -730,18 +730,21 @@ class HelpersMixin:
         if not is_first:
             return
 
-        # Phase 2: Wait for more commands to arrive (lock NOT held)
-        await asyncio.sleep(COLOR_MODE_BATCH_WINDOW)
-
-        # Phase 3: Process and send the batched commands (hold lock)
+        # Wrap entire batch processing in try/finally to ensure pending is cleared
+        # even if cancelled during sleep or any other failure
         batched_command: dict[str, Any] = {}
-        async with lock:
-            pending = self._get_pending_commands(device_id)
+        try:
+            # Phase 2: Wait for more commands to arrive (lock NOT held)
+            await asyncio.sleep(COLOR_MODE_BATCH_WINDOW)
 
-            try:
+            # Phase 3: Process and send the batched commands (hold lock)
+            async with lock:
+                pending = self._get_pending_commands(device_id)
+
                 # Check if there are still pending commands
                 order_key = "_order"
                 if not pending or pending == {order_key: []}:
+                    pending.clear()
                     return
 
                 # Extract arrival order and remove the tracking key
@@ -774,15 +777,23 @@ class HelpersMixin:
                         pending.pop("color_temp", None)
                         self.logger.debug(f"dropping color_temp in favor of rgb_color (arrived last) for {device_id}")
 
-                # Take ownership of pending commands
+                # Take ownership of pending commands and clear
                 batched_command = dict(pending)
-            finally:
-                # Always clear pending to prevent corruption on exception
                 pending.clear()
 
-        # Phase 4: Send the batched command (lock NOT held during API call)
-        if batched_command:
-            await self._send_single_command(device_id, attribute, batched_command)
+            # Phase 4: Send the batched command (lock NOT held during API call)
+            if batched_command:
+                await self._send_single_command(device_id, attribute, batched_command)
+        except asyncio.CancelledError:
+            # If cancelled, still clear pending to prevent stuck commands
+            async with lock:
+                self._get_pending_commands(device_id).clear()
+            raise
+        except Exception:
+            # On any other error, clear pending and re-raise
+            async with lock:
+                self._get_pending_commands(device_id).clear()
+            raise
 
     async def _send_single_command(self: Govee2Mqtt, device_id: str, attribute: str, command: Any) -> None:
         """Send a single (possibly batched) command to the Govee API."""
