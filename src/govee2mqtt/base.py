@@ -57,6 +57,7 @@ class Base:
         self.states: dict[str, Any] = {}
         self.boosted: list[str] = []
         self.command_locks: dict[str, asyncio.Lock] = {}
+        self._pending_commands: dict[str, dict[str, Any]] = {}
 
         self.mqttc: Client
         self.mqtt_connect_time: datetime
