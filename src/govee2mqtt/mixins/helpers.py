@@ -362,6 +362,55 @@ class HelpersMixin:
                         self.upsert_state(device_id, number=number_updates)
                     if switch_updates:
                         self.upsert_state(device_id, switch=switch_updates)
+
+                # Handle scene-related numeric state IDs returned by Govee
+                # When a scene is set (e.g., "Morning"), Govee returns both:
+                #   - The complete scene via "lightScene" key (already handled above)
+                #   - Individual components via "id" and "paramId" keys (handled here)
+                # Example: Setting "Morning" → lightScene: {id: 1623, paramId: 1698}
+                #                            → id: 1623, paramId: 1698 (separate keys)
+                case "id" | "paramId":
+                    # Get current internal state
+                    internal = self.states.get(device_id, {}).get("internal", {})
+
+                    # Store the scene component for debugging/validation
+                    internal_key = f"scene_{key}"  # "scene_id" or "scene_paramId"
+                    internal[internal_key] = data[key]
+
+                    # Update internal state
+                    self.upsert_state(device_id, internal=internal)
+
+                    # Debug log to track scene state updates
+                    self.logger.debug(f"Device '{self.get_device_name(device_id)}' scene {key} => {data[key]}")
+
+                    # Validate scene ID matches the current scene (if set)
+                    if key == "id":
+                        current_select = self.states.get(device_id, {}).get("select", {})
+                        current_scene = current_select.get("light_scene")
+
+                        if current_scene:
+                            # Check if the ID matches what we expect for this scene
+                            light_scene_values = internal.get("light_scene_values", {})
+                            expected_value = light_scene_values.get(current_scene)
+
+                            # The expected value could be a dict {id, paramId} or just an int
+                            expected_id = None
+                            if isinstance(expected_value, dict):
+                                expected_id = expected_value.get("id")
+                            elif isinstance(expected_value, int):
+                                expected_id = expected_value
+
+                            if expected_id is not None:
+                                if expected_id == data[key]:
+                                    self.logger.debug(
+                                        f"Scene ID {data[key]} confirms '{current_scene}' " f"scene is active on device '{self.get_device_name(device_id)}'"
+                                    )
+                                else:
+                                    self.logger.warning(
+                                        f"Scene ID mismatch on device '{self.get_device_name(device_id)}': "
+                                        f"expected {expected_id} for '{current_scene}', got {data[key]}"
+                                    )
+
                 case _:
                     self.logger.warning(f"Govee update for device '{self.get_device_name(device_id)}' ({device_id}), unhandled state {key} => {data[key]}")
 
