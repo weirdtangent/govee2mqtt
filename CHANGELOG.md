@@ -1,3 +1,10 @@
+## [2.5.4](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.3...v2.5.4) (2025-12-30)
+
+
+### Bug Fixes
+
+* handle Govee scene state id and paramId to eliminate warnings ([4a5dea2](https://github.com/weirdtangent/govee2mqtt/commit/4a5dea233c5d7fc5c985ca46c70f5c4913754f9f))
+
 ## [2.5.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.2...v2.5.3) (2025-12-29)
 
 
