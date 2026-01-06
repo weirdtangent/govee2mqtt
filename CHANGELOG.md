@@ -1,3 +1,16 @@
+# [2.6.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.4...v2.6.0) (2026-01-06)
+
+
+### Bug Fixes
+
+* address Copilot review concerns ([1a2df6c](https://github.com/weirdtangent/govee2mqtt/commit/1a2df6c5b5b81471f23be9aa1033d94452b4eb56))
+* ensure protocol_version is always a string type ([28402d3](https://github.com/weirdtangent/govee2mqtt/commit/28402d37f94c0b2375c312bf80c6ea94f535ab23))
+
+
+### Features
+
+* add support for MQTT protocol version configuration ([2c4c9f2](https://github.com/weirdtangent/govee2mqtt/commit/2c4c9f27ba53a41ed5720f79132136f53db65aaa))
+
 ## [2.5.4](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.3...v2.5.4) (2025-12-30)
 
 
