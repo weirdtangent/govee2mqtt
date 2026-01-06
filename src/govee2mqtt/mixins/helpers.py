@@ -1277,6 +1277,7 @@ class HelpersMixin:
               "tls_key":                mqtt.get("tls_key")          or os.getenv("MQTT_TLS_KEY"),
               "prefix":                 mqtt.get("prefix")           or os.getenv("MQTT_PREFIX", "govee2mqtt"),
               "discovery_prefix":       mqtt.get("discovery_prefix") or os.getenv("MQTT_DISCOVERY_PREFIX", "homeassistant"),
+              "protocol_version":   str(mqtt.get("protocol_version") or os.getenv("MQTT_PROTOCOL_VERSION") or "5"),
         }
 
         govee = {

@@ -32,6 +32,7 @@ It supports the following environment variables:
 -   `MQTT_PASSWORD: password`
 -   `MQTT_PREFIX: govee`
 -   `MQTT_DISCOVERY_PREFIX: homeassistant`
+-   `MQTT_PROTOCOL_VERSION: 5` (MQTT protocol version: "5" for MQTT v5, "3.1.1" or "3" for MQTT v3.1.1)
 
 -   `GOVEE_API_KEY: [your_api_key]` (see https://developer.govee.com/reference/apply-you-govee-api-key)
 -   `GOVEE_DEVICE_INTERVAL: 30` (estimate 30 sec per 10 Govee devices, so set to 60 if you have 10-20 devices, etc)
