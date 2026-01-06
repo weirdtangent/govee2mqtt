@@ -6,6 +6,7 @@ from datetime import datetime
 from logging import Logger
 from mqtt_helper import MqttHelper
 from paho.mqtt.client import Client, MQTTMessage, ConnectFlags, DisconnectFlags
+from paho.mqtt.enums import MQTTProtocolVersion
 from paho.mqtt.reasoncodes import ReasonCode
 from paho.mqtt.properties import Properties
 from types import FrameType
@@ -35,6 +36,7 @@ class GoveeServiceProtocol(Protocol):
     mqtt_config: dict[str, Any]
     mqtt_connect_time: datetime
     mqtt_helper: MqttHelper
+    mqtt_protocol: MQTTProtocolVersion
     mqttc: Client
     qos: int
     rate_limited: bool
