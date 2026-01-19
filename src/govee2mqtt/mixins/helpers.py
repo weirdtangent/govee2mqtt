@@ -38,7 +38,8 @@ class HelpersMixin:
         component = self.devices[device_id]["component"]
 
         for key in data:
-            if not data[key]:
+            # Don't skip toggle states even when they're 0 (OFF)
+            if data[key] is None or (not data[key] and key not in {"dreamViewToggle", "gradientToggle", "nightlightToggle", "warmMistToggle"}):
                 continue
 
             match key:
