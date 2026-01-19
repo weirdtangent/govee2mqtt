@@ -2,19 +2,16 @@
 # Filters out base image vulnerabilities that don't apply to a Python MQTT application
 #
 # This application is a Python-based MQTT bridge that:
-# - Doesn't use system utilities (tar, perl, util-linux, etc.)
-# - Doesn't use network utilities (curl, libssh, openssl outside of Python)
-# - Doesn't use databases (sqlite, expat for XML)
+# - Doesn't use system command-line utilities (tar, perl, util-linux, etc.)
+# - Doesn't call curl/libssh/GnuTLS binaries (Python has native libraries)
+# - Doesn't use databases (sqlite) or XML parsing (expat)
 # - Runs in an ephemeral container with no persistent storage or shell access
+#
+# NOTE: These CVEs may have any upstream severity rating, but are assessed as
+# low/no risk for this specific application context after manual review.
 
 # ============================================================================
-# MEDIUM/LOW SEVERITY - Not actionable for this use case
-# ============================================================================
-# These will be filtered by workflow severity: 'CRITICAL,HIGH'
-# But documented here for completeness
-
-# ============================================================================
-# SYSTEM UTILITIES - Not used by Python application
+# SYSTEM UTILITIES - Command-line tools not invoked by Python app
 # ============================================================================
 
 # util-linux - System utilities like login, su, mount
@@ -35,28 +32,25 @@ CVE-2023-31486
 CVE-2018-20482
 
 # ============================================================================
-# NETWORK LIBRARIES - Not directly used (Python has its own stack)
+# NETWORK LIBRARIES - Binaries/CLI tools not invoked
 # ============================================================================
 
-# curl/libcurl - Python uses urllib/requests, not curl
+# curl/libcurl - The curl CLI tool is not invoked by this application
+# Python uses native urllib3/aiohttp, not subprocess calls to curl
 CVE-2024-9681
 CVE-2025-0359
 CVE-2025-0594
 CVE-2024-8096
 
-# libssh - SSH protocol not used by MQTT application
+# libssh - SSH protocol library and tools not used by MQTT application
+# paho-mqtt only uses TCP or TLS connections, not SSH
 CVE-2023-6004
 CVE-2023-6918
 CVE-2023-48795
 CVE-2023-1667
 CVE-2023-2283
 
-# OpenSSL - Python uses its own SSL/TLS via ssl module
-# These OpenSSL CVEs don't affect Python's cryptography stack
-CVE-2024-9143
-CVE-2024-5535
-
-# GnuTLS - Not used (Python uses OpenSSL bindings)
+# GnuTLS - This TLS library is not used (Python uses OpenSSL bindings)
 CVE-2024-0567
 CVE-2024-0553
 
@@ -64,7 +58,7 @@ CVE-2024-0553
 # PARSING LIBRARIES - Not used by this application
 # ============================================================================
 
-# libexpat - Only matters if parsing XML (we don't)
+# libexpat - Only matters if parsing XML (we use JSON, not XML)
 CVE-2024-45490
 CVE-2024-45491
 CVE-2024-45492
@@ -72,7 +66,7 @@ CVE-2024-50602
 CVE-2023-52425
 CVE-2023-52426
 
-# sqlite - Database not used in this application
+# sqlite - Database not used in this application (stateless MQTT bridge)
 CVE-2024-5470
 CVE-2023-7104
 
@@ -83,3 +77,10 @@ CVE-2023-7104
 # gcc/binutils - Build-time only, not in runtime container
 CVE-2023-4039
 CVE-2022-27943
+
+# ============================================================================
+# IMPORTANT: OpenSSL CVEs are NOT ignored
+# ============================================================================
+# Python's ssl module wraps OpenSSL, so OpenSSL CVEs CAN affect this application
+# when TLS is enabled for MQTT connections. OpenSSL CVEs must be reviewed and
+# patched via base image updates (apt-get upgrade), not ignored here.
