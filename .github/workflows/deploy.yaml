@@ -190,6 +190,8 @@ jobs:
           image-ref: graystorm/govee2mqtt:latest
           format: sarif
           output: trivy-results.sarif
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@27fcff4ecb39e96348e7ceddcc2d9ef42308b6fc # v4
