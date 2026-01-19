@@ -15,7 +15,7 @@ SKU_CLASS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^H714\d+$"), "humidifier"),
     (re.compile(r"^H715\d+$"), "dehumidifier"),
     (re.compile(r"^H716\d+$"), "aroma_diffuser"),
-    (re.compile(r"^H[678]\d{3,}$"), "light"),
+    (re.compile(r"^H[678]\d{2,}[A-Z]*$"), "light"),
     (re.compile(r"^H5\d{3,}$"), "sensor"),
 ]
 
