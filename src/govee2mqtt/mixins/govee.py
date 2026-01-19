@@ -10,11 +10,11 @@ if TYPE_CHECKING:
 
 
 SKU_CLASS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"^H710\d+[A-Z]*$"), "fan"),
-    (re.compile(r"^H712\d+[A-Z]*$"), "air_purifier"),
-    (re.compile(r"^H714\d+[A-Z]*$"), "humidifier"),
-    (re.compile(r"^H715\d+[A-Z]*$"), "dehumidifier"),
-    (re.compile(r"^H716\d+[A-Z]*$"), "aroma_diffuser"),
+    (re.compile(r"^H710\d*[A-Z]*$"), "fan"),
+    (re.compile(r"^H712\d*[A-Z]*$"), "air_purifier"),
+    (re.compile(r"^H714\d*[A-Z]*$"), "humidifier"),
+    (re.compile(r"^H715\d*[A-Z]*$"), "dehumidifier"),
+    (re.compile(r"^H716\d*[A-Z]*$"), "aroma_diffuser"),
     (re.compile(r"^H[678]\d{2,}[A-Z]*$"), "light"),
     (re.compile(r"^H5\d{2,}[A-Z]*$"), "sensor"),
 ]
