@@ -84,13 +84,19 @@ class HelpersMixin:
                     self.upsert_state(device_id, light={"color_temp": color})
 
                 case "gradientToggle":
-                    self.upsert_state(device_id, switch={"gradient": "ON" if data[key] == 1 else "OFF"}, light={"state": "ON" if data[key] == 1 else "OFF"})
+                    # Only update state if we have a definitive value (0 or 1), not empty string
+                    if data[key] in (0, 1):
+                        self.upsert_state(device_id, switch={"gradient": "ON" if data[key] == 1 else "OFF"}, light={"state": "ON" if data[key] == 1 else "OFF"})
 
                 case "nightlightToggle":
-                    self.upsert_state(device_id, light={"state": "ON" if data[key] == 1 else "OFF"})
+                    # Only update state if we have a definitive value (0 or 1), not empty string
+                    if data[key] in (0, 1):
+                        self.upsert_state(device_id, light={"state": "ON" if data[key] == 1 else "OFF"})
 
                 case "warmMistToggle":
-                    self.upsert_state(device_id, switch={"warm_mist": "ON" if data[key] == 1 else "OFF"})
+                    # Only update state if we have a definitive value (0 or 1), not empty string
+                    if data[key] in (0, 1):
+                        self.upsert_state(device_id, switch={"warm_mist": "ON" if data[key] == 1 else "OFF"})
 
                 case "nightlightScene":
                     scene_value = data[key]
