@@ -1,3 +1,10 @@
+## [2.6.5](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.4...v2.6.5) (2026-01-19)
+
+
+### Bug Fixes
+
+* don't assume DreamView is OFF on startup ([a1d1cb2](https://github.com/weirdtangent/govee2mqtt/commit/a1d1cb2288512ba12d4f3d39f22b60edd032f7b4))
+
 ## [2.6.4](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.3...v2.6.4) (2026-01-19)
 
 
