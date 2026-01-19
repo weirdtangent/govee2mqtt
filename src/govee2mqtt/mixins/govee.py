@@ -525,7 +525,7 @@ class GoveeMixin:
                         "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "dreamview"),
                         "icon": "mdi:creation",
                     }
-                    self.upsert_state(device_id, switch={"dreamview": "OFF"})
+                    # Don't set initial state - let build_device_states query actual state from API
                 case "dynamic_scene":
                     instance = cap.get("instance")
                     if not instance:
