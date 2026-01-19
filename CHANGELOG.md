@@ -1,3 +1,10 @@
+## [2.6.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.2...v2.6.3) (2026-01-19)
+
+
+### Bug Fixes
+
+* correct light state key in dreamViewToggle handler ([384d7bb](https://github.com/weirdtangent/govee2mqtt/commit/384d7bb46c5a8d64a5672449f6d36617400b8ce2))
+
 ## [2.6.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.1...v2.6.2) (2026-01-19)
 
 
