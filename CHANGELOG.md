@@ -1,3 +1,10 @@
+## [2.6.6](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.5...v2.6.6) (2026-01-19)
+
+
+### Bug Fixes
+
+* process toggle states even when OFF (value=0) ([13c5ab1](https://github.com/weirdtangent/govee2mqtt/commit/13c5ab1139b10763dbe2025ae2576910f1571169))
+
 ## [2.6.5](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.4...v2.6.5) (2026-01-19)
 
 
