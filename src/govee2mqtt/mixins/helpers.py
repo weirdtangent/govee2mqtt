@@ -478,9 +478,25 @@ class HelpersMixin:
                     # if one mode turned ON the others must be OFF
                     for other in {"gradient", "nightlight", "dreamview"} - {key}:
                         switch[other] = "OFF"
-                    capabilities[f"{key}Toggle"] = {
+                    # Map keys to correct Govee capability instance names (camelCase)
+                    instance_map = {
+                        "gradient": "gradientToggle",
+                        "nightlight": "nightlightToggle",
+                        "dreamview": "dreamViewToggle",
+                    }
+                    instance_name = instance_map.get(key, f"{key}Toggle")
+                    capabilities[instance_name] = {
                         "type": "devices.capabilities.toggle",
-                        "instance": f"{key}Toggle",
+                        "instance": instance_name,
+                        "value": 1 if state_on else 0,
+                    }
+
+                case "warm_mist":
+                    state_on = str(value).lower() == "on"
+                    switch[key] = "ON" if state_on else "OFF"
+                    capabilities["warmMistToggle"] = {
+                        "type": "devices.capabilities.toggle",
+                        "instance": "warmMistToggle",
                         "value": 1 if state_on else 0,
                     }
 
