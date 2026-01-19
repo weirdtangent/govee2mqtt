@@ -105,7 +105,7 @@ class HelpersMixin:
                     self.upsert_state(
                         device_id,
                         switch={"dreamview": "ON" if data[key] == 1 else "OFF"},
-                        light={"light": "ON" if data[key] == 1 else "OFF"},
+                        light={"state": "ON" if data[key] == 1 else "OFF"},
                     )
 
                 case "sensorTemperature":
