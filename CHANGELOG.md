@@ -1,3 +1,10 @@
+## [2.6.7](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.6...v2.6.7) (2026-01-19)
+
+
+### Bug Fixes
+
+* prevent toggle empty strings from overwriting light state ([8aa0175](https://github.com/weirdtangent/govee2mqtt/commit/8aa017579bd773b5835bfe22a9866e6491d31f95)), closes [#16](https://github.com/weirdtangent/govee2mqtt/issues/16) [#16](https://github.com/weirdtangent/govee2mqtt/issues/16)
+
 ## [2.6.6](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.5...v2.6.6) (2026-01-19)
 
 
