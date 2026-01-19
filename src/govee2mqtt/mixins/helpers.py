@@ -46,10 +46,14 @@ class HelpersMixin:
                     self.upsert_state(device_id, availability="online" if data[key] else "offline")
 
                 case "powerSwitch":
+                    power_on = data[key] == 1
                     if "power" in component["cmps"]:
-                        self.upsert_state(device_id, switch={"power": "ON" if data[key] == 1 else "OFF"})
+                        self.upsert_state(device_id, switch={"power": "ON" if power_on else "OFF"})
                     elif "light" in component["cmps"]:
-                        self.upsert_state(device_id, light={"state": "ON" if data[key] == 1 else "OFF"})
+                        self.upsert_state(device_id, light={"state": "ON" if power_on else "OFF"})
+                        # When light turns off, DreamView also turns off
+                        if not power_on and "dreamview" in component["cmps"]:
+                            self.upsert_state(device_id, switch={"dreamview": "OFF"})
 
                 case "brightness":
                     self.upsert_state(device_id, light={"brightness": data[key]})
@@ -105,7 +109,6 @@ class HelpersMixin:
                     self.upsert_state(
                         device_id,
                         switch={"dreamview": "ON" if data[key] == 1 else "OFF"},
-                        light={"state": "ON" if data[key] == 1 else "OFF"},
                     )
 
                 case "sensorTemperature":
@@ -437,6 +440,9 @@ class HelpersMixin:
                         "instance": "powerSwitch",
                         "value": 1 if state_on else 0,
                     }
+                    # When light turns off, DreamView must also turn off
+                    if not state_on and "dreamview" in switch:
+                        switch["dreamview"] = "OFF"
 
                 case "brightness":
                     light["brightness"] = int(value)
