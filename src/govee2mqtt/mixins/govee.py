@@ -10,13 +10,13 @@ if TYPE_CHECKING:
 
 
 SKU_CLASS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"^H710\d+$"), "fan"),
-    (re.compile(r"^H712\d+$"), "air_purifier"),
-    (re.compile(r"^H714\d+$"), "humidifier"),
-    (re.compile(r"^H715\d+$"), "dehumidifier"),
-    (re.compile(r"^H716\d+$"), "aroma_diffuser"),
-    (re.compile(r"^H[678]\d{3,}$"), "light"),
-    (re.compile(r"^H5\d{3,}$"), "sensor"),
+    (re.compile(r"^H710\d*[A-Z]*$"), "fan"),
+    (re.compile(r"^H712\d*[A-Z]*$"), "air_purifier"),
+    (re.compile(r"^H714\d*[A-Z]*$"), "humidifier"),
+    (re.compile(r"^H715\d*[A-Z]*$"), "dehumidifier"),
+    (re.compile(r"^H716\d*[A-Z]*$"), "aroma_diffuser"),
+    (re.compile(r"^H[678]\d{2,}[A-Z]*$"), "light"),
+    (re.compile(r"^H5\d{2,}[A-Z]*$"), "sensor"),
 ]
 
 
@@ -85,11 +85,11 @@ class GoveeMixin:
             if pattern.match(sku):
                 return device_class
 
-        # If we reach here, it's unsupported — log details (the first time)for future handling
+        # If we reach here, it's unsupported — log details (the first time) for future handling
         if not self.discovery_complete:
             device_name = device.get("deviceName", "Unknown Device")
             device_id = device.get("device", "Unknown ID")
-            self.logger.debug(f'unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
+            self.logger.warning(f'unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
         return ""
 
     async def build_light(self: Govee2Mqtt, light: dict[str, Any]) -> str:
