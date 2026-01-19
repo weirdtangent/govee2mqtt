@@ -491,6 +491,15 @@ class HelpersMixin:
                         "value": 1 if state_on else 0,
                     }
 
+                case "warm_mist":
+                    state_on = str(value).lower() == "on"
+                    switch[key] = "ON" if state_on else "OFF"
+                    capabilities["warmMistToggle"] = {
+                        "type": "devices.capabilities.toggle",
+                        "instance": "warmMistToggle",
+                        "value": 1 if state_on else 0,
+                    }
+
                 case "nightlight_scene":
                     internal = self.states.get(device_id, {}).get("internal", {})
                     scene_labels = internal.get("nightlight_scene_labels", {})
