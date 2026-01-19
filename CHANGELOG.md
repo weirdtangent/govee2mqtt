@@ -1,3 +1,11 @@
+## [2.6.4](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.3...v2.6.4) (2026-01-19)
+
+
+### Bug Fixes
+
+* auto-disable DreamView when light turns off ([28d45f3](https://github.com/weirdtangent/govee2mqtt/commit/28d45f34d3971306f2d594ba963b84529409e17f))
+* remove incorrect light state update for DreamView toggle ([b4908e2](https://github.com/weirdtangent/govee2mqtt/commit/b4908e28eb8c726ee00dbd53afadb407e0e4b9be))
+
 ## [2.6.3](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.2...v2.6.3) (2026-01-19)
 
 
