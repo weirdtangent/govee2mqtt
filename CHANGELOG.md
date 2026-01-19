@@ -1,3 +1,11 @@
+## [2.6.2](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.1...v2.6.2) (2026-01-19)
+
+
+### Bug Fixes
+
+* add missing warm_mist command handler ([f24999d](https://github.com/weirdtangent/govee2mqtt/commit/f24999d64fb07a83006e7346a1eb8696723d5735))
+* correct dreamView instance name for proper toggle functionality ([365d87e](https://github.com/weirdtangent/govee2mqtt/commit/365d87ec62d094d8e5714e86f63965cad2572912))
+
 ## [2.6.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.0...v2.6.1) (2026-01-19)
 
 
