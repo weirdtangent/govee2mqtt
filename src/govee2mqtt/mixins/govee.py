@@ -85,11 +85,11 @@ class GoveeMixin:
             if pattern.match(sku):
                 return device_class
 
-        # If we reach here, it's unsupported — log details (the first time)for future handling
+        # If we reach here, it's unsupported — log details (the first time) for future handling
         if not self.discovery_complete:
             device_name = device.get("deviceName", "Unknown Device")
             device_id = device.get("device", "Unknown ID")
-            self.logger.debug(f'unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
+            self.logger.warning(f'unrecognized Govee device type: "{device_name}" [{sku}] ({device_id})')
         return ""
 
     async def build_light(self: Govee2Mqtt, light: dict[str, Any]) -> str:
