@@ -1,3 +1,14 @@
+## [2.6.1](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.0...v2.6.1) (2026-01-19)
+
+
+### Bug Fixes
+
+* add letter suffix support to all appliance patterns ([7c40ecb](https://github.com/weirdtangent/govee2mqtt/commit/7c40ecb1192c39f6b1b14e7c77d48aea5abe3178))
+* change appliance patterns from \d+ to \d* for letter-only suffixes ([d03a42c](https://github.com/weirdtangent/govee2mqtt/commit/d03a42c786eff20eb439a08cb7b42f4db9b8c906))
+* log unrecognized devices at warning level instead of debug ([a828ba7](https://github.com/weirdtangent/govee2mqtt/commit/a828ba77b0eb205c40428c9a59b1580a31041007))
+* support H605C and other short SKU light models ([d5c9e7f](https://github.com/weirdtangent/govee2mqtt/commit/d5c9e7f211cca62b7885e1883838a6e4a24ed063))
+* update sensor pattern for consistency with light pattern ([1b4d8eb](https://github.com/weirdtangent/govee2mqtt/commit/1b4d8eb6e63e7dc8c4663ec7fcdfc7465d938329))
+
 # [2.6.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.5.4...v2.6.0) (2026-01-06)
 
 
