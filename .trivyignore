@@ -14,9 +14,10 @@
 # SYSTEM UTILITIES - Command-line tools not invoked by Python app
 # ============================================================================
 
-# util-linux - System utilities like login, su, mount
+# util-linux - System utilities like login, su, mount, passwd, chfn, chsh
 # Python app doesn't interact with user management or filesystem mounting
 CVE-2025-23744
+CVE-2025-14104
 CVE-2024-28085
 
 # tar - Only used during Docker build, not at runtime
@@ -67,6 +68,7 @@ CVE-2023-52425
 CVE-2023-52426
 
 # sqlite - Database not used in this application (stateless MQTT bridge)
+CVE-2025-7709
 CVE-2024-5470
 CVE-2023-7104
 
