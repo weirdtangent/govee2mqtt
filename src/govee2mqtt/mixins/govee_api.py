@@ -84,6 +84,7 @@ class GoveeAPIMixin:
                     return {}
 
                 data = await r.json()
+                self.logger.debug(f"raw API response for '{self.get_device_name(device_id)}': {data}")
 
         except aiohttp.ClientError as err:
             self.logger.error(f"request error communicating with Govee for device '{self.get_device_name(device_id)}': {err}")
@@ -96,6 +97,7 @@ class GoveeAPIMixin:
         for capability in data.get("payload", {}).get("capabilities", []):
             new_capabilities[capability["instance"]] = capability["state"]["value"]
 
+        self.logger.debug(f"device '{self.get_device_name(device_id)}' state from Govee API: {new_capabilities}")
         return new_capabilities
 
     async def get_device_scenes(self: Govee2Mqtt, device_id: str) -> list[dict[str, Any]]:
