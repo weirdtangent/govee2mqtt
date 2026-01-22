@@ -9,38 +9,54 @@ A few notes:
 * Support is there for power on/off, brightness, and rgb_color.
 * "Rediscover" button added to service - when pressed, device discovery is re-run so HA will rediscover deleted devices
 
-# Getting Started
-## Direct Install
-```bash
-git clone https://github.com/weirdtangent/govee2mqtt.git
-cd govee2mqtt
-pip3 install -r ./requirements.txt
-cp config.yaml.sample config.yaml
-vi config.yaml
-python3 ./app.py -c ./
-```
-
 ## Docker
+
 For `docker-compose`, use the [configuration included](https://github.com/weirdtangent/govee2mqtt/blob/master/docker-compose.yaml) in this repository.
 
-An docker image is available at `graystorm/govee2mqtt:latest`. You can mount your configuration volume at `/config` (and see the included `config.yaml.sample` file) or use the ENV variables:
+Using the [docker image](https://hub.docker.com/repository/docker/graystorm/govee2mqtt/general), mount your configuration volume at `/config` and include a `config.yaml` file (see the included [config.yaml.sample](config.yaml.sample) file as a template).
 
-It supports the following environment variables:
+## Configuration
 
--   `MQTT_HOST: 10.10.10.1`
--   `MQTT_USERNAME: admin`
--   `MQTT_PASSWORD: password`
--   `MQTT_PREFIX: govee`
--   `MQTT_DISCOVERY_PREFIX: homeassistant`
--   `MQTT_PROTOCOL_VERSION: 5` (MQTT protocol version: "5" for MQTT v5, "3.1.1" or "3" for MQTT v3.1.1)
+The recommended way to configure govee2mqtt is via the `config.yaml` file. See [config.yaml.sample](config.yaml.sample) for a complete example with all available options.
 
--   `GOVEE_API_KEY: [your_api_key]` (see https://developer.govee.com/reference/apply-you-govee-api-key)
--   `GOVEE_DEVICE_INTERVAL: 30` (estimate 30 sec per 10 Govee devices, so set to 60 if you have 10-20 devices, etc)
--   `GOVEE_DEVICE_BOOST_INTERVAL: 5`
--   `GOVEE_LIST_INTERVAL: 300`
+### MQTT Settings
 
--   `TZ: America/New_York` (see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)
--   `DEBUG: True` (for much more logging)
+```yaml
+mqtt:
+  host: 10.10.10.1
+  port: 1883
+  username: mqtt
+  password: password
+  qos: 0
+  protocol_version: "5"  # MQTT protocol version: 3.1.1/3 or 5
+  prefix: govee
+  discovery_prefix: homeassistant
+  # TLS settings (optional)
+  tls_enabled: false
+  tls_ca_cert: filename
+  tls_cert: filename
+  tls_key: filename
+```
+
+### Govee Settings
+
+```yaml
+govee:
+  api_key: xxxxx-xxx-xxxxxx  # see https://developer.govee.com/reference/apply-you-govee-api-key
+  device_interval: 30        # polling interval; estimate 30 sec per 10 devices due to API rate limits
+  device_boost_interval: 2   # faster polling after state changes
+  device_list_interval: 300  # how often to refresh device list
+```
+
+### Other Settings
+
+```yaml
+timezone: America/New_York   # see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+```
+
+### Environment Variables
+
+While the config file is recommended, environment variables are also supported. See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for the full list of available environment variables.
 
 # Unsupported so far by Govee, or just plain wrong
 
