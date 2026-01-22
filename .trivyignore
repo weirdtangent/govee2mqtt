@@ -5,10 +5,37 @@
 # - Doesn't use system command-line utilities (tar, perl, util-linux, etc.)
 # - Doesn't call curl/libssh/GnuTLS binaries (Python has native libraries)
 # - Doesn't use databases (sqlite) or XML parsing (expat)
+# - Doesn't use LDAP, Kerberos, or SSH protocols
 # - Runs in an ephemeral container with no persistent storage or shell access
 #
 # NOTE: These CVEs may have any upstream severity rating, but are assessed as
 # low/no risk for this specific application context after manual review.
+
+# ============================================================================
+# GLIBC - Low-level C library vulnerabilities not exploitable in Python context
+# ============================================================================
+
+# memalign integer overflow - requires attacker control of alignment args
+# with very specific large values [1<<62+1, 1<<63]. Python doesn't expose
+# memalign to user code and app doesn't take input controlling alignment.
+CVE-2026-0861
+
+# getnetbyaddr info disclosure - requires calling with zero-valued network
+# and specific nsswitch.conf. Python doesn't call getnetbyaddr this way.
+CVE-2026-0915
+
+# wordexp WRDE_REUSE/WRDE_APPEND returns uninitialized memory
+# Python doesn't expose wordexp to user code
+CVE-2025-15281
+
+# Older glibc issues - various DoS/overflow issues not exploitable via Python
+CVE-2010-4756
+CVE-2018-20796
+CVE-2019-1010022
+CVE-2019-1010023
+CVE-2019-1010024
+CVE-2019-1010025
+CVE-2019-9192
 
 # ============================================================================
 # SYSTEM UTILITIES - Command-line tools not invoked by Python app
@@ -19,29 +46,68 @@
 CVE-2025-23744
 CVE-2025-14104
 CVE-2024-28085
+CVE-2022-0563
+
+# coreutils - Basic utilities, app doesn't spawn shell commands
+CVE-2017-18018
+CVE-2025-5278
 
 # tar - Only used during Docker build, not at runtime
 CVE-1999-1572
 CVE-2005-2541
+TEMP-0290435-0B57B5
 
 # perl - Not used by Python application
 CVE-2011-4116
 CVE-2023-31484
 CVE-2023-31486
 
+# bash - Container runs Python directly, no shell interaction
+TEMP-0841856-B18BAF
+
 # sysvinit - Init system issues don't apply to containerized processes
 CVE-2018-20482
+TEMP-0517018-A83CE6
+
+# shadow/passwd - User management not used by app
+CVE-2007-5686
+CVE-2024-56433
+TEMP-0628843-DBAD28
+
+# systemd - Container doesn't use systemd
+CVE-2013-4392
+CVE-2023-31437
+CVE-2023-31438
+CVE-2023-31439
+
+# ncurses - Terminal UI library not used
+CVE-2025-6141
+
+# apt - Package manager only used during build
+CVE-2011-3374
+
+# git - Only present during build, not runtime
+CVE-2018-1000021
+CVE-2022-24975
+CVE-2024-52005
 
 # ============================================================================
 # NETWORK LIBRARIES - Binaries/CLI tools not invoked
 # ============================================================================
 
 # curl/libcurl - The curl CLI tool is not invoked by this application
-# Python uses native urllib3/aiohttp, not subprocess calls to curl
+# Python uses native aiohttp, not subprocess calls to curl
 CVE-2024-9681
 CVE-2025-0359
 CVE-2025-0594
 CVE-2024-8096
+CVE-2025-10966
+CVE-2025-14017
+CVE-2025-14524
+CVE-2025-14819
+CVE-2025-15079
+CVE-2025-15224
+CVE-2025-13034
 
 # libssh - SSH protocol library and tools not used by MQTT application
 # paho-mqtt only uses TCP or TLS connections, not SSH
@@ -54,6 +120,19 @@ CVE-2023-2283
 # GnuTLS - This TLS library is not used (Python uses OpenSSL bindings)
 CVE-2024-0567
 CVE-2024-0553
+CVE-2011-3389
+
+# libldap - LDAP protocol not used by MQTT application
+CVE-2015-3276
+CVE-2017-14159
+CVE-2017-17740
+CVE-2020-15719
+CVE-2026-22185
+
+# libkrb5 - Kerberos authentication not used
+CVE-2018-5709
+CVE-2024-26458
+CVE-2024-26461
 
 # ============================================================================
 # PARSING LIBRARIES - Not used by this application
@@ -66,11 +145,18 @@ CVE-2024-45492
 CVE-2024-50602
 CVE-2023-52425
 CVE-2023-52426
+CVE-2025-59375
+CVE-2025-66382
+
+# libtasn1 - ASN.1 parsing library, only affects certificate parsing
+# MQTT TLS uses standard certs, not attacker-controlled ASN.1 input
+CVE-2025-13151
 
 # sqlite - Database not used in this application (stateless MQTT bridge)
 CVE-2025-7709
 CVE-2024-5470
 CVE-2023-7104
+CVE-2021-45346
 
 # ============================================================================
 # COMPILER/BUILD TOOLS - Only present during build, not runtime
