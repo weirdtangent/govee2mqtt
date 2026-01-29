@@ -121,6 +121,7 @@ CVE-2023-2283
 CVE-2024-0567
 CVE-2024-0553
 CVE-2011-3389
+CVE-2025-9820
 
 # libldap - LDAP protocol not used by MQTT application
 CVE-2015-3276
