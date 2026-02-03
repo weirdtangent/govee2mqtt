@@ -168,6 +168,15 @@ CVE-2023-4039
 CVE-2022-27943
 
 # ============================================================================
+# PYTHON PACKAGING TOOLS - Only used during build, not at runtime
+# ============================================================================
+
+# pip wheel extraction vulnerability - pip is only used during Docker build
+# to install uv. At runtime, the app uses uv for package management and runs
+# Python directly. No pip commands are invoked at runtime.
+CVE-2026-1703
+
+# ============================================================================
 # ADDITIONAL BASE IMAGE VULNERABILITIES
 # ============================================================================
 # Additional vulnerabilities in Debian base image packages that do not affect
