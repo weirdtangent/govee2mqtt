@@ -37,7 +37,7 @@ class PublishMixin:
             "cmps": {
                 "server": {
                     "p": "binary_sensor",
-                    "name": self.service_name,
+                    "name": None,
                     "uniq_id": self.mqtt_helper.svc_unique_id("server"),
                     "stat_t": self.mqtt_helper.stat_t(device_id, "service", "server"),
                     "payload_on": "online",

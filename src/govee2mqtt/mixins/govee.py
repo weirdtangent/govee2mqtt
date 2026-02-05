@@ -455,10 +455,14 @@ class GoveeMixin:
     ) -> dict[str, dict[str, Any]]:
         light_is_nightlight = False
 
+        # Avoid "Light Light" when the device name already ends with "Light"
+        device_name = light.get("deviceName", "")
+        light_component_name: str | None = None if device_name.lower().endswith(" light") else "Light"
+
         components: dict[str, dict[str, Any]] = {
             "light": {
                 "p": "light",
-                "name": "Light",
+                "name": light_component_name,
                 "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
                 "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
                 "avty_t": self.mqtt_helper.avty_t(device_id),
@@ -609,14 +613,12 @@ class GoveeMixin:
                                     "max": rng.get("max", 16777215) or 16777215,
                                 }
 
-        # If a light supports a color mode (rgb or color_temp), drop simpler light components
+        # If a light supports a color mode (rgb or color_temp), drop simpler color modes
+        # but keep brightness topics so HA can control brightness in color_temp mode
         cmpset = set(components["light"]["supported_color_modes"])
         if "rgb" in cmpset or "color_temp" in cmpset:
             cmpset.discard("onoff")
             cmpset.discard("brightness")
-            components["light"].pop("brightness_scale", None)
-            components["light"].pop("brightness_state_topic", None)
-            components["light"].pop("brightness_command_topic", None)
         components["light"]["supported_color_modes"] = list(cmpset)
 
         # if light really is a nightlight, rename it and move it to the nightlight component
