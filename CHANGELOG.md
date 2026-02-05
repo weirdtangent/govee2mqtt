@@ -1,3 +1,10 @@
+## [2.6.8](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.7...v2.6.8) (2026-02-05)
+
+
+### Bug Fixes
+
+* keep brightness topics for color_temp lights and fix doubled entity names ([8841762](https://github.com/weirdtangent/govee2mqtt/commit/88417621279734ca7a081f27b778570ba96902cd))
+
 ## [2.6.7](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.6...v2.6.7) (2026-01-19)
 
 
