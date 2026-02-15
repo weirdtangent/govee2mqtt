@@ -1,3 +1,10 @@
+## [2.6.10](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.9...v2.6.10) (2026-02-15)
+
+
+### Bug Fixes
+
+* add checkout step to claude-code-review workflow ([340ed9d](https://github.com/weirdtangent/govee2mqtt/commit/340ed9d4dfcd6291f7c35baa8088654ea3bf1b96))
+
 ## [2.6.9](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.8...v2.6.9) (2026-02-15)
 
 
