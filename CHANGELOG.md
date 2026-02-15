@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.11...v2.7.0) (2026-02-15)
+
+
+### Features
+
+* upgrade Claude review with auto-PR review and GitHub App token ([2621094](https://github.com/weirdtangent/govee2mqtt/commit/2621094a332fafd09faf4fdc47059d75427866a8))
+
 ## [2.6.11](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.10...v2.6.11) (2026-02-15)
 
 
