@@ -1,3 +1,10 @@
+## [2.6.11](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.10...v2.6.11) (2026-02-15)
+
+
+### Bug Fixes
+
+* only trigger Claude review on [@claude](https://github.com/claude) mention ([b9845ed](https://github.com/weirdtangent/govee2mqtt/commit/b9845ed92e73f63506bd8d27bc1ae8ac3d9b5434))
+
 ## [2.6.10](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.9...v2.6.10) (2026-02-15)
 
 
