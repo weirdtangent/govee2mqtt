@@ -1,3 +1,31 @@
+# [2.7.0](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.11...v2.7.0) (2026-02-15)
+
+
+### Features
+
+* upgrade Claude review with auto-PR review and GitHub App token ([2621094](https://github.com/weirdtangent/govee2mqtt/commit/2621094a332fafd09faf4fdc47059d75427866a8))
+
+## [2.6.11](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.10...v2.6.11) (2026-02-15)
+
+
+### Bug Fixes
+
+* only trigger Claude review on [@claude](https://github.com/claude) mention ([b9845ed](https://github.com/weirdtangent/govee2mqtt/commit/b9845ed92e73f63506bd8d27bc1ae8ac3d9b5434))
+
+## [2.6.10](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.9...v2.6.10) (2026-02-15)
+
+
+### Bug Fixes
+
+* add checkout step to claude-code-review workflow ([340ed9d](https://github.com/weirdtangent/govee2mqtt/commit/340ed9d4dfcd6291f7c35baa8088654ea3bf1b96))
+
+## [2.6.9](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.8...v2.6.9) (2026-02-15)
+
+
+### Bug Fixes
+
+* add id-token: write permission for claude-code-action ([bc190ae](https://github.com/weirdtangent/govee2mqtt/commit/bc190aee76b2ca67d5d817372ce05b69553f9ec4))
+
 ## [2.6.8](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.7...v2.6.8) (2026-02-05)
 
 
