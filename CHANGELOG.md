@@ -1,3 +1,10 @@
+## [2.6.9](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.8...v2.6.9) (2026-02-15)
+
+
+### Bug Fixes
+
+* add id-token: write permission for claude-code-action ([bc190ae](https://github.com/weirdtangent/govee2mqtt/commit/bc190aee76b2ca67d5d817372ce05b69553f9ec4))
+
 ## [2.6.8](https://github.com/weirdtangent/govee2mqtt/compare/v2.6.7...v2.6.8) (2026-02-05)
 
 
