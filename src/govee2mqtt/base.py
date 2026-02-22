@@ -139,7 +139,7 @@ class Base:
     def restore_state(self: Govee2Mqtt) -> None:
         data_file = Path(self.config["config_path"]) / "govee2mqtt.dat"
         if os.path.exists(data_file):
-            with open(data_file, "r") as file:
+            with open(data_file, "r", encoding="utf-8") as file:
                 state = json.loads(file.read())
                 self.restore_state_values(state["api_calls"], state["last_call_date"])
             self.logger.info(f"restored state from {data_file}")
