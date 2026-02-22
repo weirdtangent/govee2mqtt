@@ -42,7 +42,7 @@ dev = [
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-qtt = ["VERSION"]
+govee2mqtt = ["VERSION"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -103,11 +103,7 @@ pythonpath = "src"
 [tool.coverage.run]
 # .coveragerc
 branch = true
-source = [
-    "govee_api",
-    "qtt",
-    "util",
-]
+source = ["govee2mqtt"]
 omit = [
     "tests/*",
     "*/__init__.py",
