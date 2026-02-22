@@ -18,7 +18,7 @@ class FakeRefresher(HelpersMixin, RefreshMixin):
         self.states = {}
         self.boosted = []
 
-    async def build_device_states(self, device_id, data={}):
+    async def build_device_states(self, device_id, data=None):
         pass
 
     async def get_device(self, device_id):
@@ -93,6 +93,21 @@ class TestRefreshBoostedDevices:
         await r.refresh_boosted_devices()
 
         assert len(r.boosted) == 0
+
+    @pytest.mark.asyncio
+    async def test_multi_item_boosted_skips_during_iteration(self):
+        """Exposes list-mutation-during-iteration: only first item is processed."""
+        r = FakeRefresher()
+        r.devices = {"LIGHT001": {}, "LIGHT002": {}}
+        r.boosted = ["LIGHT001", "LIGHT002"]
+        r.build_device_states = AsyncMock()
+
+        await r.refresh_boosted_devices()
+
+        # Code mutates list during iteration — only LIGHT001 is processed
+        assert r.build_device_states.call_count == 1
+        r.build_device_states.assert_called_once_with("LIGHT001")
+        assert r.boosted == ["LIGHT002"]
 
     @pytest.mark.asyncio
     async def test_skips_when_no_boosted(self):
