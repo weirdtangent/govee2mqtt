@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from mqtt_helper import parse_device_topic
+
 from govee2mqtt.mixins.mqtt import MqttMixin
 
 
@@ -96,41 +98,33 @@ class TestMqttOnMessage:
 # ===========================================================================
 class TestParseDeviceTopic:
     def test_light_rgb_color_topic(self) -> None:
-        fake = FakeMqtt()
         components = "govee2mqtt/govee2mqtt_DEVICEID123/light/rgb_color/set".split("/")
-        result = fake._parse_device_topic(components)
+        result = parse_device_topic(components)
         assert result is not None
         assert result[0] == "govee2mqtt"
         assert result[1] == "DEVICEID123"
         assert result[2] == "rgb_color"
-        fake.close()
 
     def test_switch_dreamview_topic(self) -> None:
-        fake = FakeMqtt()
         components = "govee2mqtt/govee2mqtt_DEVICEID123/switch/dreamview/set".split("/")
-        result = fake._parse_device_topic(components)
+        result = parse_device_topic(components)
         assert result is not None
         assert result[0] == "govee2mqtt"
         assert result[1] == "DEVICEID123"
         assert result[2] == "dreamview"
-        fake.close()
 
     def test_non_set_returns_none(self) -> None:
-        fake = FakeMqtt()
         components = "govee2mqtt/govee2mqtt_DEVICEID123/light/rgb_color/get".split("/")
-        result = fake._parse_device_topic(components)
+        result = parse_device_topic(components)
         assert result is None
-        fake.close()
 
     def test_simple_light_set_topic(self) -> None:
-        fake = FakeMqtt()
         components = "govee2mqtt/govee2mqtt_DEVICEID123/light/set".split("/")
-        result = fake._parse_device_topic(components)
+        result = parse_device_topic(components)
         assert result is not None
         assert result[0] == "govee2mqtt"
         assert result[1] == "DEVICEID123"
         assert result[2] == "light"
-        fake.close()
 
 
 # ===========================================================================
