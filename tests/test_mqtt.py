@@ -55,7 +55,7 @@ class FakeMqtt(MqttMixin):
         # Async handler stubs
         self.handle_homeassistant_message = AsyncMock()
         self.handle_device_topic = AsyncMock()
-        self.handle_service_message = AsyncMock()
+        self.handle_service_command = AsyncMock()
 
     def close(self) -> None:
         self.loop.close()
@@ -87,7 +87,7 @@ class TestMqttOnMessage:
         msg = _make_msg("govee2mqtt/service/refresh_interval/set", "60")
         await fake.mqtt_on_message(MagicMock(), None, msg)
         # json.loads("60") returns int 60, not the string "60"
-        fake.handle_service_message.assert_awaited_once_with("refresh_interval", 60)
+        fake.handle_service_command.assert_awaited_once_with("refresh_interval", 60)
         fake.close()
 
 

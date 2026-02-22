@@ -928,7 +928,7 @@ class HelpersMixin:
         if need_boost and device_id not in self.boosted:
             self.boosted.append(device_id)
 
-    async def handle_service_message(self: Govee2Mqtt, handler: str, message: Any) -> None:
+    async def handle_service_command(self: Govee2Mqtt, handler: str, message: Any) -> None:
         match handler:
             case "refresh_interval":
                 self.device_interval = int(message)
