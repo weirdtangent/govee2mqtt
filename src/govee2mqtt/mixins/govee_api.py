@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
+from __future__ import annotations
+
 import aiohttp
 from aiohttp import ClientError
 from datetime import datetime
