@@ -6,6 +6,7 @@ import asyncio
 import colorsys
 from deepmerge.merger import Merger
 import logging
+from mqtt_helper import ConfigError
 import os
 import pathlib
 import re
@@ -25,12 +26,6 @@ READY_FILE = os.getenv("READY_FILE", "/tmp/govee2mqtt.ready")
 # Home Assistant may send rgb_color and color_temp nearly simultaneously;
 # we collect them and keep only the one that arrived last.
 COLOR_MODE_BATCH_WINDOW = 0.1
-
-
-class ConfigError(ValueError):
-    """Raised when the configuration file is invalid."""
-
-    pass
 
 
 class HelpersMixin:
