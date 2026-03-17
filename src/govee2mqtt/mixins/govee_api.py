@@ -53,7 +53,7 @@ class GoveeAPIMixin:
 
                 data = await r.json(content_type=None)
 
-        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+        except json.JSONDecodeError as err:
             self.logger.error(f"invalid JSON response from Govee for device list: {err}")
             return []
         except ClientError as err:
@@ -61,6 +61,10 @@ class GoveeAPIMixin:
             return []
         except Exception as err:
             self.logger.error(f"error communicating with Govee for device list: {err!r}")
+            return []
+
+        if not isinstance(data, dict):
+            self.logger.error(f"unexpected response type from Govee for device list: {type(data).__name__}")
             return []
 
         result = data.get("data", [])
@@ -93,7 +97,7 @@ class GoveeAPIMixin:
                 data = await r.json(content_type=None)
                 self.logger.debug(f"raw API response for '{self.get_device_name(device_id)}': {data}")
 
-        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+        except json.JSONDecodeError as err:
             self.logger.error(f"invalid JSON response from Govee for device '{self.get_device_name(device_id)}': {err}")
             return {}
         except aiohttp.ClientError as err:
@@ -101,6 +105,10 @@ class GoveeAPIMixin:
             return {}
         except Exception as err:
             self.logger.error(f"error communicating with Govee for device '{self.get_device_name(device_id)}': {err!r}")
+            return {}
+
+        if not isinstance(data, dict):
+            self.logger.error(f"unexpected response type from Govee for device '{self.get_device_name(device_id)}': {type(data).__name__}")
             return {}
 
         new_capabilities: dict[str, Any] = {}
@@ -134,7 +142,7 @@ class GoveeAPIMixin:
 
                 data = await r.json(content_type=None)
 
-        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+        except json.JSONDecodeError as err:
             self.logger.debug(f"invalid JSON response getting scenes for device ({device_id}): {err}")
             return []
         except aiohttp.ClientError as err:
@@ -142,6 +150,10 @@ class GoveeAPIMixin:
             return []
         except Exception as err:
             self.logger.debug(f"error getting scenes for device ({device_id}): {err!r}")
+            return []
+
+        if not isinstance(data, dict):
+            self.logger.debug(f"unexpected response type getting scenes for device ({device_id}): {type(data).__name__}")
             return []
 
         # Extract scene options from the response
@@ -180,7 +192,7 @@ class GoveeAPIMixin:
 
                 data = await r.json(content_type=None)
 
-        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+        except json.JSONDecodeError as err:
             self.logger.error(f"invalid JSON response from Govee sending command to device '{self.get_device_name(device_id)}': {err}")
             return {}
         except ClientError as err:
@@ -188,6 +200,10 @@ class GoveeAPIMixin:
             return {}
         except Exception as err:
             self.logger.error(f"error communicating with Govee sending command to device '{self.get_device_name(device_id)}': {err!r}")
+            return {}
+
+        if not isinstance(data, dict):
+            self.logger.error(f"unexpected response type from Govee sending command to device '{self.get_device_name(device_id)}': {type(data).__name__}")
             return {}
 
         new_capabilities = {}
