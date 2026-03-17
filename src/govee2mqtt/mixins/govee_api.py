@@ -2,6 +2,8 @@
 # Copyright (c) 2025 Jeff Culverhouse
 from __future__ import annotations
 
+import json
+
 import aiohttp
 from aiohttp import ClientError
 from datetime import datetime
@@ -49,13 +51,16 @@ class GoveeAPIMixin:
                     self.logger.error(f"error ({r.status}) getting device list")
                     return []
 
-                data = await r.json()
+                data = await r.json(content_type=None)
 
+        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+            self.logger.error(f"invalid JSON response from Govee for device list: {err}")
+            return []
         except ClientError as err:
             self.logger.error(f"request error communicating with Govee for device list: {err}")
             return []
         except Exception as err:
-            self.logger.error(f"error communicating with Govee for device list: {err}")
+            self.logger.error(f"error communicating with Govee for device list: {err!r}")
             return []
 
         result = data.get("data", [])
@@ -85,14 +90,17 @@ class GoveeAPIMixin:
                     self.logger.error(f"error ({r.status}) getting device '{self.get_device_name(device_id)}'")
                     return {}
 
-                data = await r.json()
+                data = await r.json(content_type=None)
                 self.logger.debug(f"raw API response for '{self.get_device_name(device_id)}': {data}")
 
+        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+            self.logger.error(f"invalid JSON response from Govee for device '{self.get_device_name(device_id)}': {err}")
+            return {}
         except aiohttp.ClientError as err:
             self.logger.error(f"request error communicating with Govee for device '{self.get_device_name(device_id)}': {err}")
             return {}
         except Exception as err:
-            self.logger.error(f"error communicating with Govee for device '{self.get_device_name(device_id)}': {err}")
+            self.logger.error(f"error communicating with Govee for device '{self.get_device_name(device_id)}': {err!r}")
             return {}
 
         new_capabilities: dict[str, Any] = {}
@@ -124,13 +132,16 @@ class GoveeAPIMixin:
                     self.logger.debug(f"error ({r.status}) getting scenes for device ({device_id})")
                     return []
 
-                data = await r.json()
+                data = await r.json(content_type=None)
 
+        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+            self.logger.debug(f"invalid JSON response getting scenes for device ({device_id}): {err}")
+            return []
         except aiohttp.ClientError as err:
             self.logger.debug(f"request error getting scenes for device ({device_id}): {err}")
             return []
         except Exception as err:
-            self.logger.debug(f"error getting scenes for device ({device_id}): {err}")
+            self.logger.debug(f"error getting scenes for device ({device_id}): {err!r}")
             return []
 
         # Extract scene options from the response
@@ -167,13 +178,16 @@ class GoveeAPIMixin:
                 if r.status != 200:
                     return {}
 
-                data = await r.json()
+                data = await r.json(content_type=None)
 
-        except ClientError:
-            self.logger.error(f"request error communicating with Govee sending command to device '{self.get_device_name(device_id)}'")
+        except (json.JSONDecodeError, aiohttp.ContentTypeError) as err:
+            self.logger.error(f"invalid JSON response from Govee sending command to device '{self.get_device_name(device_id)}': {err}")
             return {}
-        except Exception:
-            self.logger.error(f"error communicating with Govee sending command to device '{self.get_device_name(device_id)}'")
+        except ClientError as err:
+            self.logger.error(f"request error communicating with Govee sending command to device '{self.get_device_name(device_id)}': {err}")
+            return {}
+        except Exception as err:
+            self.logger.error(f"error communicating with Govee sending command to device '{self.get_device_name(device_id)}': {err!r}")
             return {}
 
         new_capabilities = {}
