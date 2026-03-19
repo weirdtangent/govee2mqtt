@@ -99,6 +99,54 @@ class TestRestoreState:
         Base.restore_state(obj)
         obj.restore_state_values.assert_not_called()
 
+    def test_empty_file_starts_fresh(self, tmp_path):
+        state_file = tmp_path / "govee2mqtt.dat"
+        state_file.write_text("")
+
+        obj = MagicMock()
+        obj.config = {"config_path": str(tmp_path)}
+        obj.logger = MagicMock()
+
+        Base.restore_state(obj)
+        obj.restore_state_values.assert_not_called()
+        obj.logger.warning.assert_called_once()
+
+    def test_invalid_json_starts_fresh(self, tmp_path):
+        state_file = tmp_path / "govee2mqtt.dat"
+        state_file.write_text("{corrupt")
+
+        obj = MagicMock()
+        obj.config = {"config_path": str(tmp_path)}
+        obj.logger = MagicMock()
+
+        Base.restore_state(obj)
+        obj.restore_state_values.assert_not_called()
+        obj.logger.warning.assert_called_once()
+
+    def test_wrong_shape_json_starts_fresh(self, tmp_path):
+        state_file = tmp_path / "govee2mqtt.dat"
+        state_file.write_text("[]")
+
+        obj = MagicMock()
+        obj.config = {"config_path": str(tmp_path)}
+        obj.logger = MagicMock()
+
+        Base.restore_state(obj)
+        obj.restore_state_values.assert_not_called()
+        obj.logger.warning.assert_called_once()
+
+    def test_missing_keys_starts_fresh(self, tmp_path):
+        state_file = tmp_path / "govee2mqtt.dat"
+        state_file.write_text(json.dumps({"unrelated": "data"}))
+
+        obj = MagicMock()
+        obj.config = {"config_path": str(tmp_path)}
+        obj.logger = MagicMock()
+
+        Base.restore_state(obj)
+        obj.restore_state_values.assert_not_called()
+        obj.logger.warning.assert_called_once()
+
 
 class TestContextManager:
     @pytest.mark.asyncio

@@ -146,5 +146,5 @@ class Base:
                     state = json.loads(file.read())
                     self.restore_state_values(state["api_calls"], state["last_call_date"])
                 self.logger.info(f"restored state from {data_file}")
-            except (json.JSONDecodeError, KeyError, ValueError) as err:
+            except (ValueError, KeyError, TypeError, OSError) as err:
                 self.logger.warning(f"could not restore state from {data_file}: {err} — starting fresh")
