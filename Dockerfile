@@ -23,7 +23,7 @@ ENV APP_PRETEND_VERSION=${VERSION}
 # ===== System Dependencies =====
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends git gosu && \
     pip install --no-cache-dir uv && \
     rm -rf /var/lib/apt/lists/*
 
@@ -63,7 +63,8 @@ RUN groupadd -g "${GROUP_ID}" appuser && \
     useradd -u "${USER_ID}" -g "${GROUP_ID}" --create-home --shell /bin/bash appuser && \
     mkdir -p /config && chown -R appuser:appuser /app /config
 
-USER appuser
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # ===== Runtime =====
 ENV SERVICE=${APP_NAME}
@@ -71,5 +72,5 @@ LABEL org.opencontainers.image.title=${APP_NAME} \
       org.opencontainers.image.description=${SERVICE_DESC} \
       org.opencontainers.image.version=${VERSION}
 
-ENTRYPOINT ["python", "-m", "govee2mqtt"]
+ENTRYPOINT ["/entrypoint.sh", "python", "-m", "govee2mqtt"]
 CMD ["-c", "/config"]
