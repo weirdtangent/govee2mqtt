@@ -68,6 +68,13 @@ class TestClassifyDevice:
     def test_h7160_is_aroma_diffuser(self) -> None:
         assert self._classify("H7160") == "aroma_diffuser"
 
+    # ---- kettles (H717x) ----
+    def test_h7170_is_kettle(self) -> None:
+        assert self._classify("H7170") == "kettle"
+
+    def test_h7171_is_kettle(self) -> None:
+        assert self._classify("H7171") == "kettle"
+
     # ---- sensors (H5xxx) ----
     def test_h5074_is_sensor(self) -> None:
         assert self._classify("H5074") == "sensor"

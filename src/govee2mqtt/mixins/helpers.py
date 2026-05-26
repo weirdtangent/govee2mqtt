@@ -118,6 +118,17 @@ class HelpersMixin:
                 case "sensorTemperature":
                     self.upsert_state(device_id, sensor={"temperature": data[key]})
 
+                case "sliderTemperature":
+                    slider_data = data[key]
+                    if not isinstance(slider_data, dict):
+                        continue
+                    target = slider_data.get("targetTemperature")
+                    if isinstance(target, (int, float)):
+                        self.upsert_state(device_id, number={"target_temperature": int(target)})
+                    unit = slider_data.get("unit")
+                    if isinstance(unit, str):
+                        self.upsert_state(device_id, internal={"temperature_unit": unit})
+
                 case "sensorHumidity":
                     self.upsert_state(device_id, sensor={"humidity": data[key]})
 
@@ -410,7 +421,7 @@ class HelpersMixin:
                             if expected_id is not None:
                                 if expected_id == data[key]:
                                     self.logger.debug(
-                                        f"Scene ID {data[key]} confirms '{current_scene}' " f"scene is active on device '{self.get_device_name(device_id)}'"
+                                        f"Scene ID {data[key]} confirms '{current_scene}' scene is active on device '{self.get_device_name(device_id)}'"
                                     )
                                 else:
                                     self.logger.warning(
@@ -434,7 +445,6 @@ class HelpersMixin:
         capabilities: dict[str, Any] = {}
         music_overrides: dict[str, Any] | None = None
         for key, value in payload.items():
-
             match key:
                 case "state" | "light" | "value" | "power":
                     state_on = str(value).upper() == "ON"
@@ -697,6 +707,19 @@ class HelpersMixin:
                             "instance": "workMode",
                             "value": payload_value,
                         }
+
+                case "target_temperature":
+                    internal = self.states.get(device_id, {}).get("internal", {})
+                    unit = internal.get("temperature_unit") or "Fahrenheit"
+                    try:
+                        target_value = int(float(value))
+                    except (TypeError, ValueError):
+                        continue
+                    capabilities["sliderTemperature"] = {
+                        "type": "devices.capabilities.temperature_setting",
+                        "instance": "sliderTemperature",
+                        "value": {"unit": unit, "targetTemperature": target_value},
+                    }
 
                 case "music_mode":
                     music_overrides = music_overrides or {}
