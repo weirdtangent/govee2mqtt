@@ -379,9 +379,9 @@ class GoveeMixin:
         work_mode_options: list[str] = []
         work_mode_value_labels: dict[int, str] = {}
         temperature_unit: str = "Fahrenheit"
-        temperature_min: int = 40
-        temperature_max: int = 212
-        temperature_step: int = 1
+        temperature_min: int | float = 40
+        temperature_max: int | float = 212
+        temperature_step: int | float = 1
         device_has: dict[str, bool] = {}
 
         for cap in kettle.get("capabilities", []):
@@ -405,9 +405,15 @@ class GoveeMixin:
                         match field.get("fieldName"):
                             case "targetTemperature":
                                 rng = field.get("range", {})
-                                temperature_min = rng.get("min", temperature_min) or temperature_min
-                                temperature_max = rng.get("max", temperature_max) or temperature_max
-                                temperature_step = rng.get("precision", temperature_step) or temperature_step
+                                min_val = rng.get("min")
+                                max_val = rng.get("max")
+                                precision = rng.get("precision")
+                                if isinstance(min_val, (int, float)):
+                                    temperature_min = min_val
+                                if isinstance(max_val, (int, float)):
+                                    temperature_max = max_val
+                                if isinstance(precision, (int, float)):
+                                    temperature_step = precision
                             case "temperatureUnit":
                                 options = field.get("options", [])
                                 default_unit: str | None = None
@@ -454,15 +460,15 @@ class GoveeMixin:
                 "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "target_temperature"),
                 "stat_t": self.mqtt_helper.stat_t(device_id, "number", "target_temperature"),
                 "cmd_t": self.mqtt_helper.cmd_t(device_id, "number", "target_temperature"),
-                "min": int(temperature_min),
-                "max": int(temperature_max),
-                "step": int(temperature_step) or 1,
+                "min": temperature_min,
+                "max": temperature_max,
+                "step": temperature_step,
                 "mode": "slider",
                 "device_class": "temperature",
                 "unit_of_measurement": unit_symbol,
                 "icon": "mdi:thermometer",
             }
-            self.upsert_state(device_id, number={"target_temperature": int(temperature_min)})
+            self.upsert_state(device_id, number={"target_temperature": temperature_min})
 
         if device_has.get("workMode", False) and work_mode_options:
             cmps["work_mode"] = {

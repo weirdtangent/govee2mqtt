@@ -124,7 +124,7 @@ class HelpersMixin:
                         continue
                     target = slider_data.get("targetTemperature")
                     if isinstance(target, (int, float)):
-                        self.upsert_state(device_id, number={"target_temperature": int(target)})
+                        self.upsert_state(device_id, number={"target_temperature": target})
                     unit = slider_data.get("unit")
                     if isinstance(unit, str):
                         self.upsert_state(device_id, internal={"temperature_unit": unit})
@@ -712,9 +712,10 @@ class HelpersMixin:
                     internal = self.states.get(device_id, {}).get("internal", {})
                     unit = internal.get("temperature_unit") or "Fahrenheit"
                     try:
-                        target_value = int(float(value))
+                        target_float = float(value)
                     except (TypeError, ValueError):
                         continue
+                    target_value: int | float = int(target_float) if target_float.is_integer() else target_float
                     capabilities["sliderTemperature"] = {
                         "type": "devices.capabilities.temperature_setting",
                         "instance": "sliderTemperature",
