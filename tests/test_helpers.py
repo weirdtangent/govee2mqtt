@@ -207,3 +207,72 @@ class TestHandleSignal:
         fake.logger.warning.assert_called()
         call_args = fake.logger.warning.call_args[0][0]
         assert "SIGINT" in call_args
+
+
+# ===========================================================================
+# TestSliderTemperature
+# ===========================================================================
+class TestSliderTemperature:
+    """Verify Govee kettle sliderTemperature ↔ HA target_temperature mapping."""
+
+    def _make_kettle(self) -> FakeHelpers:
+        fake = FakeHelpers()
+        fake.devices["KETTLE1"] = {"component": {"cmps": {"target_temperature": {"p": "number"}}}}
+        return fake
+
+    @pytest.mark.asyncio
+    async def test_slider_temperature_state_updates_number_and_unit(self) -> None:
+        fake = self._make_kettle()
+        await fake.build_device_states(
+            "KETTLE1",
+            {"sliderTemperature": {"unit": "Fahrenheit", "targetTemperature": 205}},
+        )
+        assert fake.states["KETTLE1"]["number"]["target_temperature"] == 205
+        assert fake.states["KETTLE1"]["internal"]["temperature_unit"] == "Fahrenheit"
+
+    @pytest.mark.asyncio
+    async def test_slider_temperature_preserves_float_precision(self) -> None:
+        fake = self._make_kettle()
+        await fake.build_device_states(
+            "KETTLE1",
+            {"sliderTemperature": {"unit": "Celsius", "targetTemperature": 96.5}},
+        )
+        assert fake.states["KETTLE1"]["number"]["target_temperature"] == 96.5
+        assert fake.states["KETTLE1"]["internal"]["temperature_unit"] == "Celsius"
+
+    @pytest.mark.asyncio
+    async def test_slider_temperature_ignores_non_dict_value(self) -> None:
+        fake = self._make_kettle()
+        # Should not raise or populate state
+        await fake.build_device_states("KETTLE1", {"sliderTemperature": 205})
+        assert "number" not in fake.states.get("KETTLE1", {})
+
+    def test_target_temperature_command_uses_stored_unit(self) -> None:
+        fake = self._make_kettle()
+        fake.states["KETTLE1"] = {"internal": {"temperature_unit": "Fahrenheit"}}
+        caps = fake.build_govee_capabilities("KETTLE1", "target_temperature", 200)
+        assert caps == {
+            "sliderTemperature": {
+                "type": "devices.capabilities.temperature_setting",
+                "instance": "sliderTemperature",
+                "value": {"unit": "Fahrenheit", "targetTemperature": 200},
+            }
+        }
+
+    def test_target_temperature_command_defaults_unit_when_missing(self) -> None:
+        fake = self._make_kettle()
+        fake.states["KETTLE1"] = {"internal": {}}
+        caps = fake.build_govee_capabilities("KETTLE1", "target_temperature", "100")
+        assert caps["sliderTemperature"]["value"] == {"unit": "Fahrenheit", "targetTemperature": 100}
+
+    def test_target_temperature_command_keeps_fractional_value(self) -> None:
+        fake = self._make_kettle()
+        fake.states["KETTLE1"] = {"internal": {"temperature_unit": "Celsius"}}
+        caps = fake.build_govee_capabilities("KETTLE1", "target_temperature", "85.5")
+        assert caps["sliderTemperature"]["value"] == {"unit": "Celsius", "targetTemperature": 85.5}
+
+    def test_target_temperature_command_ignores_invalid_input(self) -> None:
+        fake = self._make_kettle()
+        fake.states["KETTLE1"] = {"internal": {}}
+        caps = fake.build_govee_capabilities("KETTLE1", "target_temperature", "not-a-number")
+        assert "sliderTemperature" not in caps

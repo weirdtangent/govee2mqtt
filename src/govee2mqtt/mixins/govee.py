@@ -17,6 +17,7 @@ SKU_CLASS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^H714\d*[A-Z]*$"), "humidifier"),
     (re.compile(r"^H715\d*[A-Z]*$"), "dehumidifier"),
     (re.compile(r"^H716\d*[A-Z]*$"), "aroma_diffuser"),
+    (re.compile(r"^H717\d*[A-Z]*$"), "kettle"),
     (re.compile(r"^H[678]\d{2,}[A-Z]*$"), "light"),
     (re.compile(r"^H5\d{2,}[A-Z]*$"), "sensor"),
 ]
@@ -70,6 +71,8 @@ class GoveeMixin:
                 return await self.build_air_purifier(device)
             case "humidifier":
                 return await self.build_humidifier(device)
+            case "kettle":
+                return await self.build_kettle(device)
             # case "dehumidifier":
             #     return await self.build_dehumidifier(device)
             # case "aroma_diffuser":
@@ -367,6 +370,130 @@ class GoveeMixin:
         self.upsert_state(device_id, internal=internal)
 
         await self.prepare_device(device, raw_id, device_id, "humidifier")
+        return device_id
+
+    async def build_kettle(self: Govee2Mqtt, kettle: dict[str, Any]) -> str:
+        raw_id = str(kettle["device"])
+        device_id = raw_id.replace(":", "").upper()
+
+        work_mode_options: list[str] = []
+        work_mode_value_labels: dict[int, str] = {}
+        temperature_unit: str = "Fahrenheit"
+        temperature_min: int | float = 40
+        temperature_max: int | float = 212
+        temperature_step: int | float = 1
+        device_has: dict[str, bool] = {}
+
+        for cap in kettle.get("capabilities", []):
+            device_has[cap["instance"]] = True
+            match cap["instance"]:
+                case "workMode":
+                    fields = cap.get("parameters", {}).get("fields", [])
+                    mode_field = next((f for f in fields if f.get("fieldName") == "workMode"), None)
+                    if mode_field:
+                        for option in mode_field.get("options", []):
+                            name = option.get("name")
+                            value = option.get("value")
+                            if not name:
+                                continue
+                            if isinstance(value, int):
+                                work_mode_value_labels[value] = name
+                            if name not in work_mode_options:
+                                work_mode_options.append(name)
+                case "sliderTemperature":
+                    for field in cap.get("parameters", {}).get("fields", []):
+                        match field.get("fieldName"):
+                            case "targetTemperature":
+                                rng = field.get("range", {})
+                                min_val = rng.get("min")
+                                max_val = rng.get("max")
+                                precision = rng.get("precision")
+                                if isinstance(min_val, (int, float)):
+                                    temperature_min = min_val
+                                if isinstance(max_val, (int, float)):
+                                    temperature_max = max_val
+                                if isinstance(precision, (int, float)):
+                                    temperature_step = precision
+                            case "temperatureUnit":
+                                options = field.get("options", [])
+                                default_unit: str | None = None
+                                for option in options:
+                                    if option.get("defaultValue"):
+                                        default_unit = option.get("defaultValue") or option.get("name")
+                                        break
+                                if not default_unit and options:
+                                    default_unit = options[0].get("name")
+                                if isinstance(default_unit, str):
+                                    temperature_unit = default_unit
+
+        unit_symbol = "°F" if temperature_unit.lower().startswith("f") else "°C"
+
+        cmps: dict[str, dict[str, Any]] = {
+            "power": {
+                "p": "switch",
+                "name": "Power",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "kettle"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "power"),
+                "device_class": "switch",
+                "icon": "mdi:kettle",
+            }
+        }
+        self.upsert_state(device_id, switch={"power": "OFF"})
+
+        if device_has.get("sensorTemperature", False):
+            cmps["temperature"] = {
+                "p": "sensor",
+                "name": "Temperature",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "temperature"),
+                "device_class": "temperature",
+                "state_class": "measurement",
+                "unit_of_measurement": unit_symbol,
+                "icon": "mdi:thermometer",
+            }
+
+        if device_has.get("sliderTemperature", False):
+            cmps["target_temperature"] = {
+                "p": "number",
+                "name": "Target Temperature",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "target_temperature"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "number", "target_temperature"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "number", "target_temperature"),
+                "min": temperature_min,
+                "max": temperature_max,
+                "step": temperature_step,
+                "mode": "slider",
+                "device_class": "temperature",
+                "unit_of_measurement": unit_symbol,
+                "icon": "mdi:thermometer",
+            }
+            self.upsert_state(device_id, number={"target_temperature": temperature_min})
+
+        if device_has.get("workMode", False) and work_mode_options:
+            cmps["work_mode"] = {
+                "p": "select",
+                "name": "Work Mode",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "work_mode"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "select", "work_mode"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "select", "work_mode"),
+                "options": work_mode_options,
+                "icon": "mdi:kettle-steam",
+            }
+            self.upsert_state(device_id, select={"work_mode": work_mode_options[0]})
+
+        device = _build_device_payload(self, device_id, kettle, "kettle", cmps)
+
+        internal: dict[str, Any] = {
+            "raw_id": raw_id,
+            "sku": kettle.get("sku"),
+            "temperature_unit": temperature_unit,
+        }
+        if work_mode_value_labels:
+            internal["work_mode_value_labels"] = work_mode_value_labels
+        self.upsert_state(device_id, internal=internal)
+
+        await self.prepare_device(device, raw_id, device_id, "kettle")
         return device_id
 
     async def build_sensor(self: Govee2Mqtt, sensor: dict[str, Any]) -> str:
@@ -869,7 +996,7 @@ class GoveeMixin:
         await self.build_device_states(device_id)
 
         if not self.is_discovered(device_id):
-            self.logger.info(f"added new {type}: '{device["device"]["name"]}': [Govee {device["device"]["model"]}] ({self.get_device_name(device_id)})")
+            self.logger.info(f"added new {type}: '{device['device']['name']}': [Govee {device['device']['model']}] ({self.get_device_name(device_id)})")
             await self.publish_device_discovery(device_id)
 
         await self.publish_device_availability(device_id, online=True)
