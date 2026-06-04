@@ -15,7 +15,7 @@ dependencies = [
     "json-logging-graystorm",
     "mqtt-helper-graystorm",
     "types-pyyaml>=6.0.12.20250915",
-    "aiohttp>=3.13.2",
+    "aiohttp>=3.14.0",
 ]
 
 [project.scripts]
