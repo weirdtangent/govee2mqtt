@@ -95,6 +95,7 @@ Docker is the only supported way of deploying the application. The app should ru
 
 * [@dlashua](https://github.com/dlashua) — original project author
 * [@weirdtangent](https://github.com/weirdtangent) — fork maintainer
+* [@andrzejmarszalekam-ai](https://github.com/andrzejmarszalekam-ai) — fixed stale light color mode state (#75)
 
 ### Buy Me A Coffee
 
