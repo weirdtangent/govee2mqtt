@@ -276,3 +276,63 @@ class TestSliderTemperature:
         fake.states["KETTLE1"] = {"internal": {}}
         caps = fake.build_govee_capabilities("KETTLE1", "target_temperature", "not-a-number")
         assert "sliderTemperature" not in caps
+
+
+# ===========================================================================
+# TestLightColorModeState
+# ===========================================================================
+class TestLightColorModeState:
+    def _make_light(self) -> FakeHelpers:
+        fake = FakeHelpers()
+        fake.devices["LIGHT1"] = {
+            "component": {
+                "cmps": {
+                    "light": {
+                        "min_kelvin": 2000,
+                        "max_kelvin": 9000,
+                    }
+                }
+            }
+        }
+        fake.states["LIGHT1"] = {"light": {"state": "ON"}}
+        return fake
+
+    @pytest.mark.asyncio
+    async def test_api_rgb_state_clears_stale_color_temp(self) -> None:
+        fake = self._make_light()
+        fake.states["LIGHT1"]["light"]["color_temp"] = 2000
+
+        await fake.build_device_states("LIGHT1", {"colorRgb": 0x4000FF})
+
+        assert fake.states["LIGHT1"]["light"]["rgb_color"] == [64, 0, 255]
+        assert "color_temp" not in fake.states["LIGHT1"]["light"]
+
+    @pytest.mark.asyncio
+    async def test_api_color_temp_state_clears_stale_rgb(self) -> None:
+        fake = self._make_light()
+        fake.states["LIGHT1"]["light"]["rgb_color"] = [64, 0, 255]
+
+        await fake.build_device_states("LIGHT1", {"colorTemperatureK": 2000})
+
+        assert fake.states["LIGHT1"]["light"]["color_temp"] == 2000
+        assert "rgb_color" not in fake.states["LIGHT1"]["light"]
+
+    def test_rgb_command_clears_stale_color_temp(self) -> None:
+        fake = self._make_light()
+        fake.states["LIGHT1"]["light"]["color_temp"] = 2000
+
+        caps = fake.build_govee_capabilities("LIGHT1", "rgb_color", "64,0,255")
+
+        assert caps["colorRgb"]["value"] == 0x4000FF
+        assert fake.states["LIGHT1"]["light"]["rgb_color"] == [64, 0, 255]
+        assert "color_temp" not in fake.states["LIGHT1"]["light"]
+
+    def test_color_temp_command_clears_stale_rgb(self) -> None:
+        fake = self._make_light()
+        fake.states["LIGHT1"]["light"]["rgb_color"] = [64, 0, 255]
+
+        caps = fake.build_govee_capabilities("LIGHT1", "color_temp", 2000)
+
+        assert caps["colorTemperatureK"]["value"] == 2000
+        assert fake.states["LIGHT1"]["light"]["color_temp"] == 2000
+        assert "rgb_color" not in fake.states["LIGHT1"]["light"]

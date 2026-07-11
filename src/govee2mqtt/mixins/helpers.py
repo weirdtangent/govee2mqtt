@@ -61,6 +61,7 @@ class HelpersMixin:
 
                 case "colorRgb":
                     rgb_int = data[key]
+                    self.states.get(device_id, {}).get("light", {}).pop("color_temp", None)
                     self.upsert_state(
                         device_id,
                         light={
@@ -78,6 +79,7 @@ class HelpersMixin:
                     if isinstance(value, str):
                         value = int(value)
                     color = min(max(value, component["cmps"]["light"]["min_kelvin"]), component["cmps"]["light"]["max_kelvin"])
+                    self.states.get(device_id, {}).get("light", {}).pop("rgb_color", None)
                     self.upsert_state(device_id, light={"color_temp": color})
 
                 case "gradientToggle":
@@ -471,6 +473,7 @@ class HelpersMixin:
                         value = list(map(int, value.split(",", 3)))
                     if isinstance(value, list) and len(value) == 3:
                         rgb_val = self.rgb_to_number(value)
+                        light.pop("color_temp", None)
                         light["rgb_color"] = value
                         capabilities["colorRgb"] = {
                             "type": "devices.capabilities.color_setting",
@@ -485,6 +488,7 @@ class HelpersMixin:
                     if isinstance(value, str):
                         value = int(value)
                     color = min(max(value, component["cmps"]["light"]["min_kelvin"]), component["cmps"]["light"]["max_kelvin"])
+                    light.pop("rgb_color", None)
                     light["color_temp"] = color
                     capabilities["colorTemperatureK"] = {
                         "type": "devices.capabilities.color_setting",
