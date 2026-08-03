@@ -507,8 +507,8 @@ class GoveeMixin:
                 case "sensorTemperature":
                     device_id = f"{parent}_temp"
                     device = {
-                        "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
-                        "avty_t": self.mqtt_helper.avty_t(parent, "sensor"),
+                        "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "temperature"),
+                        "avty_t": self.mqtt_helper.avty_t(device_id),
                         "device": {
                             "name": sensor["deviceName"],
                             "identifiers": [
@@ -528,7 +528,7 @@ class GoveeMixin:
                                 "p": "sensor",
                                 "name": "Temperature",
                                 "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
-                                "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "temperature"),
                                 "device_class": "temperature",
                                 "state_class": "measurement",
                                 "unit_of_measurement": "°F",
@@ -540,8 +540,8 @@ class GoveeMixin:
                 case "sensorHumidity":
                     device_id = f"{parent}_hmdy"
                     device = {
-                        "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
-                        "avty_t": self.mqtt_helper.avty_t(parent, "sensor"),
+                        "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "humidity"),
+                        "avty_t": self.mqtt_helper.avty_t(device_id),
                         "device": {
                             "name": sensor["deviceName"],
                             "identifiers": [
@@ -561,7 +561,7 @@ class GoveeMixin:
                                 "p": "sensor",
                                 "name": "Humidity",
                                 "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
-                                "stat_t": self.mqtt_helper.stat_t(parent, "sensor"),
+                                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "humidity"),
                                 "device_class": "humidity",
                                 "state_class": "measurement",
                                 "unit_of_measurement": "%",
