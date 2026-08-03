@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+from mqtt_helper import MqttHelper
 
 from govee2mqtt.mixins.govee import GoveeMixin
 
@@ -101,3 +103,70 @@ class TestClassifyDevice:
         fake.discovery_complete = True
         fake.classify_device({"sku": "ZZZZ", "deviceName": "Mystery", "device": "00:00:00:00:00:00"})
         fake.logger.warning.assert_not_called()
+
+
+# ===========================================================================
+# TestBuildSensorDiscoveryTopics
+# ===========================================================================
+class TestBuildSensorDiscoveryTopics:
+    """Regression test for issue #78: discovery state_topic / availability_topic
+    for temperature & humidity sensors must match the topics the values are
+    actually published to (device_id-scoped, with the sub-part), otherwise the
+    entities stay `unavailable` in Home Assistant.
+    """
+
+    def _make_fake(self) -> "FakeGovee":
+        fake = FakeGovee()
+        fake.service = "govee"
+        fake.service_name = "govee service"
+        fake.qos = 0
+        fake.config = {"version": "v2.8.1"}
+        fake.states = {}
+        fake.mqtt_helper = MqttHelper("govee", default_qos=0, default_retain=True)
+        fake.upsert_state = MagicMock()  # type: ignore[method-assign]
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        return fake
+
+    async def _build(self, instance: str) -> dict[str, Any]:
+        fake = self._make_fake()
+        sensor = {
+            "device": "03:33:CD:ED:00:00:00:0A:FF:FF:00:13:FF:FF:00:21",
+            "deviceName": "Pool Thermometer",
+            "sku": "H5109",
+            "capabilities": [{"instance": instance}],
+        }
+        device_id = await fake.build_sensor(sensor)
+        # prepare_device(device, raw_id, device_id, name) — grab the discovery payload
+        device = fake.prepare_device.call_args[0][0]
+        return {"device_id": device_id, "device": device, "helper": fake.mqtt_helper}
+
+    async def test_temperature_topics_match_published_topics(self) -> None:
+        result = await self._build("sensorTemperature")
+        device_id = result["device_id"]
+        helper: MqttHelper = result["helper"]
+        device = result["device"]
+
+        # The value is published to stat_t(device_id, "sensor", "temperature")
+        # and availability to avty_t(device_id) — discovery must point there.
+        expected_state = helper.stat_t(device_id, "sensor", "temperature")
+        expected_avty = helper.avty_t(device_id)
+
+        assert device["stat_t"] == expected_state
+        assert device["avty_t"] == expected_avty
+        assert device["cmps"]["temperature"]["stat_t"] == expected_state
+        # Guard against the old bug: parent-scoped topic with no sub-part.
+        assert not device["stat_t"].endswith("/sensor")
+
+    async def test_humidity_topics_match_published_topics(self) -> None:
+        result = await self._build("sensorHumidity")
+        device_id = result["device_id"]
+        helper: MqttHelper = result["helper"]
+        device = result["device"]
+
+        expected_state = helper.stat_t(device_id, "sensor", "humidity")
+        expected_avty = helper.avty_t(device_id)
+
+        assert device["stat_t"] == expected_state
+        assert device["avty_t"] == expected_avty
+        assert device["cmps"]["humidity"]["stat_t"] == expected_state
+        assert not device["stat_t"].endswith("/sensor")
