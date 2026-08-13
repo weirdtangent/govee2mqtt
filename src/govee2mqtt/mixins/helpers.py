@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import colorsys
-from deepmerge.merger import Merger
-import logging
-from mqtt_helper import ConfigError
 import os
 import pathlib
 import re
 import signal
 import threading
+from collections.abc import Mapping
 from types import FrameType
-import yaml
+from typing import TYPE_CHECKING, Any, cast
 
-from typing import TYPE_CHECKING, Any, Mapping, cast
+import yaml
+from deepmerge.merger import Merger
+from mqtt_helper import ConfigError
 
 if TYPE_CHECKING:
     from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
@@ -29,7 +29,9 @@ COLOR_MODE_BATCH_WINDOW = 0.1
 
 
 class HelpersMixin:
-    async def build_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] = {}) -> None:
+    async def build_device_states(self: Govee2Mqtt, device_id: str, data: dict[str, Any] | None = None) -> None:
+        if data is None:
+            data = {}
         if not data:
             data = await self.get_device(device_id)
         component = self.devices[device_id]["component"]
@@ -245,20 +247,17 @@ class HelpersMixin:
                                     light_scene_selection = scene_name
                                     break
                                 # Check if both are dicts with matching id
-                                if isinstance(value, dict) and isinstance(scene_value, dict):
-                                    if value.get("id") == scene_value.get("id"):
-                                        light_scene_selection = scene_name
-                                        break
+                                if isinstance(value, dict) and isinstance(scene_value, dict) and value.get("id") == scene_value.get("id"):
+                                    light_scene_selection = scene_name
+                                    break
                                 # Check if value is an int matching the id in a stored dict
-                                if isinstance(value, int) and isinstance(scene_value, dict):
-                                    if value == scene_value.get("id"):
-                                        light_scene_selection = scene_name
-                                        break
+                                if isinstance(value, int) and isinstance(scene_value, dict) and value == scene_value.get("id"):
+                                    light_scene_selection = scene_name
+                                    break
                                 # Check if value is a dict with id matching a stored int
-                                if isinstance(value, dict) and isinstance(scene_value, int):
-                                    if value.get("id") == scene_value:
-                                        light_scene_selection = scene_name
-                                        break
+                                if isinstance(value, dict) and isinstance(scene_value, int) and value.get("id") == scene_value:
+                                    light_scene_selection = scene_name
+                                    break
                             if light_scene_selection:
                                 self.upsert_state(device_id, select={"light_scene": light_scene_selection})
                                 api_scene_handled = True
@@ -624,8 +623,7 @@ class HelpersMixin:
                     rgb_int = self._normalize_music_rgb(value, rgb_range.get("max"))
                     if rgb_int is None:
                         continue
-                    if rgb_int < rgb_range.get("min", 0):
-                        rgb_int = rgb_range.get("min", 0)
+                    rgb_int = max(rgb_int, rgb_range.get("min", 0))
                     segments_state["rgb_value"] = rgb_int
                     self.upsert_state(device_id, segments=segments_state, number={"segment_rgb": rgb_int})
                     capabilities["segmentedColorRgb"] = {
@@ -653,9 +651,9 @@ class HelpersMixin:
                     if gear_mode_labels:
                         special_modes.append(("gearmode", gear_mode_labels))
 
-                    def find_mode_key_by_name(name: str) -> int | None:
+                    def find_mode_key_by_name(name: str, labels: dict[Any, Any] = work_mode_labels) -> int | None:
                         name_lower = name.lower()
-                        for key, label in work_mode_labels.items():
+                        for key, label in labels.items():
                             if isinstance(label, str) and label.lower() == name_lower:
                                 try:
                                     return int(key)
@@ -985,7 +983,7 @@ class HelpersMixin:
         try:
             self.save_state()
             self.logger.info("state saved after signal")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - signal handler; a failed save must not abort shutdown
             self.logger.warning(f"failed to save state on signal: {e}")
 
         def _force_exit() -> None:
@@ -1024,9 +1022,9 @@ class HelpersMixin:
         hue = (1.0 / 3.0) * t  # 0=red, 1/3=green
         r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
         return {
-            "r": int(round(r * 255)),
-            "g": int(round(g * 255)),
-            "b": int(round(b * 255)),
+            "r": round(r * 255),
+            "g": round(g * 255),
+            "b": round(b * 255),
         }
 
     def number_to_rgb_bluepop(self: Govee2Mqtt, number: int, max_value: int, brightness: int = 255) -> dict[str, int]:
@@ -1042,7 +1040,7 @@ class HelpersMixin:
         # normalize to desired brightness by scaling so the max channel == brightness
         m = max(r, g, b, 1e-6)
         scale = brightness / m
-        r, g, b = int(round(r * scale)), int(round(g * scale)), int(round(b * scale))
+        r, g, b = round(r * scale), round(g * scale), round(b * scale)
         return {"r": r, "g": g, "b": b}
 
     def rgb_to_number(self: Govee2Mqtt, rgb: list[int] | dict[str, int]) -> int:
@@ -1087,7 +1085,7 @@ class HelpersMixin:
                 return lowered in {"on", "true"}
             if lowered in mapping:
                 return lowered == "on"
-            if lowered.startswith("0x") or lowered.startswith("#"):
+            if lowered.startswith(("0x", "#")):
                 return None
             if lowered.isdigit():
                 normalized_value = int(lowered)
@@ -1172,8 +1170,7 @@ class HelpersMixin:
 
         if rgb_int is None:
             return None
-        if rgb_int < 0:
-            rgb_int = 0
+        rgb_int = max(rgb_int, 0)
         if rgb_max is not None:
             rgb_int = min(rgb_int, rgb_max)
         return rgb_int
@@ -1212,7 +1209,7 @@ class HelpersMixin:
         return key
 
     def _scene_instance_from_key(self: Govee2Mqtt, key: str) -> str:
-        base = key[:-6] if key.endswith("_scene") else key
+        base = key.removesuffix("_scene")
         parts = base.split("_")
         if not parts:
             return base
@@ -1316,10 +1313,10 @@ class HelpersMixin:
                 with open(config_file, "r", encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
                 config_from = "file"
-            except Exception as e:
-                logging.warning(f"Failed to load config from {config_file}: {e}")
+            except Exception as e:  # noqa: BLE001 - any unreadable/invalid config falls back to environment vars
+                self.logger.warning(f"Failed to load config from {config_file}: {e}")
         else:
-            logging.warning(f"Config file not found at {config_file}, falling back to environment vars")
+            self.logger.warning(f"Config file not found at {config_file}, falling back to environment vars")
 
         # Merge with environment vars (env vars override nothing if file exists)
         mqtt = cast(dict[str, Any], config.get("mqtt", {}))
@@ -1328,8 +1325,8 @@ class HelpersMixin:
         # fmt: off
         mqtt = {
               "host":         cast(str, mqtt.get("host"))            or os.getenv("MQTT_HOST", "localhost"),
-              "port":     int(cast(str, mqtt.get("port")             or os.getenv("MQTT_PORT", 1883))),
-              "qos":      int(cast(str, mqtt.get("qos")              or os.getenv("MQTT_QOS", 0))),
+              "port":     int(cast(str, mqtt.get("port")             or os.getenv("MQTT_PORT", "1883"))),
+              "qos":      int(cast(str, mqtt.get("qos")              or os.getenv("MQTT_QOS", "0"))),
               "username":               mqtt.get("username")         or os.getenv("MQTT_USERNAME", ""),
               "password":               mqtt.get("password")         or os.getenv("MQTT_PASSWORD", ""),
               "tls_enabled":            mqtt.get("tls_enabled")      or (os.getenv("MQTT_TLS_ENABLED", "false").lower() == "true"),
@@ -1343,9 +1340,9 @@ class HelpersMixin:
 
         govee = {
             "api_key":                   govee.get("api_key") or os.getenv("GOVEE_API_KEY"),
-            "device_interval":       int(cast(str, govee.get("device_interval") or os.getenv("GOVEE_DEVICE_INTERVAL", 30))),
-            "device_boost_interval": int(cast(str, govee.get("device_boost_interval") or os.getenv("GOVEE_DEVICE_BOOST_INTERVAL", 5))),
-            "device_list_interval":  int(cast(str, govee.get("device_list_interval") or os.getenv("GOVEE_LIST_INTERVAL", 3600))),
+            "device_interval":       int(cast(str, govee.get("device_interval") or os.getenv("GOVEE_DEVICE_INTERVAL", "30"))),
+            "device_boost_interval": int(cast(str, govee.get("device_boost_interval") or os.getenv("GOVEE_DEVICE_BOOST_INTERVAL", "5"))),
+            "device_list_interval":  int(cast(str, govee.get("device_list_interval") or os.getenv("GOVEE_LIST_INTERVAL", "3600"))),
         }
 
         config = {
@@ -1408,7 +1405,7 @@ class HelpersMixin:
             self._assert_no_tuples(merged, f"device[{device_id}].{section} (post-merge)")
             self.devices[device_id] = merged
         new = self.devices.get(device_id, {})
-        return False if prev == new else True
+        return bool(prev != new)
 
     def upsert_state(self: Govee2Mqtt, device_id: str, **kwargs: dict[str, Any] | str | int | bool | None) -> bool:
         MERGER = Merger(
@@ -1423,4 +1420,4 @@ class HelpersMixin:
             self._assert_no_tuples(merged, f"state[{device_id}].{section} (post-merge)")
             self.states[device_id] = merged
         new = self.states.get(device_id, {})
-        return False if prev == new else True
+        return bool(prev != new)

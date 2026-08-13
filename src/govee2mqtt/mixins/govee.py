@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -157,8 +156,7 @@ class GoveeMixin:
                                 continue
                             if name not in work_mode_options and name not in base_mode_names:
                                 base_mode_names.append(name)
-                        for base in base_mode_names:
-                            work_mode_options.append(base)
+                        work_mode_options.extend(base_mode_names)
                         if gear_mode_present and gear_mode_values:
                             for level in sorted(set(gear_mode_values)):
                                 label = gear_mode_labels.get(level, f"Gear Level {level}")
@@ -1003,7 +1001,7 @@ class GoveeMixin:
         await self.publish_device_state(device_id)
 
 
-def _build_device_payload(service: "Govee2Mqtt", device_id: str, source: dict[str, Any], domain: str, components: dict[str, Any]) -> dict[str, Any]:
+def _build_device_payload(service: Govee2Mqtt, device_id: str, source: dict[str, Any], domain: str, components: dict[str, Any]) -> dict[str, Any]:
     return {
         "stat_t": service.mqtt_helper.stat_t(device_id, domain),
         "avty_t": service.mqtt_helper.avty_t(device_id),
