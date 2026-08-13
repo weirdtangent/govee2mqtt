@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 
 
 class PublishMixin:
-
     # Service -------------------------------------------------------------------------------------
 
     async def publish_service_discovery(self: Govee2Mqtt) -> None:
