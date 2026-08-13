@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
+import uuid
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from aiohttp import ClientError
-from datetime import datetime
-import uuid
-
-from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
@@ -23,12 +22,18 @@ SCENES_URL = "https://openapi.api.govee.com/router/api/v1/device/scenes"
 class GoveeAPIMixin:
     def restore_state_values(self: Govee2Mqtt, api_calls: int, last_call_date: str) -> None:
         self.api_calls = api_calls
-        self.last_call_date = datetime.strptime(last_call_date, "%Y-%m-%d %H:%M:%S.%f")
+        restored = datetime.fromisoformat(last_call_date)
+        if restored.tzinfo is None:
+            # state written before timestamps were timezone-aware: it is local wall-clock
+            restored = restored.astimezone()
+        self.last_call_date = restored
 
     def increase_api_calls(self: Govee2Mqtt) -> None:
-        if not self.last_call_date or self.last_call_date.date() != datetime.now().date():
+        # local wall-clock, as before, but timezone-aware: the daily quota rolls over at local midnight
+        now = datetime.now(UTC).astimezone()
+        if not self.last_call_date or self.last_call_date.date() != now.date():
             self.api_calls = 0
-        self.last_call_date = datetime.now()
+        self.last_call_date = now
         self.api_calls += 1
 
     def set_if_rate_limited(self: Govee2Mqtt, status: int) -> None:
@@ -59,7 +64,7 @@ class GoveeAPIMixin:
         except ClientError as err:
             self.logger.error(f"request error communicating with Govee for device list: {err}")
             return []
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 - deliberate fallback; one bad API response must not kill the daemon
             self.logger.error(f"error communicating with Govee for device list: {err!r}")
             return []
 
@@ -103,7 +108,7 @@ class GoveeAPIMixin:
         except aiohttp.ClientError as err:
             self.logger.error(f"request error communicating with Govee for device '{self.get_device_name(device_id)}': {err}")
             return {}
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 - deliberate fallback; one bad API response must not kill the daemon
             self.logger.error(f"error communicating with Govee for device '{self.get_device_name(device_id)}': {err!r}")
             return {}
 
@@ -148,7 +153,7 @@ class GoveeAPIMixin:
         except aiohttp.ClientError as err:
             self.logger.debug(f"request error getting scenes for device ({device_id}): {err}")
             return []
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 - deliberate fallback; one bad API response must not kill the daemon
             self.logger.debug(f"error getting scenes for device ({device_id}): {err!r}")
             return []
 
@@ -198,7 +203,7 @@ class GoveeAPIMixin:
         except ClientError as err:
             self.logger.error(f"request error communicating with Govee sending command to device '{self.get_device_name(device_id)}': {err}")
             return {}
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 - deliberate fallback; one bad API response must not kill the daemon
             self.logger.error(f"error communicating with Govee sending command to device '{self.get_device_name(device_id)}': {err!r}")
             return {}
 
@@ -215,7 +220,7 @@ class GoveeAPIMixin:
                         new_capabilities[key] = capability["value"][key]
                 else:
                     new_capabilities[capability["instance"]] = capability["value"]
-        except Exception:
+        except Exception:  # noqa: BLE001 - deliberate fallback; one bad API response must not kill the daemon
             self.logger.error(f"failed to process response sending command to device '{self.get_device_name(device_id)}'")
             return {}
 

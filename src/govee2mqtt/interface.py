@@ -1,14 +1,16 @@
-import aiohttp
 import asyncio
 from argparse import Namespace
 from asyncio import AbstractEventLoop
+from collections.abc import Mapping
 from datetime import datetime
 from logging import Logger
+from types import FrameType
+from typing import Any, Protocol
+
+import aiohttp
 from mqtt_helper import MqttHelper
 from paho.mqtt.client import Client, MQTTMessage
 from paho.mqtt.enums import MQTTProtocolVersion
-from types import FrameType
-from typing import Protocol, Any, Mapping
 
 
 class GoveeServiceProtocol(Protocol):
@@ -44,7 +46,7 @@ class GoveeServiceProtocol(Protocol):
     timezone: str
 
     async def build_component(self, device: dict[str, Any]) -> str: ...
-    async def build_device_states(self, device_id: str, data: dict[str, Any] = {}) -> None: ...
+    async def build_device_states(self, device_id: str, data: dict[str, Any] | None = None) -> None: ...
     async def build_air_purifier(self, air_purifier: dict[str, Any]) -> str: ...
     async def build_humidifier(self, humidifier: dict[str, Any]) -> str: ...
     async def build_kettle(self, kettle: dict[str, Any]) -> str: ...

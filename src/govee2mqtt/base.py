@@ -2,21 +2,21 @@
 # Copyright (c) 2025 Jeff Culverhouse
 from __future__ import annotations
 
-import aiohttp
 import argparse
 import asyncio
 import concurrent.futures
-from datetime import datetime
 import json
-from json_logging import get_logger
 import logging
-from mqtt_helper import MqttHelper
 import os
-from paho.mqtt.client import Client
+from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-
 from typing import Any, Self, cast
+
+import aiohttp
+from json_logging import get_logger
+from mqtt_helper import MqttHelper
+from paho.mqtt.client import Client
 
 from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
 
@@ -74,7 +74,7 @@ class Base:
         self.api_key = self.config["govee"]["api_key"]
         self.rate_limited = False
         self.api_calls = 0
-        self.last_call_date = datetime.now()
+        self.last_call_date = datetime.now(UTC).astimezone()
         self.timezone = self.config["timezone"]
 
     async def __aenter__(self: Self) -> Govee2Mqtt:
@@ -91,7 +91,7 @@ class Base:
 
         return cast(Govee2Mqtt, self)
 
-    async def __aexit__(self: Self, exc_type: BaseException | None, exc_val: BaseException | None, exc_tb: TracebackType) -> None:
+    async def __aexit__(self: Self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
         super_exit = getattr(super(), "__exit__", None)
         if callable(super_exit):
             super_exit(exc_type, exc_val, exc_tb)
@@ -114,14 +114,14 @@ class Base:
             try:
                 await cast(Any, self).publish_service_availability("offline")
                 cast(Any, self).mqttc.loop_stop()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - best-effort cleanup; shutdown must not be blocked by a broker error
                 self.logger.debug(f"mqtt loop_stop failed: {e}")
 
             if cast(Any, self).mqttc.is_connected():
                 try:
                     cast(Any, self).mqttc.disconnect()
                     self.logger.info("disconnected from mqtt broker")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - best-effort cleanup; shutdown must not be blocked by a broker error
                     self.logger.warning(f"error during mqtt disconnect: {e}")
 
         self.logger.info("exiting gracefully")

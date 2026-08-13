@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import signal
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -57,7 +56,7 @@ class LoopsMixin:
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
                 signal.signal(sig, self._handle_signal)
-            except Exception:
+            except Exception:  # noqa: BLE001 - not every signal is installable on every platform
                 self.logger.debug(f"cannot install handler for {sig}")
 
         await self.refresh_device_list()
@@ -75,8 +74,8 @@ class LoopsMixin:
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
             self.logger.warning("main loop cancelled — shutting down...")
-        except Exception as err:
-            self.logger.exception(f"unhandled exception in main loop: {err}")
+        except Exception:
+            self.logger.exception("unhandled exception in main loop")
             self.running = False
         finally:
             self.logger.info("all loops terminated — cleanup complete.")
