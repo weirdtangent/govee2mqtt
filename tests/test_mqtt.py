@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
+import re
 import asyncio
 import json
 from typing import Any
@@ -47,6 +48,7 @@ class FakeMqtt(MqttMixin):
         }
         self.mqtt_helper = MagicMock()
         self.mqtt_helper.service_slug = "govee2mqtt"
+        self.mqtt_helper.obj_id = MagicMock(side_effect=lambda dev, e="": re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", f"{dev} {e}".lower())).strip("_"))
         self.mqtt_connect_time = None
         self.client_id = "test-client"
         self.running = True
