@@ -951,6 +951,9 @@ class HelpersMixin:
 
     async def handle_service_command(self: Govee2Mqtt, handler: str, message: Any) -> None:
         match handler:
+            case "reset_discovery":
+                await self.reset_discovery(reason="requested over MQTT")
+                return
             case "refresh_interval":
                 self.device_interval = int(message)
                 self.logger.info(f"refresh_interval updated to be {message}")
@@ -964,6 +967,17 @@ class HelpersMixin:
                 self.logger.error(f"unrecognized message to {self.mqtt_helper.service_slug}: {handler} with {message}")
                 return
         await self.publish_service_state()
+
+    async def clear_discovery(self: Govee2Mqtt) -> None:
+        """Delete every retained discovery topic we own, service device included.
+
+        Each device publishes one bundled `device` config topic carrying all its components, so
+        there is exactly one topic per device to clear rather than one per entity.
+        """
+        await self.clear_discovery_topic(self.mqtt_helper.disc_t("device", "service"))
+        for device_id in list(self.devices):
+            await self.clear_discovery_topic(self.mqtt_helper.disc_t("device", device_id))
+            self.upsert_state(device_id, internal={"discovered": False})
 
     async def rediscover_all(self: Govee2Mqtt) -> None:
         await self.publish_service_state()
