@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
+import re
 import json
 import pytest
 from unittest.mock import MagicMock, patch
@@ -18,6 +19,7 @@ class FakePublisher(HelpersMixin, PublishMixin):
         self.mqtt_helper = MagicMock()
         self.mqtt_helper.safe_publish = MagicMock()
         self.mqtt_helper.service_slug = "govee2mqtt"
+        self.mqtt_helper.obj_id = MagicMock(side_effect=lambda dev, e="": re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", f"{dev} {e}".lower())).strip("_"))
         self.mqtt_helper.svc_unique_id = MagicMock(side_effect=lambda e: f"govee2mqtt_{e}")
         self.mqtt_helper.dev_unique_id = MagicMock(side_effect=lambda d, e: f"govee2mqtt_{d}_{e}")
         self.mqtt_helper.device_slug = MagicMock(side_effect=lambda d: f"govee2mqtt_{d}")
@@ -274,3 +276,38 @@ class TestDeviceState:
                 break
         else:
             pytest.fail("attributes not published")
+
+
+class TestStableObjectIds:
+    """entity_id must be pinned to the component key, never the display name.
+
+    HA derives entity_id from the display name at first discovery and keeps it forever, keyed on
+    unique_id. Confirmed on a live install that clearing discovery and waiting 25s still restores
+    the same entity_id, so publishing obj_id at creation is the only point this can be fixed.
+    """
+
+    @pytest.mark.asyncio
+    async def test_every_service_component_publishes_an_obj_id(self):
+        pub = FakePublisher()
+
+        with patch("govee2mqtt.mixins.publish.asyncio") as mock_asyncio:
+            mock_asyncio.to_thread = _fake_to_thread
+            await pub.publish_service_discovery()
+
+        cmps = json.loads(pub.mqtt_helper.safe_publish.call_args_list[0].args[1])["cmps"]
+        missing = [k for k, c in cmps.items() if "obj_id" not in c]
+        assert missing == [], f"components without obj_id: {missing}"
+
+    @pytest.mark.asyncio
+    async def test_obj_id_is_keyed_on_the_component_not_the_unique_id_token(self):
+        """Some components carry a unique_id token that differs from their component key
+        (a pre-existing quirk). obj_id must follow the component key regardless."""
+        pub = FakePublisher()
+
+        with patch("govee2mqtt.mixins.publish.asyncio") as mock_asyncio:
+            mock_asyncio.to_thread = _fake_to_thread
+            await pub.publish_service_discovery()
+
+        cmps = json.loads(pub.mqtt_helper.safe_publish.call_args_list[0].args[1])["cmps"]
+        for key, comp in cmps.items():
+            assert comp["obj_id"].endswith(key), f"{key} -> {comp['obj_id']}"
