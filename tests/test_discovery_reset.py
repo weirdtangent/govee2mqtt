@@ -33,21 +33,37 @@ def _cleared_topics(svc):
 
 class TestClearDiscovery:
     @pytest.mark.asyncio
-    async def test_clears_service_and_every_device(self):
-        svc = FakeService(devices=["AA:BB", "CC:DD"])
+    async def test_delegates_to_the_broker_sweep(self):
+        """The device map is empty at connect time, so the topic list must come from the broker."""
+        svc = FakeService()
+        svc.clear_retained_discovery = AsyncMock()
+
+        await svc.clear_discovery()
+
+        svc.clear_retained_discovery.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_clears_topics_the_device_map_never_knew_about(self):
+        svc = FakeService()  # no devices loaded yet, exactly as at mqtt_on_connect
+        svc.collect_retained_discovery_topics = AsyncMock(
+            return_value=[
+                "homeassistant/device/govee2mqtt_AA:BB/config",
+                "homeassistant/device/govee2mqtt_service/config",
+            ]
+        )
 
         await svc.clear_discovery()
 
         assert _cleared_topics(svc) == [
-            "homeassistant/device/govee2mqtt_service/config",
             "homeassistant/device/govee2mqtt_AA:BB/config",
-            "homeassistant/device/govee2mqtt_CC:DD/config",
+            "homeassistant/device/govee2mqtt_service/config",
         ]
 
     @pytest.mark.asyncio
     async def test_clears_with_empty_payload_retained(self):
         """An empty payload removes the registry entry; None would publish the string "null"."""
-        svc = FakeService(devices=["AA:BB"])
+        svc = FakeService()
+        svc.collect_retained_discovery_topics = AsyncMock(return_value=["homeassistant/device/govee2mqtt_service/config"])
 
         await svc.clear_discovery()
 
@@ -56,8 +72,10 @@ class TestClearDiscovery:
             assert c.kwargs == {"retain": True}
 
     @pytest.mark.asyncio
-    async def test_marks_devices_undiscovered_so_they_republish(self):
+    async def test_marks_loaded_devices_undiscovered(self):
+        """Matters on the manual reset path, where devices are loaded by the time it runs."""
         svc = FakeService(devices=["AA:BB"])
+        svc.clear_retained_discovery = AsyncMock()
 
         await svc.clear_discovery()
 
