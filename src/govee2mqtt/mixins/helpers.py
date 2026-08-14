@@ -951,6 +951,9 @@ class HelpersMixin:
 
     async def handle_service_command(self: Govee2Mqtt, handler: str, message: Any) -> None:
         match handler:
+            case "reset_discovery":
+                await self.reset_discovery(reason="requested over MQTT")
+                return
             case "refresh_interval":
                 self.device_interval = int(message)
                 self.logger.info(f"refresh_interval updated to be {message}")
@@ -964,6 +967,19 @@ class HelpersMixin:
                 self.logger.error(f"unrecognized message to {self.mqtt_helper.service_slug}: {handler} with {message}")
                 return
         await self.publish_service_state()
+
+    async def clear_discovery(self: Govee2Mqtt) -> None:
+        """Delete every retained discovery topic we own.
+
+        The topic list comes from the broker, not from self.devices: this runs from
+        mqtt_on_connect, before the device map is populated, so anything derived from in-memory
+        state would miss every per-device topic and reduce a schema bump to an in-place update.
+        Resetting the `discovered` flags still matters for the manual reset, where devices *are*
+        loaded by the time the button is pressed.
+        """
+        await self.clear_retained_discovery()
+        for device_id in list(self.devices):
+            self.upsert_state(device_id, internal={"discovered": False})
 
     async def rediscover_all(self: Govee2Mqtt) -> None:
         await self.publish_service_state()

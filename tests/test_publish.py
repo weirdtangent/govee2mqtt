@@ -49,7 +49,7 @@ class TestServiceDiscovery:
         assert topic == "homeassistant/device/govee2mqtt_service/config"
         assert payload["device"]["name"] == "govee2mqtt service"
         assert "cmps" in payload
-        assert len(payload["cmps"]) == 6
+        assert len(payload["cmps"]) == 7
 
     @pytest.mark.asyncio
     async def test_retain_true_on_publish(self):
