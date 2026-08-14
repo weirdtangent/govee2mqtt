@@ -44,7 +44,9 @@ class TestSaveState:
     def test_leaves_no_temp_file_behind(self, svc, tmp_path):
         svc.save_state()
 
-        assert list(tmp_path.glob("*.tmp")) == []
+        # note: pathlib glob DOES match dotfiles (the stdlib glob module does not), but assert
+        # on the whole directory so this cannot silently weaken if the temp prefix changes
+        assert [q.name for q in tmp_path.iterdir()] == ["govee2mqtt.dat"]
 
     def test_a_failed_save_does_not_destroy_existing_state(self, svc, tmp_path, monkeypatch):
         """The whole point: the previous version truncated first and lost everything."""
@@ -67,7 +69,10 @@ class TestSaveState:
 
         svc.save_state()
 
-        assert list(tmp_path.glob("*.tmp")) == []
+        # nothing was ever saved here, so the directory must be completely empty. Asserting on
+        # the whole directory rather than glob("*.tmp") keeps this honest regardless of the
+        # temp-file prefix (pathlib glob does match dotfiles; the stdlib glob module does not).
+        assert [q.name for q in tmp_path.iterdir()] == []
 
     def test_does_not_chmod_an_existing_file(self, svc, tmp_path, monkeypatch):
         """os.fchmod on a file owned by another uid is what raised EPERM in production."""
@@ -78,6 +83,18 @@ class TestSaveState:
         svc.save_state()
 
         assert called == []
+
+    def test_does_not_leak_the_descriptor_when_fdopen_fails(self, svc, tmp_path, monkeypatch):
+        """mkstemp hands back a raw fd; os.fdopen only takes ownership once it succeeds."""
+        closed = []
+        real_close = os.close
+        monkeypatch.setattr(os, "close", lambda fd: (closed.append(fd), real_close(fd))[1])
+        monkeypatch.setattr(os, "fdopen", lambda *a, **k: (_ for _ in ()).throw(OSError(24, "EMFILE")))
+
+        svc.save_state()
+
+        assert closed, "descriptor from mkstemp was never closed"
+        assert [q.name for q in tmp_path.iterdir()] == []
 
 
 class TestRoundTrip:
