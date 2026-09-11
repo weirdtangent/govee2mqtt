@@ -1021,7 +1021,9 @@ class GoveeMixin:
         await self.build_device_states(device_id)
 
         if not self.is_discovered(device_id):
-            self.logger.info(f"added new {type}: '{device['device']['name']}': [Govee {device['device']['model']}] ({self.get_device_name(device_id)})")
+            self.logger.info(
+                f"added new {type}: '{device['device']['name']}': [Govee {device['device']['model']}] ({self.get_device_name(device_id)}) id={raw_id.upper()}"
+            )
             await self.publish_device_discovery(device_id)
 
         await self.publish_device_availability(device_id, online=True)

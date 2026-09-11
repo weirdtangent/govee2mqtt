@@ -170,3 +170,47 @@ class TestBuildSensorDiscoveryTopics:
         assert device["avty_t"] == expected_avty
         assert device["cmps"]["humidity"]["stat_t"] == expected_state
         assert not device["stat_t"].endswith("/sensor")
+
+
+# ===========================================================================
+# TestPrepareDeviceLogging
+# ===========================================================================
+class TestPrepareDeviceLogging:
+    """The 'added new ...' line is the only startup record of what the service
+    adopted, so it has to carry the Govee device id. That id is MAC-derived,
+    which makes it the one field that ties a device back to a client seen on
+    the network.
+    """
+
+    def _make_fake(self) -> "FakeGovee":
+        fake = FakeGovee()
+        fake.states = {"AABBCCDDEEFF": {"internal": {}}}
+        fake.upsert_device = MagicMock()  # type: ignore[method-assign]
+        fake.upsert_state = MagicMock()  # type: ignore[method-assign]
+        fake.build_device_states = AsyncMock()  # type: ignore[method-assign]
+        fake.is_discovered = MagicMock(return_value=False)  # type: ignore[method-assign]
+        fake.get_device_name = MagicMock(return_value="Smart Kettle")  # type: ignore[method-assign]
+        fake.publish_device_discovery = AsyncMock()  # type: ignore[method-assign]
+        fake.publish_device_availability = AsyncMock()  # type: ignore[method-assign]
+        fake.publish_device_state = AsyncMock()  # type: ignore[method-assign]
+        return fake
+
+    async def test_log_line_includes_raw_id(self) -> None:
+        fake = self._make_fake()
+        device = {"device": {"name": "Smart Kettle", "model": "H7170"}}
+
+        await fake.prepare_device(device, "aa:bb:cc:dd:ee:ff", "AABBCCDDEEFF", "kettle")
+
+        message = fake.logger.info.call_args[0][0]
+        assert "id=AA:BB:CC:DD:EE:FF" in message
+        assert "added new kettle" in message
+        assert "H7170" in message
+
+    async def test_no_log_line_when_already_discovered(self) -> None:
+        fake = self._make_fake()
+        fake.is_discovered = MagicMock(return_value=True)  # type: ignore[method-assign]
+        device = {"device": {"name": "Smart Kettle", "model": "H7170"}}
+
+        await fake.prepare_device(device, "aa:bb:cc:dd:ee:ff", "AABBCCDDEEFF", "kettle")
+
+        fake.logger.info.assert_not_called()
