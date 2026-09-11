@@ -140,7 +140,7 @@ class GoveeMixin:
     async def get_light_scenes(self: Govee2Mqtt, device_id: str) -> list[dict[str, Any]]:
         """Available light scenes, fetched once per run rather than once per rescan.
 
-        build_light runs on every device-list refresh, so fetching scenes there cost one API call
+        build_light runs on every device-list refresh, so fetching scenes there costs one API call
         per light per rescan — 19 lights every 900s is ~1,800 calls/day, against a 10,000/day
         quota, to re-read lists that essentially never change. The scene map is already persisted
         as `light_scene_values` for command lookups, so rebuilding the list from it costs nothing.

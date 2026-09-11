@@ -328,6 +328,20 @@ class TestBuildGroup:
         assert "rgb_command_topic" not in group
         assert group["obj_id"] == "humidifiers_group"
 
+    async def test_the_published_entity_id_is_light_bedroom_group(self) -> None:
+        """obj_id alone proves nothing: HA 2026.4 ignores it and reads def_ent_id, which
+        publish_device_discovery derives via apply_default_entity_ids. Assert what is actually
+        published, or this passes while the real entity_id still collides with the ceiling light."""
+        fake = self._make_fake()
+        await fake.build_group(self._group(name="Bedroom"))
+        payload = fake.prepare_device.call_args[0][0]
+
+        # exactly what publish_device_discovery does to the payload before it goes on the wire
+        published = MqttHelper("govee2mqtt").apply_default_entity_ids(payload)
+
+        assert published["cmps"]["group"]["def_ent_id"] == "light.bedroom_group"
+        assert "obj_id" not in published["cmps"]["group"]
+
     async def test_does_not_say_group_twice(self) -> None:
         fake = self._make_fake()
         await fake.build_group(self._group(name="Steelers Group"))
@@ -376,7 +390,7 @@ class TestBuildGroup:
 # TestLightSceneCaching
 # ===========================================================================
 class TestLightSceneCaching:
-    """build_light runs on every device-list refresh, so fetching scenes there cost one API call
+    """build_light runs on every device-list refresh, so fetching scenes there costs one API call
     per light per rescan — 19 lights every 900s is ~1,800 calls/day against a 10,000/day quota,
     re-reading lists that essentially never change.
     """

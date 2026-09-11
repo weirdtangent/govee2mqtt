@@ -25,6 +25,10 @@ READY_FILE = os.getenv("READY_FILE", "/tmp/govee2mqtt.ready")
 # Time window (in seconds) to batch commands for the same device.
 # Home Assistant may send rgb_color and color_temp nearly simultaneously;
 # we collect them and keep only the one that arrived last.
+# States whose 0 is a real value, not "nothing to report". The API answers "" when it has nothing
+# to say, so each of these re-checks its own value inside its case rather than trusting the guard.
+KEEP_FALSY_STATES = frozenset({"powerSwitch", "sensorTemperature", "sensorHumidity", "dreamViewToggle", "gradientToggle", "nightlightToggle", "warmMistToggle"})
+
 COLOR_MODE_BATCH_WINDOW = 0.1
 
 
@@ -46,7 +50,7 @@ class HelpersMixin:
             # from a poll -- turn a light off in the Govee app and HA went on showing it ON, since
             # only the truthy 1 survived. Each of these re-checks the value inside its own case,
             # because the API also returns "" when it has nothing to say.
-            if data[key] is None or (not data[key] and key not in {"powerSwitch", "dreamViewToggle", "gradientToggle", "nightlightToggle", "warmMistToggle"}):
+            if data[key] is None or (not data[key] and key not in KEEP_FALSY_STATES):
                 continue
 
             match key:
@@ -130,6 +134,8 @@ class HelpersMixin:
                     )
 
                 case "sensorTemperature":
+                    if data[key] == "":
+                        continue
                     self.upsert_state(device_id, sensor={"temperature": data[key]})
 
                 case "sliderTemperature":
@@ -144,6 +150,8 @@ class HelpersMixin:
                         self.upsert_state(device_id, internal={"temperature_unit": unit})
 
                 case "sensorHumidity":
+                    if data[key] == "":
+                        continue
                     self.upsert_state(device_id, sensor={"humidity": data[key]})
 
                 case "filterLifeTime":
@@ -1401,11 +1409,12 @@ class HelpersMixin:
         are worth building entities for — so this is reached with nothing in self.devices, and
         raising KeyError from inside a debug log line took the whole build down.
         """
-        device = self.devices.get(device_id, {})
-        if not isinstance(device, dict):
-            return device_id
-        name = device.get("component", {}).get("device", {}).get("name")
-        return name if isinstance(name, str) else device_id
+        value: Any = self.devices.get(device_id)
+        for step in ("component", "device", "name"):
+            if not isinstance(value, dict):
+                return device_id
+            value = value.get(step)
+        return value if isinstance(value, str) else device_id
 
     def get_raw_id(self: Govee2Mqtt, device_id: str) -> str:
         return cast(str, self.states[device_id]["internal"]["raw_id"])
