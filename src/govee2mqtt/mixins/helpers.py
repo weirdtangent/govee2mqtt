@@ -1395,7 +1395,17 @@ class HelpersMixin:
     # Device properties ---------------------------------------------------------------------------
 
     def get_device_name(self: Govee2Mqtt, device_id: str) -> str:
-        return cast(str, self.devices[device_id]["component"]["device"]["name"])
+        """Display name for logging, falling back to the id for a device we have not adopted yet.
+
+        build_sensor reads a device's state *before* adopting it, to decide which of its readings
+        are worth building entities for — so this is reached with nothing in self.devices, and
+        raising KeyError from inside a debug log line took the whole build down.
+        """
+        device = self.devices.get(device_id, {})
+        if not isinstance(device, dict):
+            return device_id
+        name = device.get("component", {}).get("device", {}).get("name")
+        return name if isinstance(name, str) else device_id
 
     def get_raw_id(self: Govee2Mqtt, device_id: str) -> str:
         return cast(str, self.states[device_id]["internal"]["raw_id"])

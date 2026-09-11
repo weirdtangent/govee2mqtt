@@ -497,10 +497,18 @@ class TestSensorCapabilities:
         fake.qos = 0
         fake.config = {"version": "v0.0.0-test"}
         fake.states = {}
+        fake.devices = {}
         fake.mqtt_helper = MqttHelper("govee2mqtt", default_qos=0, default_retain=True)
         fake.upsert_state = MagicMock()  # type: ignore[method-assign]
         fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
-        fake.get_device = AsyncMock(return_value=readings)  # type: ignore[method-assign]
+
+        # the real get_device logs through get_device_name first; a bare AsyncMock skips that and
+        # hid a KeyError that took down every sensor build in production
+        async def _get_device(device_id: str) -> dict[str, Any]:
+            HelpersMixin.get_device_name(fake, device_id)  # type: ignore[arg-type]
+            return readings
+
+        fake.get_device = AsyncMock(side_effect=_get_device)  # type: ignore[method-assign]
         return fake
 
     def _sensor(self, name: str = "Great Room H5179", sku: str = "H5179") -> dict[str, Any]:
@@ -580,3 +588,34 @@ class TestSensorCapabilities:
 
         assert await fake.build_sensor(sensor) == []
         fake.get_device.assert_not_awaited()
+
+
+# ===========================================================================
+# TestGetDeviceName
+# ===========================================================================
+class TestGetDeviceName:
+    """build_sensor reads a device's state before adopting it, so this is reached with nothing in
+    self.devices. Raising KeyError from inside a debug log line took down every sensor build.
+    """
+
+    def _make(self) -> "FakeGovee":
+        fake = FakeGovee()
+        fake.devices = {}
+        return fake
+
+    def test_falls_back_to_the_id_for_an_unadopted_device(self) -> None:
+        fake = self._make()
+
+        assert HelpersMixin.get_device_name(fake, "3A2E181F68120103_temp") == "3A2E181F68120103_temp"  # type: ignore[arg-type]
+
+    def test_returns_the_name_once_adopted(self) -> None:
+        fake = self._make()
+        fake.devices = {"D1": {"component": {"device": {"name": "Great Room H5179"}}}}
+
+        assert HelpersMixin.get_device_name(fake, "D1") == "Great Room H5179"  # type: ignore[arg-type]
+
+    def test_falls_back_when_the_payload_is_half_built(self) -> None:
+        fake = self._make()
+        fake.devices = {"D1": {"component": {}}}
+
+        assert HelpersMixin.get_device_name(fake, "D1") == "D1"  # type: ignore[arg-type]
