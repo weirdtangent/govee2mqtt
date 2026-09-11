@@ -84,6 +84,18 @@ class TestClassifyDevice:
     def test_h5179_is_sensor(self) -> None:
         assert self._classify("H5179") == "sensor"
 
+    # ---- device groups (virtual, no real model number) ----
+    def test_same_mode_group_is_group(self) -> None:
+        assert self._classify("SameModeGroup") == "group"
+
+    def test_base_group_is_group(self) -> None:
+        assert self._classify("BaseGroup") == "group"
+
+    def test_group_logs_no_warning(self) -> None:
+        fake = FakeGovee()
+        fake.classify_device({"sku": "SameModeGroup", "deviceName": "Lanterns", "device": "6029841"})
+        fake.logger.warning.assert_not_called()
+
     # ---- unknown / unsupported ----
     def test_unknown_sku_returns_empty(self) -> None:
         assert self._classify("ZZZZ") == ""
@@ -214,3 +226,96 @@ class TestPrepareDeviceLogging:
         await fake.prepare_device(device, "aa:bb:cc:dd:ee:ff", "AABBCCDDEEFF", "kettle")
 
         fake.logger.info.assert_not_called()
+
+
+# ===========================================================================
+# TestBuildGroup
+# ===========================================================================
+class TestBuildGroup:
+    """Govee device groups (BaseGroup / SameModeGroup) are virtual devices: the API takes a
+    powerSwitch command for them but rejects /device/state and /device/scenes, so they are
+    adopted as on/off-only lights that are never polled.
+    """
+
+    def _make_fake(self) -> "FakeGovee":
+        fake = FakeGovee()
+        fake.service = "govee"
+        fake.service_name = "govee service"
+        fake.qos = 0
+        fake.config = {"version": "v2.10.3"}
+        fake.states = {}
+        fake.mqtt_helper = MqttHelper("govee", default_qos=0, default_retain=True)
+        fake.upsert_state = MagicMock()  # type: ignore[method-assign]
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        fake.get_device_scenes = AsyncMock(return_value=[])  # type: ignore[method-assign]
+        return fake
+
+    def _group(self, sku: str = "SameModeGroup", name: str = "Great Room Lamps") -> dict[str, Any]:
+        return {
+            "sku": sku,
+            "device": "5037841",
+            "deviceName": name,
+            "capabilities": [
+                {
+                    "type": "devices.capabilities.on_off",
+                    "instance": "powerSwitch",
+                    "parameters": {"dataType": "ENUM", "options": [{"name": "on", "value": 1}, {"name": "off", "value": 0}]},
+                }
+            ],
+        }
+
+    async def test_group_is_routed_to_build_group(self) -> None:
+        fake = self._make_fake()
+        fake.build_group = AsyncMock(return_value="5037841")  # type: ignore[method-assign]
+
+        assert await fake.build_component(self._group()) == "5037841"
+        fake.build_group.assert_awaited_once()
+
+    async def test_builds_onoff_only_light(self) -> None:
+        fake = self._make_fake()
+        device_id = await fake.build_group(self._group())
+        device = fake.prepare_device.call_args[0][0]
+        light = device["cmps"]["light"]
+
+        assert device_id == "5037841"
+        assert list(device["cmps"]) == ["light"]
+        assert light["p"] == "light"
+        assert light["supported_color_modes"] == ["onoff"]
+        assert light["stat_t"] == fake.mqtt_helper.stat_t(device_id, "light", "state")
+        assert light["cmd_t"] == fake.mqtt_helper.cmd_t(device_id, "light")
+        assert light["avty_t"] == fake.mqtt_helper.avty_t(device_id)
+
+    async def test_group_claims_no_mac_connection(self) -> None:
+        fake = self._make_fake()
+        await fake.build_group(self._group())
+        device = fake.prepare_device.call_args[0][0]
+
+        # the group id is not a MAC — publishing it as one would collide in HA's device registry
+        assert "connections" not in device["device"]
+        assert device["device"]["model"] == "SameModeGroup"
+
+    async def test_marks_state_as_group_and_seeds_off(self) -> None:
+        fake = self._make_fake()
+        await fake.build_group(self._group(sku="BaseGroup", name="Steelers"))
+
+        internal = next(c.kwargs["internal"] for c in fake.upsert_state.call_args_list if "internal" in c.kwargs)
+        assert internal["is_group"] is True
+        assert internal["raw_id"] == "5037841"
+        assert internal["sku"] == "BaseGroup"
+
+        light_states = [c.kwargs["light"] for c in fake.upsert_state.call_args_list if "light" in c.kwargs]
+        assert light_states == [{"state": "OFF"}]
+
+    async def test_existing_state_is_not_reset_to_off(self) -> None:
+        fake = self._make_fake()
+        fake.states = {"5037841": {"light": {"state": "ON"}}}
+        await fake.build_group(self._group())
+
+        assert not [c for c in fake.upsert_state.call_args_list if "light" in c.kwargs]
+
+    async def test_no_scene_lookup_for_groups(self) -> None:
+        fake = self._make_fake()
+        await fake.build_group(self._group())
+
+        # /device/scenes answers "devices not exist" for a group — asking is a wasted API call
+        fake.get_device_scenes.assert_not_awaited()

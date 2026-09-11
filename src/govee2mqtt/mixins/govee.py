@@ -10,6 +10,11 @@ if TYPE_CHECKING:
     from govee2mqtt.interface import GoveeServiceProtocol as Govee2Mqtt
 
 
+# Govee "device groups" are virtual devices the app creates when you group real devices together.
+# They come back in the device list with one of these pseudo-SKUs instead of a real model number,
+# and they only ever advertise a powerSwitch capability.
+GROUP_SKUS: frozenset[str] = frozenset({"BaseGroup", "SameModeGroup"})
+
 SKU_CLASS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^H710\d*[A-Z]*$"), "fan"),
     (re.compile(r"^H712\d*[A-Z]*$"), "air_purifier"),
@@ -64,6 +69,8 @@ class GoveeMixin:
                 return await self.build_light(device)
             case "sensor":
                 return await self.build_sensor(device)
+            case "group":
+                return await self.build_group(device)
             # case "fan":
             #     return await self.build_fan(device)
             case "air_purifier":
@@ -84,6 +91,9 @@ class GoveeMixin:
 
     def classify_device(self: Govee2Mqtt, device: dict[str, Any]) -> str:
         sku = device["sku"]
+
+        if sku in GROUP_SKUS:
+            return "group"
 
         for pattern, device_class in SKU_CLASS_PATTERNS:
             if pattern.match(sku):
@@ -110,6 +120,44 @@ class GoveeMixin:
         device = _build_device_payload(self, device_id, light, "light", components)
 
         await self.prepare_device(device, raw_id, device_id, "light")
+        return device_id
+
+    async def build_group(self: Govee2Mqtt, group: dict[str, Any]) -> str:
+        """Adopt a Govee device group as an on/off-only light.
+
+        Groups are virtual: the Govee API accepts a powerSwitch command for them, but rejects both
+        /device/state and /device/scenes with "devices not exist". So there is nothing to poll and
+        nothing to discover beyond on/off — the `is_group` flag tells build_device_states to leave
+        them alone, and their state is whatever we last commanded.
+        """
+        raw_id = str(group["device"])
+        device_id = raw_id.replace(":", "").upper()
+
+        self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": group.get("sku"), "is_group": True})
+
+        device_name = group.get("deviceName", "")
+        components: dict[str, dict[str, Any]] = {
+            "light": {
+                "p": "light",
+                # Avoid "Light Light" when the group name already ends with "Light"
+                "name": None if device_name.lower().endswith(" light") else "Light",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
+                "obj_id": self.mqtt_helper.obj_id(device_name, "light"),
+                "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
+                "avty_t": self.mqtt_helper.avty_t(device_id),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "light"),
+                "supported_color_modes": ["onoff"],
+                "icon": "mdi:lightbulb-group",
+            },
+        }
+
+        # keep whatever we last commanded across restarts; only seed a default the first time
+        if "state" not in self.states.get(device_id, {}).get("light", {}):
+            self.upsert_state(device_id, light={"state": "OFF"})
+
+        device = _build_device_payload(self, device_id, group, "light", components)
+
+        await self.prepare_device(device, raw_id, device_id, "group")
         return device_id
 
     async def build_air_purifier(self: Govee2Mqtt, air_purifier: dict[str, Any]) -> str:
@@ -1031,21 +1079,23 @@ class GoveeMixin:
 
 
 def _build_device_payload(service: Govee2Mqtt, device_id: str, source: dict[str, Any], domain: str, components: dict[str, Any]) -> dict[str, Any]:
+    device: dict[str, Any] = {
+        "name": source["deviceName"],
+        "identifiers": [
+            service.mqtt_helper.device_slug(device_id),
+        ],
+        "manufacturer": "Govee",
+        "model": source["sku"],
+        "via_device": service.service,
+    }
+    # groups are virtual and their "device" is a group id, not a MAC — don't claim a connection
+    if source.get("sku") not in GROUP_SKUS:
+        device["connections"] = [["mac", source["device"]]]
+
     return {
         "stat_t": service.mqtt_helper.stat_t(device_id, domain),
         "avty_t": service.mqtt_helper.avty_t(device_id),
-        "device": {
-            "name": source["deviceName"],
-            "identifiers": [
-                service.mqtt_helper.device_slug(device_id),
-            ],
-            "manufacturer": "Govee",
-            "model": source["sku"],
-            "connections": [
-                ["mac", source["device"]],
-            ],
-            "via_device": service.service,
-        },
+        "device": device,
         "origin": {
             "name": service.service_name,
             "sw": service.config["version"],
