@@ -113,14 +113,32 @@ class GoveeMixin:
         # Store internal state first so get_device_scenes can access sku/raw_id
         self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": light.get("sku")})
 
-        # Fetch available light scenes from the Govee API
-        scenes = await self.get_device_scenes(device_id)
+        scenes = await self.get_light_scenes(device_id)
 
         components = self.build_light_components(device_id, light, scenes=scenes)
         device = _build_device_payload(self, device_id, light, "light", components)
 
         await self.prepare_device(device, raw_id, device_id, "light")
         return device_id
+
+    async def get_light_scenes(self: Govee2Mqtt, device_id: str) -> list[dict[str, Any]]:
+        """Available light scenes, fetched once per run rather than once per rescan.
+
+        build_light runs on every device-list refresh, so fetching scenes there cost one API call
+        per light per rescan — 19 lights every 900s is ~1,800 calls/day, against a 10,000/day
+        quota, to re-read lists that essentially never change. The scene map is already persisted
+        as `light_scene_values` for command lookups, so rebuilding the list from it costs nothing.
+
+        `discovery_complete` is the once-per-run gate: it is False for the first pass after a
+        restart and True for every rescan afterwards, so a restart still picks up scenes added in
+        the Govee app. An empty cache always re-fetches, so a failed or rate-limited first attempt
+        retries on the next rescan instead of leaving the device without scenes forever.
+        """
+        cached = self.states.get(device_id, {}).get("internal", {}).get("light_scene_values")
+        if cached and self.discovery_complete:
+            return [{"name": name, "value": value} for name, value in cached.items()]
+
+        return await self.get_device_scenes(device_id)
 
     async def build_group(self: Govee2Mqtt, group: dict[str, Any]) -> str:
         """Adopt a Govee device group as an on/off-only light.

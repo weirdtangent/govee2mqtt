@@ -351,3 +351,62 @@ class TestBuildGroup:
 
         # /device/scenes answers "devices not exist" for a group — asking is a wasted API call
         fake.get_device_scenes.assert_not_awaited()
+
+
+# ===========================================================================
+# TestLightSceneCaching
+# ===========================================================================
+class TestLightSceneCaching:
+    """build_light runs on every device-list refresh, so fetching scenes there cost one API call
+    per light per rescan — 19 lights every 900s is ~1,800 calls/day against a 10,000/day quota,
+    re-reading lists that essentially never change.
+    """
+
+    def _make_fake(self, discovery_complete: bool, cached: dict[str, Any] | None = None) -> "FakeGovee":
+        fake = FakeGovee()
+        fake.discovery_complete = discovery_complete
+        fake.states = {"L1": {"internal": {"light_scene_values": cached}}} if cached is not None else {"L1": {"internal": {}}}
+        fake.get_device_scenes = AsyncMock(return_value=[{"name": "Sunrise", "value": 1}])  # type: ignore[method-assign]
+        return fake
+
+    async def test_first_pass_after_a_restart_fetches(self) -> None:
+        fake = self._make_fake(discovery_complete=False, cached={"Sunset": 9})
+
+        scenes = await fake.get_light_scenes("L1")
+
+        fake.get_device_scenes.assert_awaited_once()
+        assert scenes == [{"name": "Sunrise", "value": 1}]
+
+    async def test_later_rescans_reuse_the_cache(self) -> None:
+        fake = self._make_fake(discovery_complete=True, cached={"Sunset": 9, "Aurora": 12})
+
+        scenes = await fake.get_light_scenes("L1")
+
+        fake.get_device_scenes.assert_not_awaited()
+        assert scenes == [{"name": "Sunset", "value": 9}, {"name": "Aurora", "value": 12}]
+
+    async def test_an_empty_cache_always_refetches(self) -> None:
+        """A failed or rate-limited first attempt must not leave the device sceneless forever."""
+        fake = self._make_fake(discovery_complete=True, cached={})
+
+        scenes = await fake.get_light_scenes("L1")
+
+        fake.get_device_scenes.assert_awaited_once()
+        assert scenes == [{"name": "Sunrise", "value": 1}]
+
+    async def test_an_unknown_device_refetches(self) -> None:
+        fake = self._make_fake(discovery_complete=True)
+        fake.states = {}
+
+        await fake.get_light_scenes("L1")
+
+        fake.get_device_scenes.assert_awaited_once()
+
+    async def test_the_cache_round_trips_through_build_light_components(self) -> None:
+        """What get_light_scenes returns must be the shape build_light_components consumes, or the
+        scene select silently disappears on the first rescan."""
+        fake = self._make_fake(discovery_complete=True, cached={"Sunset": 9})
+
+        scenes = await fake.get_light_scenes("L1")
+
+        assert all(set(s) == {"name", "value"} for s in scenes)

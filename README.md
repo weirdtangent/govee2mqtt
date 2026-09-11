@@ -6,6 +6,7 @@ Forked from [dlashua/govee2mqtt](https://github.com/dlashua/govee2mqtt)
 A few notes:
 * Govee's API is SLOW. Not only does each request take longer than it should, it takes, sometimes, 3 to 4 seconds for the command to reach the light strip.
 * If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests (currently 10,000/day).
+  Budget it as `devices x (86400 / GOVEE_DEVICE_INTERVAL)`, plus `86400 / GOVEE_DEVICE_LIST_INTERVAL` for the device list - 28 devices at the 180s default is 13,440 calls/day, over the limit on its own.
 * Support is there for power on/off, brightness, and rgb_color.
 * "Rediscover" button added to service - when pressed, device discovery is re-run so HA will rediscover deleted devices
 * Device groups created in the Govee app are adopted as on/off-only lights (`light.<name>_group`), but they cannot report their own state - see [Device Groups Are Write-Only](#device-groups-are-write-only)
