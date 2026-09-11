@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 from mqtt_helper import MqttHelper
 
 from govee2mqtt.mixins.govee import GoveeMixin
+from govee2mqtt.mixins.helpers import HelpersMixin
 
 
 # ---------------------------------------------------------------------------
@@ -16,6 +17,22 @@ class FakeGovee(GoveeMixin):
         self.logger = MagicMock()
         self.devices: dict[str, Any] = {}
         self.discovery_complete = False
+
+
+class FakeLightService(HelpersMixin, GoveeMixin):
+    """Composes the real HelpersMixin so upsert_state actually stores state -- the cache under test
+    is written by build_light_components and read back by get_light_scenes."""
+
+    def __init__(self) -> None:
+        self.logger = MagicMock()
+        self.service = "govee2mqtt"
+        self.service_name = "govee2mqtt service"
+        self.qos = 0
+        self.config = {"version": "v0.0.0-test"}
+        self.devices: dict[str, Any] = {}
+        self.states: dict[str, Any] = {}
+        self.discovery_complete = False
+        self.mqtt_helper = MqttHelper("govee2mqtt", default_qos=0, default_retain=True)
 
 
 # ===========================================================================
@@ -402,11 +419,60 @@ class TestLightSceneCaching:
 
         fake.get_device_scenes.assert_awaited_once()
 
-    async def test_the_cache_round_trips_through_build_light_components(self) -> None:
-        """What get_light_scenes returns must be the shape build_light_components consumes, or the
-        scene select silently disappears on the first rescan."""
+    async def test_returns_the_shape_build_light_components_consumes(self) -> None:
         fake = self._make_fake(discovery_complete=True, cached={"Sunset": 9})
 
         scenes = await fake.get_light_scenes("L1")
 
         assert all(set(s) == {"name", "value"} for s in scenes)
+
+
+# ===========================================================================
+# TestSceneCacheEndToEnd
+# ===========================================================================
+class TestSceneCacheEndToEnd:
+    """The unit tests above stub the cache into place, so they would all still pass if the cache
+    stopped being *written* -- and the per-rescan API calls would quietly come back. This drives the
+    real build_light -> build_light_components -> light_scene_values path instead.
+    """
+
+    def _make_light_service(self, scenes: list[dict[str, Any]]) -> "FakeLightService":
+        fake = FakeLightService()
+        fake.get_device_scenes = AsyncMock(return_value=scenes)  # type: ignore[method-assign]
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        return fake
+
+    def _light(self) -> dict[str, Any]:
+        return {
+            "sku": "H6008",
+            "device": "AA:BB:CC:DD:EE:FF",
+            "deviceName": "Reading Chair",
+            "capabilities": [{"instance": "powerSwitch"}, {"instance": "brightness", "parameters": {"range": {"max": 100}}}],
+        }
+
+    async def test_first_build_fetches_and_stores_the_cache(self) -> None:
+        fake = self._make_light_service([{"name": "Sunset", "value": 9}, {"name": "Aurora", "value": 12}])
+        fake.discovery_complete = False
+
+        device_id = await fake.build_light(self._light())
+
+        fake.get_device_scenes.assert_awaited_once()
+        assert fake.states[device_id]["internal"]["light_scene_values"] == {"Sunset": 9, "Aurora": 12}
+
+    async def test_a_later_rescan_neither_refetches_nor_loses_the_scene_select(self) -> None:
+        fake = self._make_light_service([{"name": "Sunset", "value": 9}, {"name": "Aurora", "value": 12}])
+
+        fake.discovery_complete = False
+        await fake.build_light(self._light())
+        assert fake.get_device_scenes.await_count == 1
+
+        # the rescan the device list triggers every GOVEE_LIST_INTERVAL
+        fake.discovery_complete = True
+        device_id = await fake.build_light(self._light())
+
+        assert fake.get_device_scenes.await_count == 1, "rescan re-fetched scenes"
+
+        components = fake.prepare_device.call_args[0][0]["cmps"]
+        assert "light_scene" in components, "scene select vanished on rescan"
+        assert components["light_scene"]["options"] == ["Aurora", "Sunset"]
+        assert fake.states[device_id]["internal"]["light_scene_values"] == {"Sunset": 9, "Aurora": 12}
