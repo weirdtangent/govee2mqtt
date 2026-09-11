@@ -143,10 +143,17 @@ Two rules follow, and breaking either one strands an entity permanently:
 
 1. **Never reuse a `unique_id` for a different entity.** If a component's meaning changes, mint a
    new `unique_id` deliberately.
-2. **Every component publishes an explicit `obj_id`**, derived from its stable component key rather
-   than its display name. Without it HA derives the `entity_id` from the display name, so renaming
-   a component in a later release leaves its `entity_id` describing the old name — and a
+2. **Every component publishes an explicit `def_ent_id`**, derived from its stable component key
+   rather than its display name. Without it HA derives the `entity_id` from the display name, so
+   renaming a component in a later release leaves its `entity_id` describing the old name — and a
    differently-named component can end up owning it.
+
+   This option used to be `obj_id` (`object_id`). **HA Core 2026.4 removed it**, after deprecating
+   it in 2025.10; it is not aliased, so a payload still publishing `obj_id` silently loses control
+   of its `entity_id`s. The replacement, `default_entity_id`/`def_ent_id`, takes a *full*
+   `entity_id` (`light.great_room_lamps_light`) rather than a bare slug. `mqtt_helper.obj_id()`
+   still computes the slug; `mqtt_helper.apply_default_entity_ids()` pairs it with each component's
+   domain at publish time.
 
 ### If an entity_id is already wrong
 
