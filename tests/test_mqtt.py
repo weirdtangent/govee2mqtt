@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Jeff Culverhouse
-import re
 import asyncio
 import json
+import re
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from mqtt_helper import parse_device_topic
 
 from govee2mqtt.mixins.mqtt import MqttMixin
@@ -100,7 +99,7 @@ class TestMqttOnMessage:
 # ===========================================================================
 class TestParseDeviceTopic:
     def test_light_rgb_color_topic(self) -> None:
-        components = "govee2mqtt/govee2mqtt_DEVICEID123/light/rgb_color/set".split("/")
+        components = ["govee2mqtt", "govee2mqtt_DEVICEID123", "light", "rgb_color", "set"]
         result = parse_device_topic(components)
         assert result is not None
         assert result[0] == "govee2mqtt"
@@ -108,7 +107,7 @@ class TestParseDeviceTopic:
         assert result[2] == "rgb_color"
 
     def test_switch_dreamview_topic(self) -> None:
-        components = "govee2mqtt/govee2mqtt_DEVICEID123/switch/dreamview/set".split("/")
+        components = ["govee2mqtt", "govee2mqtt_DEVICEID123", "switch", "dreamview", "set"]
         result = parse_device_topic(components)
         assert result is not None
         assert result[0] == "govee2mqtt"
@@ -116,12 +115,12 @@ class TestParseDeviceTopic:
         assert result[2] == "dreamview"
 
     def test_non_set_returns_none(self) -> None:
-        components = "govee2mqtt/govee2mqtt_DEVICEID123/light/rgb_color/get".split("/")
+        components = ["govee2mqtt", "govee2mqtt_DEVICEID123", "light", "rgb_color", "get"]
         result = parse_device_topic(components)
         assert result is None
 
     def test_simple_light_set_topic(self) -> None:
-        components = "govee2mqtt/govee2mqtt_DEVICEID123/light/set".split("/")
+        components = ["govee2mqtt", "govee2mqtt_DEVICEID123", "light", "set"]
         result = parse_device_topic(components)
         assert result is not None
         assert result[0] == "govee2mqtt"
