@@ -15,6 +15,18 @@ if TYPE_CHECKING:
 # and they only ever advertise a powerSwitch capability.
 GROUP_SKUS: frozenset[str] = frozenset({"BaseGroup", "SameModeGroup"})
 
+SENSOR_CAPABILITIES: dict[str, dict[str, str]] = {
+    "sensorTemperature": {
+        "suffix": "temp",
+        "key": "temperature",
+        "name": "Temperature",
+        "device_class": "temperature",
+        "unit": "°F",
+        "icon": "mdi:thermometer",
+    },
+    "sensorHumidity": {"suffix": "hmdy", "key": "humidity", "name": "Humidity", "device_class": "humidity", "unit": "%", "icon": "mdi:water-percent"},
+}
+
 SKU_CLASS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^H710\d*[A-Z]*$"), "fan"),
     (re.compile(r"^H712\d*[A-Z]*$"), "air_purifier"),
@@ -43,10 +55,12 @@ class GoveeMixin:
 
         # Collect successful device IDs
         for result in results:
-            if isinstance(result, Exception):
+            # gather(return_exceptions=True) hands back BaseException, which is truthy -- narrow on
+            # the type rather than on truthiness or a failed build reads as a list of ids
+            if isinstance(result, BaseException):
                 self.logger.error("error during build_component", exc_info=result)
-            elif result and isinstance(result, str):
-                seen_devices.add(result)
+                continue
+            seen_devices.update(device_id for device_id in result if device_id)
 
         # Mark missing devices offline
         missing_devices = set(self.devices.keys()) - seen_devices
@@ -62,32 +76,34 @@ class GoveeMixin:
             self.discovery_complete = True
 
     # convert Govee device capabilities into MQTT components
-    async def build_component(self: Govee2Mqtt, device: dict[str, Any]) -> str:
+    async def build_component(self: Govee2Mqtt, device: dict[str, Any]) -> list[str]:
+        """Every device_id this Govee device was adopted as -- a list because one sensor can carry
+        several readings, each of which becomes its own MQTT device."""
         device_class = self.classify_device(device)
         match device_class:
             case "light":
-                return await self.build_light(device)
+                return [await self.build_light(device)]
             case "sensor":
                 return await self.build_sensor(device)
             case "group":
-                return await self.build_group(device)
+                return [await self.build_group(device)]
             # case "fan":
-            #     return await self.build_fan(device)
+            #     return [await self.build_fan(device)]
             case "air_purifier":
-                return await self.build_air_purifier(device)
+                return [await self.build_air_purifier(device)]
             case "humidifier":
-                return await self.build_humidifier(device)
+                return [await self.build_humidifier(device)]
             case "kettle":
-                return await self.build_kettle(device)
+                return [await self.build_kettle(device)]
             # case "dehumidifier":
-            #     return await self.build_dehumidifier(device)
+            #     return [await self.build_dehumidifier(device)]
             # case "aroma_diffuser":
             case _:
                 if device_class:
                     self.logger.debug(
                         f'recognized Govee device class "{device_class}" but not handled yet, for device "{device["deviceName"]}" [{device["sku"]}] ({device["device"]})'
                     )
-                return ""
+                return []
 
     def classify_device(self: Govee2Mqtt, device: dict[str, Any]) -> str:
         sku = device["sku"]
@@ -595,90 +611,79 @@ class GoveeMixin:
         await self.prepare_device(device, raw_id, device_id, "kettle")
         return device_id
 
-    async def build_sensor(self: Govee2Mqtt, sensor: dict[str, Any]) -> str:
+    async def build_sensor(self: Govee2Mqtt, sensor: dict[str, Any]) -> list[str]:
+        """Adopt every reading a sensor actually reports, and none that it does not.
+
+        Taking the first capability and returning was wrong twice over. A thermo-hygrometer reports
+        sensorTemperature *and* sensorHumidity, so humidity was silently dropped — on an H5179 that
+        is a live reading thrown away. And a BLE-only sensor with no gateway (an H5074, say)
+        answers online=False with "" for every reading, so adopting it minted entities that can
+        never hold a value and cost a poll every refresh to keep learning nothing.
+
+        One state read decides both, and is handed to prepare_device so adoption does not turn
+        straight round and read the same state again.
+        """
         raw_id = sensor["device"]
         parent = raw_id.replace(":", "").upper()
 
-        for cap in sensor["capabilities"]:
-            device_id = None
-            device = None
-            match cap["instance"]:
-                case "sensorTemperature":
-                    device_id = f"{parent}_temp"
-                    device = {
-                        "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "temperature"),
-                        "avty_t": self.mqtt_helper.avty_t(device_id),
-                        "device": {
-                            "name": sensor["deviceName"],
-                            "identifiers": [
-                                self.mqtt_helper.device_slug(device_id),
-                            ],
-                            "manufacturer": "Govee",
-                            "model": sensor["sku"],
-                            "connections": [
-                                ["mac", sensor["device"]],
-                            ],
-                            "via_device": self.service,
-                        },
-                        "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
-                        "qos": self.qos,
-                        "cmps": {
-                            "temperature": {
-                                "p": "sensor",
-                                "name": "Temperature",
-                                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "temperature"),
-                                "obj_id": self.mqtt_helper.obj_id(sensor["deviceName"], "temperature"),
-                                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "temperature"),
-                                "device_class": "temperature",
-                                "state_class": "measurement",
-                                "unit_of_measurement": "°F",
-                                "icon": "mdi:thermometer",
-                            }
-                        },
+        instances = [cap["instance"] for cap in sensor.get("capabilities", []) if cap["instance"] in SENSOR_CAPABILITIES]
+        if not instances:
+            return []
+
+        # seed internal state before reading: get_device resolves sku and raw_id from it
+        probe_id = f"{parent}_{SENSOR_CAPABILITIES[instances[0]]['suffix']}"
+        self.upsert_state(probe_id, internal={"raw_id": raw_id, "sku": sensor.get("sku")})
+        readings = await self.get_device(probe_id)
+
+        live = [instance for instance in instances if readings.get(instance) not in (None, "")]
+        if not live:
+            self.logger.debug(
+                f'sensor "{sensor["deviceName"]}" [{sensor["sku"]}] reports no readings — not adopting '
+                f"(a Bluetooth-only sensor is invisible to the cloud API without a gateway)"
+            )
+            return []
+
+        adopted: list[str] = []
+        for instance in live:
+            spec = SENSOR_CAPABILITIES[instance]
+            device_id = f"{parent}_{spec['suffix']}"
+            device = {
+                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", spec["key"]),
+                "avty_t": self.mqtt_helper.avty_t(device_id),
+                "device": {
+                    "name": sensor["deviceName"],
+                    "identifiers": [
+                        self.mqtt_helper.device_slug(device_id),
+                    ],
+                    "manufacturer": "Govee",
+                    "model": sensor["sku"],
+                    "connections": [
+                        ["mac", sensor["device"]],
+                    ],
+                    "via_device": self.service,
+                },
+                "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
+                "qos": self.qos,
+                "cmps": {
+                    spec["key"]: {
+                        "p": "sensor",
+                        "name": spec["name"],
+                        "uniq_id": self.mqtt_helper.dev_unique_id(device_id, spec["key"]),
+                        "obj_id": self.mqtt_helper.obj_id(sensor["deviceName"], spec["key"]),
+                        "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", spec["key"]),
+                        "device_class": spec["device_class"],
+                        "state_class": "measurement",
+                        "unit_of_measurement": spec["unit"],
+                        "icon": spec["icon"],
                     }
+                },
+            }
 
-                case "sensorHumidity":
-                    device_id = f"{parent}_hmdy"
-                    device = {
-                        "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "humidity"),
-                        "avty_t": self.mqtt_helper.avty_t(device_id),
-                        "device": {
-                            "name": sensor["deviceName"],
-                            "identifiers": [
-                                self.mqtt_helper.device_slug(device_id),
-                            ],
-                            "manufacturer": "Govee",
-                            "model": sensor["sku"],
-                            "connections": [
-                                ["mac", sensor["device"]],
-                            ],
-                            "via_device": self.service,
-                        },
-                        "origin": {"name": self.service_name, "sw": self.config["version"], "support_url": "https://github.com/weirdTangent/govee2mqtt"},
-                        "qos": self.qos,
-                        "cmps": {
-                            "humidity": {
-                                "p": "sensor",
-                                "name": "Humidity",
-                                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidity"),
-                                "obj_id": self.mqtt_helper.obj_id(sensor["deviceName"], "humidity"),
-                                "stat_t": self.mqtt_helper.stat_t(device_id, "sensor", "humidity"),
-                                "device_class": "humidity",
-                                "state_class": "measurement",
-                                "unit_of_measurement": "%",
-                                "icon": "mdi:water-percent",
-                            }
-                        },
-                    }
-                case _:
-                    continue
+            self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": sensor.get("sku")})
+            await self.prepare_device(device, raw_id, device_id, sensor["deviceName"], state=readings)
+            adopted.append(device_id)
 
-            if device_id:
-                self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": sensor.get("sku")})
-                await self.prepare_device(device, raw_id, device_id, sensor["deviceName"])
-                return device_id
-
-        return ""
+        return adopted
 
     def build_light_components(
         self: Govee2Mqtt, device_id: str, light: dict[str, Any], scenes: list[dict[str, Any]] | None = None
@@ -1102,11 +1107,13 @@ class GoveeMixin:
 
         return components
 
-    async def prepare_device(self: Govee2Mqtt, device: dict[str, Any], raw_id: str, device_id: str, type: str) -> None:
+    async def prepare_device(self: Govee2Mqtt, device: dict[str, Any], raw_id: str, device_id: str, type: str, state: dict[str, Any] | None = None) -> None:
         self.upsert_device(device_id, component=device)
         if "internal" not in self.states.get(device_id, {}):
             self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": device["device"]["model"]})
-        await self.build_device_states(device_id)
+        # `state` lets a caller that has already read this device pass it in rather than pay for a
+        # second read; build_device_states falls back to fetching when it is None or empty
+        await self.build_device_states(device_id, state)
 
         if not self.is_discovered(device_id):
             self.logger.info(
