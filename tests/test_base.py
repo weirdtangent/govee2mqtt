@@ -58,16 +58,20 @@ class TestSaveState:
 
         assert stat.S_IMODE(state_file.stat().st_mode) == 0o600
 
-    def test_no_error_handling_raises_on_permission_error(self, tmp_path):
-        """govee2mqtt save_state has no PermissionError handling — verify it raises."""
+    def test_logs_and_swallows_unwritable_path(self, tmp_path):
+        """save_state catches OSError and logs — a failed save must not abort the caller."""
         obj = MagicMock()
         obj.config = {"config_path": "/nonexistent/readonly/path"}
         obj.api_calls = 0
         obj.last_call_date = datetime.now(UTC).astimezone()
         obj.logger = MagicMock()
 
-        with pytest.raises((PermissionError, FileNotFoundError)):
-            Base.save_state(obj)
+        # Must not raise: the atomic-write path traps OSError (PermissionError and
+        # FileNotFoundError both qualify) and reports it rather than propagating.
+        Base.save_state(obj)
+
+        obj.logger.error.assert_called_once()
+        assert "could not save state" in obj.logger.error.call_args.args[0]
 
 
 class TestRestoreState:
