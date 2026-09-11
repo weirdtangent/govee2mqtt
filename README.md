@@ -86,12 +86,15 @@ on/off-only lights, and because there is no state to read, govee2mqtt never poll
 reflects the last command it sent, not what the group is really doing. Change a group from the Govee
 app or turn off one of its members and Home Assistant will not notice.
 
-The API also never says what is *in* a group — the payload is a name and `powerSwitch`, which would
-look identical for a group of humidifiers, and `BaseGroup` vs `SameModeGroup` reflects shared modes
-rather than device type. The light domain is therefore an assumption, resting on Govee's "Same Model
-Group Control" refusing non-light devices (it declines to group two humidifiers of one model). Group
-entities are named for what they are — `light.great_room_lamps_group`, not `light..._light` — both
-because it reads better and because a group sharing a name with a real device would otherwise
+The API also under-reports groups in two ways. It never says what is *in* one — the payload is a
+name and `powerSwitch`, which would look identical for a group of humidifiers — so the light domain
+is an assumption. And it advertises only `powerSwitch` even where the Govee app can clearly do more:
+a **Same Model** group (all members identical) offers the full capability set in the app, and a
+**General Group** (mixed members, e.g. "Bedroom Red") offers on/off, colour, brightness and scenes.
+Neither shows up in the API, and whether `/device/control` would accept them anyway is untested.
+
+Group entities are named for what they are — `light.great_room_lamps_group`, not `light..._light` —
+both because it reads better and because a group sharing a name with a real device would otherwise
 contest its `entity_id` and be handed a `_2` suffix permanently.
 
 ### Incorrect Device Capabilities

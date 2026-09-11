@@ -130,13 +130,20 @@ class GoveeMixin:
         nothing to discover beyond on/off — the `is_group` flag tells build_device_states to leave
         them alone, and their state is whatever we last commanded.
 
-        `light` is an assumption, not something the API tells us: a group's payload is a name and
-        powerSwitch, and would look identical for a group of humidifiers. It holds because Govee's
-        "Same Model Group Control" refuses non-light devices — confirmed against two humidifiers of
-        one model (H7143), which it declined to group. If a non-light group ever does appear it
-        will be a new entity landing wrongly in the light domain, and HA pins an entity's domain at
-        first discovery, so it would have to be deleted and re-registered after teaching this
-        method the difference.
+        Both the domain and the capability set are assumptions the API does not confirm.
+
+        On the domain: a group's payload is a name and powerSwitch, and would look identical for a
+        group of humidifiers. Every group that exists here today is lights, and "Same Model Group
+        Control" declined to group two humidifiers of one model (H7143) — but the app's other path,
+        a general group, has not been tried with non-lights, so this is untested rather than ruled
+        out. HA pins an entity's domain at first discovery, so a non-light group appearing later
+        means deleting and re-registering that entity, not just a config change.
+
+        On the capabilities: the app can do more to a group than powerSwitch — brightness, colour
+        and scenes on a general group, and the full capability set on a same-model one — so the API
+        is under-reporting rather than describing a genuine limit. Whether the control endpoint
+        accepts those unadvertised capabilities is untested; it is lenient enough to have accepted
+        a powerSwitch value of 2 without complaint, so its silence proves nothing either way.
         """
         raw_id = str(group["device"])
         device_id = raw_id.replace(":", "").upper()
@@ -148,13 +155,16 @@ class GoveeMixin:
         # real light that shares its name -- a Govee group called "Bedroom" would otherwise want
         # light.bedroom_light, which the Bedroom ceiling light already owns, and land on _2.
         # The MQTT topics stay on "light" so the command routing and state publishing are unchanged.
+        # Don't say "group" twice when the name already ends with it -- in the display name
+        # ("Steelers Group Group") or in the entity id (light.steelers_group_group)
+        names_itself_a_group = device_name.lower().endswith(" group")
+
         components: dict[str, dict[str, Any]] = {
             "group": {
                 "p": "light",
-                # Avoid "Group Group" when the group name already ends with "Group"
-                "name": None if device_name.lower().endswith(" group") else "Group",
+                "name": None if names_itself_a_group else "Group",
                 "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "group"),
-                "obj_id": self.mqtt_helper.obj_id(device_name, "group"),
+                "obj_id": self.mqtt_helper.obj_id(device_name, "" if names_itself_a_group else "group"),
                 "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
                 "avty_t": self.mqtt_helper.avty_t(device_id),
                 "cmd_t": self.mqtt_helper.cmd_t(device_id, "light"),

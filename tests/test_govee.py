@@ -315,7 +315,7 @@ class TestBuildGroup:
         group = fake.prepare_device.call_args[0][0]["cmps"]["group"]
 
         assert group["name"] is None
-        assert group["obj_id"] == "steelers_group_group"
+        assert group["obj_id"] == "steelers_group"
 
     async def test_group_claims_no_mac_connection(self) -> None:
         fake = self._make_fake()
