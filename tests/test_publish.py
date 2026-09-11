@@ -5,6 +5,7 @@ import re
 from unittest.mock import MagicMock, patch
 
 import pytest
+from mqtt_helper import MqttHelper
 
 from govee2mqtt.mixins.helpers import HelpersMixin
 from govee2mqtt.mixins.publish import PublishMixin
@@ -28,6 +29,8 @@ class FakePublisher(HelpersMixin, PublishMixin):
         self.mqtt_helper.avty_t = MagicMock(side_effect=lambda *args: "/".join(["govee2mqtt"] + list(args) + ["availability"]))
         self.mqtt_helper.cmd_t = MagicMock(side_effect=lambda *args: "/".join(["govee2mqtt"] + list(args) + ["set"]))
         self.mqtt_helper.disc_t = MagicMock(side_effect=lambda kind, did: f"homeassistant/{kind}/govee2mqtt_{did}/config")
+        # the real rewrite -- this is the step HA's entity_ids depend on, so it must not be a stub
+        self.mqtt_helper.apply_default_entity_ids = MagicMock(side_effect=MqttHelper("govee2mqtt").apply_default_entity_ids)
         self.devices = {}
         self.states = {}
 
@@ -284,31 +287,49 @@ class TestStableObjectIds:
 
     HA derives entity_id from the display name at first discovery and keeps it forever, keyed on
     unique_id. Confirmed on a live install that clearing discovery and waiting 25s still restores
-    the same entity_id, so publishing obj_id at creation is the only point this can be fixed.
+    the same entity_id, so publishing the default entity_id at creation is the only point this can
+    be fixed.
+
+    HA Core 2026.4 removed `object_id`; `default_entity_id` (`def_ent_id`) replaced it and wants a
+    full entity_id. A payload still publishing `obj_id` is silently ignored, which is how a device
+    discovered on 2026.9 landed as light.great_room_great_room.
     """
 
     @pytest.mark.asyncio
-    async def test_every_service_component_publishes_an_obj_id(self):
-        pub = FakePublisher()
-
+    async def _publish(self, pub):
         with patch("govee2mqtt.mixins.publish.asyncio") as mock_asyncio:
             mock_asyncio.to_thread = _fake_to_thread
             await pub.publish_service_discovery()
-
-        cmps = json.loads(pub.mqtt_helper.safe_publish.call_args_list[0].args[1])["cmps"]
-        missing = [k for k, c in cmps.items() if "obj_id" not in c]
-        assert missing == [], f"components without obj_id: {missing}"
+        return json.loads(pub.mqtt_helper.safe_publish.call_args_list[0].args[1])["cmps"]
 
     @pytest.mark.asyncio
-    async def test_obj_id_is_keyed_on_the_component_not_the_unique_id_token(self):
-        """Some components carry a unique_id token that differs from their component key
-        (a pre-existing quirk). obj_id must follow the component key regardless."""
-        pub = FakePublisher()
+    async def test_every_service_component_publishes_a_def_ent_id(self):
+        cmps = await self._publish(FakePublisher())
 
-        with patch("govee2mqtt.mixins.publish.asyncio") as mock_asyncio:
-            mock_asyncio.to_thread = _fake_to_thread
-            await pub.publish_service_discovery()
+        missing = [k for k, c in cmps.items() if "def_ent_id" not in c]
+        assert missing == [], f"components without def_ent_id: {missing}"
 
-        cmps = json.loads(pub.mqtt_helper.safe_publish.call_args_list[0].args[1])["cmps"]
+    @pytest.mark.asyncio
+    async def test_no_component_still_publishes_the_removed_obj_id(self):
+        """HA 2026.4+ does not recognise obj_id, so shipping one is dead weight and a false signal."""
+        cmps = await self._publish(FakePublisher())
+
+        stale = [k for k, c in cmps.items() if "obj_id" in c]
+        assert stale == [], f"components still publishing obj_id: {stale}"
+
+    @pytest.mark.asyncio
+    async def test_def_ent_id_is_a_full_entity_id_in_the_components_own_domain(self):
+        """A bare slug is silently ignored -- HA partitions on the dot to find the object_id."""
+        cmps = await self._publish(FakePublisher())
+
         for key, comp in cmps.items():
-            assert comp["obj_id"].endswith(key), f"{key} -> {comp['obj_id']}"
+            assert comp["def_ent_id"].startswith(f"{comp['p']}."), f"{key} -> {comp['def_ent_id']}"
+
+    @pytest.mark.asyncio
+    async def test_def_ent_id_is_keyed_on_the_component_not_the_unique_id_token(self):
+        """Some components carry a unique_id token that differs from their component key
+        (a pre-existing quirk). The entity_id must follow the component key regardless."""
+        cmps = await self._publish(FakePublisher())
+
+        for key, comp in cmps.items():
+            assert comp["def_ent_id"].endswith(key), f"{key} -> {comp['def_ent_id']}"
