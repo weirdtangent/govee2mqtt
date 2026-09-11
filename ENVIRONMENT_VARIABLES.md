@@ -22,7 +22,7 @@ While using a config.yaml file is the recommended approach, govee2mqtt also supp
 -   `GOVEE_API_KEY` (required) - see https://developer.govee.com/reference/apply-you-govee-api-key
 -   `GOVEE_DEVICE_INTERVAL` (optional, default = 30) - polling interval in seconds; estimate 30 sec per 10 devices
 -   `GOVEE_DEVICE_BOOST_INTERVAL` (optional, default = 5) - faster polling interval after state changes
--   `GOVEE_LIST_INTERVAL` (optional, default = 300) - how often to refresh the device list
+-   `GOVEE_LIST_INTERVAL` (optional, default = 3600) - how often to refresh the device list
 
 ## Other Settings
 
