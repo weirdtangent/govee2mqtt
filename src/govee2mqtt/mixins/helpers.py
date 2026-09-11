@@ -33,6 +33,10 @@ class HelpersMixin:
         if data is None:
             data = {}
         if not data:
+            # Govee has no state endpoint for device groups (/device/state answers "devices not
+            # exist"), so polling one would only burn quota. Their state is whatever we last sent.
+            if self.states.get(device_id, {}).get("internal", {}).get("is_group"):
+                return
             data = await self.get_device(device_id)
         component = self.devices[device_id]["component"]
 

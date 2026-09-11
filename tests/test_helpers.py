@@ -2,7 +2,7 @@
 # Copyright (c) 2025 Jeff Culverhouse
 import signal
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
@@ -336,3 +336,43 @@ class TestLightColorModeState:
         assert caps["colorTemperatureK"]["value"] == 2000
         assert fake.states["LIGHT1"]["light"]["color_temp"] == 2000
         assert "rgb_color" not in fake.states["LIGHT1"]["light"]
+
+
+# ===========================================================================
+# TestGroupStateIsNeverPolled
+# ===========================================================================
+class TestGroupStateIsNeverPolled:
+    """Govee's /device/state endpoint answers "devices not exist" for a device group, so polling
+    one only burns daily API quota. Their state is whatever we last commanded.
+    """
+
+    def _make_group(self) -> FakeHelpers:
+        fake = FakeHelpers()
+        fake.devices["5037841"] = {"component": {"cmps": {"light": {"p": "light"}}}}
+        fake.states["5037841"] = {"internal": {"raw_id": "5037841", "sku": "SameModeGroup", "is_group": True}, "light": {"state": "OFF"}}
+        fake.get_device = AsyncMock()  # type: ignore[method-assign]
+        return fake
+
+    @pytest.mark.asyncio
+    async def test_no_api_call_for_a_group(self) -> None:
+        fake = self._make_group()
+        await fake.build_device_states("5037841")
+
+        fake.get_device.assert_not_awaited()
+        assert fake.states["5037841"]["light"]["state"] == "OFF"
+
+    @pytest.mark.asyncio
+    async def test_command_response_still_updates_a_group(self) -> None:
+        fake = self._make_group()
+        await fake.build_device_states("5037841", {"powerSwitch": 1})
+
+        fake.get_device.assert_not_awaited()
+        assert fake.states["5037841"]["light"]["state"] == "ON"
+
+    @pytest.mark.asyncio
+    async def test_non_group_is_still_polled(self) -> None:
+        fake = self._make_group()
+        fake.states["5037841"]["internal"].pop("is_group")
+        await fake.build_device_states("5037841")
+
+        fake.get_device.assert_awaited_once_with("5037841")

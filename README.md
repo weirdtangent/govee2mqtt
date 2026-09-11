@@ -77,6 +77,14 @@ The Govee API does not report the current state of these settings, so govee2mqtt
 - There is no documented way to turn MusicMode OFF (setting a solid color is a workaround)
 - Enabling DreamView while the light is OFF will turn the light ON automatically, but enabling Gradient while OFF leaves the light OFF
 
+### Device Groups Are Write-Only
+
+Groups you create in the Govee app (`BaseGroup` / `SameModeGroup`) show up in the device list, but
+`/device/state` and `/device/scenes` both reject them with `devices not exist`. They are adopted as
+on/off-only lights, and because there is no state to read, govee2mqtt never polls them — the entity
+reflects the last command it sent, not what the group is really doing. Change a group from the Govee
+app or turn off one of its members and Home Assistant will not notice.
+
 ### Incorrect Device Capabilities
 
 The API sometimes reports incorrect capabilities for devices. For example, the H6042 Smart TV Light Bar reports MusicMode options that don't actually work when sent back to the API, while the mobile app offers completely different (working) options.
