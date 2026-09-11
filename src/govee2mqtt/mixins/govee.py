@@ -136,13 +136,17 @@ class GoveeMixin:
         self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": group.get("sku"), "is_group": True})
 
         device_name = group.get("deviceName", "")
+        # Keyed "group", not "light": it is what these are, and it keeps a group clear of the
+        # real light that shares its name -- a Govee group called "Bedroom" would otherwise want
+        # light.bedroom_light, which the Bedroom ceiling light already owns, and land on _2.
+        # The MQTT topics stay on "light" so the command routing and state publishing are unchanged.
         components: dict[str, dict[str, Any]] = {
-            "light": {
+            "group": {
                 "p": "light",
-                # Avoid "Light Light" when the group name already ends with "Light"
-                "name": None if device_name.lower().endswith(" light") else "Light",
-                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "light"),
-                "obj_id": self.mqtt_helper.obj_id(device_name, "light"),
+                # Avoid "Group Group" when the group name already ends with "Group"
+                "name": None if device_name.lower().endswith(" group") else "Group",
+                "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "group"),
+                "obj_id": self.mqtt_helper.obj_id(device_name, "group"),
                 "stat_t": self.mqtt_helper.stat_t(device_id, "light", "state"),
                 "avty_t": self.mqtt_helper.avty_t(device_id),
                 "cmd_t": self.mqtt_helper.cmd_t(device_id, "light"),

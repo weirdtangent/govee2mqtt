@@ -53,7 +53,7 @@ class HelpersMixin:
                     power_on = data[key] == 1
                     if "power" in component["cmps"]:
                         self.upsert_state(device_id, switch={"power": "ON" if power_on else "OFF"})
-                    elif "light" in component["cmps"]:
+                    elif "light" in component["cmps"] or "group" in component["cmps"]:
                         self.upsert_state(device_id, light={"state": "ON" if power_on else "OFF"})
                         # When light turns off, DreamView also turns off
                         if not power_on and "dreamview" in component["cmps"]:
