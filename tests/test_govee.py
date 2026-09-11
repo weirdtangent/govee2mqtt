@@ -376,7 +376,7 @@ class TestBuildGroup:
 # TestLightSceneCaching
 # ===========================================================================
 class TestLightSceneCaching:
-    """build_light runs on every device-list refresh, so fetching scenes there cost one API call
+    """build_light runs on every device-list refresh, so fetching scenes there costs one API call
     per light per rescan — 19 lights every 900s is ~1,800 calls/day against a 10,000/day quota,
     re-reading lists that essentially never change.
     """

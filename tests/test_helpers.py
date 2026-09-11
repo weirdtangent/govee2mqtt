@@ -439,3 +439,84 @@ class TestPowerSwitchOff:
         await fake.build_device_states("PUR1", {"powerSwitch": 0})
 
         assert fake.states["PUR1"]["switch"]["power"] == "OFF"
+
+
+# ===========================================================================
+# TestSensorZeroReadings
+# ===========================================================================
+class TestSensorZeroReadings:
+    """0 degrees and 0% are real readings. The falsy-value guard dropped them, so a sensor could be
+    adopted for reporting a value and then never store the value it reported.
+    """
+
+    def _make_sensor(self) -> FakeHelpers:
+        fake = FakeHelpers()
+        fake.devices["S_temp"] = {"component": {"cmps": {"temperature": {"p": "sensor"}}}}
+        fake.states["S_temp"] = {"internal": {}}
+        return fake
+
+    @pytest.mark.asyncio
+    async def test_zero_temperature_is_stored(self) -> None:
+        fake = self._make_sensor()
+
+        await fake.build_device_states("S_temp", {"sensorTemperature": 0})
+
+        assert fake.states["S_temp"]["sensor"]["temperature"] == 0
+
+    @pytest.mark.asyncio
+    async def test_zero_humidity_is_stored(self) -> None:
+        fake = self._make_sensor()
+
+        await fake.build_device_states("S_temp", {"sensorHumidity": 0})
+
+        assert fake.states["S_temp"]["sensor"]["humidity"] == 0
+
+    @pytest.mark.asyncio
+    async def test_an_empty_reading_is_not_stored_as_zero(self) -> None:
+        """The API answers "" when it has nothing to report; that must not become a reading."""
+        fake = self._make_sensor()
+
+        await fake.build_device_states("S_temp", {"sensorTemperature": "", "sensorHumidity": ""})
+
+        assert "sensor" not in fake.states["S_temp"]
+
+    @pytest.mark.asyncio
+    async def test_a_real_reading_still_arrives(self) -> None:
+        fake = self._make_sensor()
+
+        await fake.build_device_states("S_temp", {"sensorTemperature": 75.92})
+
+        assert fake.states["S_temp"]["sensor"]["temperature"] == 75.92
+
+
+# ===========================================================================
+# TestGetDeviceNameHalfBuilt
+# ===========================================================================
+class TestGetDeviceNameHalfBuilt:
+    """A non-mapping intermediate (`{"component": None}`) made the chained .get() calls raise
+    AttributeError -- the very thing this helper was made tolerant to avoid."""
+
+    @pytest.mark.parametrize(
+        "devices",
+        [
+            {},
+            {"D": None},
+            {"D": {}},
+            {"D": {"component": None}},
+            {"D": {"component": {}}},
+            {"D": {"component": {"device": None}}},
+            {"D": {"component": {"device": {}}}},
+            {"D": {"component": {"device": {"name": None}}}},
+        ],
+    )
+    def test_falls_back_to_the_id(self, devices: dict) -> None:
+        fake = FakeHelpers()
+        fake.devices = devices
+
+        assert fake.get_device_name("D") == "D"
+
+    def test_returns_the_name_when_fully_built(self) -> None:
+        fake = FakeHelpers()
+        fake.devices = {"D": {"component": {"device": {"name": "Great Room H5179"}}}}
+
+        assert fake.get_device_name("D") == "Great Room H5179"
