@@ -275,15 +275,47 @@ class TestBuildGroup:
         fake = self._make_fake()
         device_id = await fake.build_group(self._group())
         device = fake.prepare_device.call_args[0][0]
-        light = device["cmps"]["light"]
+        group = device["cmps"]["group"]
 
         assert device_id == "5037841"
-        assert list(device["cmps"]) == ["light"]
-        assert light["p"] == "light"
-        assert light["supported_color_modes"] == ["onoff"]
-        assert light["stat_t"] == fake.mqtt_helper.stat_t(device_id, "light", "state")
-        assert light["cmd_t"] == fake.mqtt_helper.cmd_t(device_id, "light")
-        assert light["avty_t"] == fake.mqtt_helper.avty_t(device_id)
+        assert list(device["cmps"]) == ["group"]
+        assert group["p"] == "light"
+        assert group["supported_color_modes"] == ["onoff"]
+        assert group["stat_t"] == fake.mqtt_helper.stat_t(device_id, "light", "state")
+        assert group["cmd_t"] == fake.mqtt_helper.cmd_t(device_id, "light")
+        assert group["avty_t"] == fake.mqtt_helper.avty_t(device_id)
+
+    async def test_entity_id_says_group_so_it_cannot_collide_with_a_real_light(self) -> None:
+        """A Govee group called "Bedroom" must not contest light.bedroom_light with the Bedroom
+        ceiling light -- HA hands the loser a _2 suffix, permanently."""
+        fake = self._make_fake()
+        device_id = await fake.build_group(self._group(name="Bedroom"))
+        group = fake.prepare_device.call_args[0][0]["cmps"]["group"]
+
+        assert group["obj_id"] == "bedroom_group"
+        assert group["uniq_id"] == fake.mqtt_helper.dev_unique_id(device_id, "group")
+        assert group["name"] == "Group"
+
+    async def test_a_group_is_onoff_only_whatever_it_contains(self) -> None:
+        """The API payload for a group of humidifiers is identical in shape to one of lamps, so the
+        light domain is an assumption resting on Govee refusing to group non-lights. Keep the entity
+        to the one capability a group actually has, so the assumption costs nothing if it breaks."""
+        fake = self._make_fake()
+        await fake.build_group(self._group(name="Humidifiers"))
+        group = fake.prepare_device.call_args[0][0]["cmps"]["group"]
+
+        assert group["supported_color_modes"] == ["onoff"]
+        assert "brightness_command_topic" not in group
+        assert "rgb_command_topic" not in group
+        assert group["obj_id"] == "humidifiers_group"
+
+    async def test_does_not_say_group_twice(self) -> None:
+        fake = self._make_fake()
+        await fake.build_group(self._group(name="Steelers Group"))
+        group = fake.prepare_device.call_args[0][0]["cmps"]["group"]
+
+        assert group["name"] is None
+        assert group["obj_id"] == "steelers_group"
 
     async def test_group_claims_no_mac_connection(self) -> None:
         fake = self._make_fake()

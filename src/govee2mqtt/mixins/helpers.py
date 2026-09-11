@@ -41,8 +41,12 @@ class HelpersMixin:
         component = self.devices[device_id]["component"]
 
         for key in data:
-            # Don't skip toggle states even when they're 0 (OFF)
-            if data[key] is None or (not data[key] and key not in {"dreamViewToggle", "gradientToggle", "nightlightToggle", "warmMistToggle"}):
+            # Don't skip states that are meaningfully 0 (OFF). powerSwitch belongs here: Govee
+            # reports 0 for a device that is off, so dropping it meant an OFF never propagated
+            # from a poll -- turn a light off in the Govee app and HA went on showing it ON, since
+            # only the truthy 1 survived. Each of these re-checks the value inside its own case,
+            # because the API also returns "" when it has nothing to say.
+            if data[key] is None or (not data[key] and key not in {"powerSwitch", "dreamViewToggle", "gradientToggle", "nightlightToggle", "warmMistToggle"}):
                 continue
 
             match key:
@@ -50,10 +54,12 @@ class HelpersMixin:
                     self.upsert_state(device_id, availability="online" if data[key] else "offline")
 
                 case "powerSwitch":
+                    if data[key] not in (0, 1):
+                        continue
                     power_on = data[key] == 1
                     if "power" in component["cmps"]:
                         self.upsert_state(device_id, switch={"power": "ON" if power_on else "OFF"})
-                    elif "light" in component["cmps"]:
+                    elif "light" in component["cmps"] or "group" in component["cmps"]:
                         self.upsert_state(device_id, light={"state": "ON" if power_on else "OFF"})
                         # When light turns off, DreamView also turns off
                         if not power_on and "dreamview" in component["cmps"]:

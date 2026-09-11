@@ -348,7 +348,8 @@ class TestGroupStateIsNeverPolled:
 
     def _make_group(self) -> FakeHelpers:
         fake = FakeHelpers()
-        fake.devices["5037841"] = {"component": {"cmps": {"light": {"p": "light"}}}}
+        # cmps is keyed "group" (what build_group publishes); the state still lives under "light"
+        fake.devices["5037841"] = {"component": {"cmps": {"group": {"p": "light"}}}}
         fake.states["5037841"] = {"internal": {"raw_id": "5037841", "sku": "SameModeGroup", "is_group": True}, "light": {"state": "OFF"}}
         fake.get_device = AsyncMock()  # type: ignore[method-assign]
         return fake
@@ -370,9 +371,71 @@ class TestGroupStateIsNeverPolled:
         assert fake.states["5037841"]["light"]["state"] == "ON"
 
     @pytest.mark.asyncio
+    async def test_a_group_turning_off_is_not_dropped(self) -> None:
+        """powerSwitch=0 is falsy, and used to be skipped before reaching the group branch."""
+        fake = self._make_group()
+        fake.states["5037841"]["light"]["state"] = "ON"
+
+        await fake.build_device_states("5037841", {"powerSwitch": 0})
+
+        assert fake.states["5037841"]["light"]["state"] == "OFF"
+
+    @pytest.mark.asyncio
     async def test_non_group_is_still_polled(self) -> None:
         fake = self._make_group()
         fake.states["5037841"]["internal"].pop("is_group")
         await fake.build_device_states("5037841")
 
         fake.get_device.assert_awaited_once_with("5037841")
+
+
+# ===========================================================================
+# TestPowerSwitchOff
+# ===========================================================================
+class TestPowerSwitchOff:
+    """powerSwitch=0 is falsy, so the "skip empty values" guard used to drop it outright: an OFF
+    read back from Govee never reached the state, and only the truthy 1 survived. Turning a light
+    off in the Govee app left Home Assistant showing it ON until something commanded it from HA.
+    Confirmed against a live H6008 reporting online=True, powerSwitch=0, brightness=50.
+    """
+
+    def _make_light(self, state: str = "ON") -> FakeHelpers:
+        fake = FakeHelpers()
+        fake.devices["LIGHT1"] = {"component": {"cmps": {"light": {"p": "light"}}}}
+        fake.states["LIGHT1"] = {"internal": {}, "light": {"state": state}}
+        return fake
+
+    @pytest.mark.asyncio
+    async def test_off_from_a_poll_turns_the_light_off(self) -> None:
+        fake = self._make_light("ON")
+
+        await fake.build_device_states("LIGHT1", {"powerSwitch": 0})
+
+        assert fake.states["LIGHT1"]["light"]["state"] == "OFF"
+
+    @pytest.mark.asyncio
+    async def test_on_from_a_poll_still_turns_the_light_on(self) -> None:
+        fake = self._make_light("OFF")
+
+        await fake.build_device_states("LIGHT1", {"powerSwitch": 1})
+
+        assert fake.states["LIGHT1"]["light"]["state"] == "ON"
+
+    @pytest.mark.asyncio
+    async def test_an_empty_value_changes_nothing(self) -> None:
+        """The API answers "" when it has nothing to say; that must not read as OFF."""
+        fake = self._make_light("ON")
+
+        await fake.build_device_states("LIGHT1", {"powerSwitch": ""})
+
+        assert fake.states["LIGHT1"]["light"]["state"] == "ON"
+
+    @pytest.mark.asyncio
+    async def test_off_reaches_a_switch_device_too(self) -> None:
+        fake = FakeHelpers()
+        fake.devices["PUR1"] = {"component": {"cmps": {"power": {"p": "switch"}}}}
+        fake.states["PUR1"] = {"internal": {}, "switch": {"power": "ON"}}
+
+        await fake.build_device_states("PUR1", {"powerSwitch": 0})
+
+        assert fake.states["PUR1"]["switch"]["power"] == "OFF"
