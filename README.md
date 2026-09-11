@@ -100,6 +100,15 @@ Group entities are named for what they are — `light.great_room_lamps_group` ra
 both because it reads better and because a group sharing a name with a real device would otherwise
 contest its `entity_id` and be handed a `_2` suffix permanently.
 
+### Bluetooth-Only Sensors Are Invisible
+
+A sensor with no WiFi path (an H5074, for instance, with no Govee gateway) is listed by
+`/user/devices` but answers `online: false` with an empty string for every reading, so the cloud
+API can see that it exists and never what it says. govee2mqtt does not adopt a sensor that reports
+nothing — entities that can never hold a value are worse than no entities, and polling them costs
+API quota to keep learning nothing. If such a sensor later gains a gateway it is adopted on the
+next rescan. Home Assistant's own Govee BLE integration reads these directly over Bluetooth.
+
 ### Incorrect Device Capabilities
 
 The API sometimes reports incorrect capabilities for devices. For example, the H6042 Smart TV Light Bar reports MusicMode options that don't actually work when sent back to the API, while the mobile app offers completely different (working) options.

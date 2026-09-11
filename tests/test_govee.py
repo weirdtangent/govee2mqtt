@@ -158,16 +158,18 @@ class TestBuildSensorDiscoveryTopics:
 
     async def _build(self, instance: str) -> dict[str, Any]:
         fake = self._make_fake()
+        reading = 72.5 if instance == "sensorTemperature" else 48.0
+        fake.get_device = AsyncMock(return_value={"online": True, instance: reading})  # type: ignore[method-assign]
         sensor = {
             "device": "03:33:CD:ED:00:00:00:0A:FF:FF:00:13:FF:FF:00:21",
             "deviceName": "Pool Thermometer",
             "sku": "H5109",
             "capabilities": [{"instance": instance}],
         }
-        device_id = await fake.build_sensor(sensor)
+        adopted = await fake.build_sensor(sensor)
         # prepare_device(device, raw_id, device_id, name) — grab the discovery payload
         device = fake.prepare_device.call_args[0][0]
-        return {"device_id": device_id, "device": device, "helper": fake.mqtt_helper}
+        return {"device_id": adopted[0], "device": device, "helper": fake.mqtt_helper}
 
     async def test_temperature_topics_match_published_topics(self) -> None:
         result = await self._build("sensorTemperature")
@@ -285,7 +287,7 @@ class TestBuildGroup:
         fake = self._make_fake()
         fake.build_group = AsyncMock(return_value="5037841")  # type: ignore[method-assign]
 
-        assert await fake.build_component(self._group()) == "5037841"
+        assert await fake.build_component(self._group()) == ["5037841"]
         fake.build_group.assert_awaited_once()
 
     async def test_builds_onoff_only_light(self) -> None:
@@ -476,3 +478,105 @@ class TestSceneCacheEndToEnd:
         assert "light_scene" in components, "scene select vanished on rescan"
         assert components["light_scene"]["options"] == ["Aurora", "Sunset"]
         assert fake.states[device_id]["internal"]["light_scene_values"] == {"Sunset": 9, "Aurora": 12}
+
+
+# ===========================================================================
+# TestSensorCapabilities
+# ===========================================================================
+class TestSensorCapabilities:
+    """A thermo-hygrometer reports temperature AND humidity. build_sensor used to return at the
+    first capability, so humidity was silently dropped — a live reading thrown away on an H5179.
+    And a Bluetooth-only sensor with no gateway answers online=False with "" for everything, so
+    adopting it minted entities that could never hold a value.
+    """
+
+    def _make_fake(self, readings: dict[str, Any]) -> "FakeGovee":
+        fake = FakeGovee()
+        fake.service = "govee2mqtt"
+        fake.service_name = "govee2mqtt service"
+        fake.qos = 0
+        fake.config = {"version": "v0.0.0-test"}
+        fake.states = {}
+        fake.mqtt_helper = MqttHelper("govee2mqtt", default_qos=0, default_retain=True)
+        fake.upsert_state = MagicMock()  # type: ignore[method-assign]
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        fake.get_device = AsyncMock(return_value=readings)  # type: ignore[method-assign]
+        return fake
+
+    def _sensor(self, name: str = "Great Room H5179", sku: str = "H5179") -> dict[str, Any]:
+        return {
+            "device": "3A:2E:18:1F:68:12:01:03",
+            "deviceName": name,
+            "sku": sku,
+            "capabilities": [{"instance": "sensorTemperature"}, {"instance": "sensorHumidity"}],
+        }
+
+    async def test_adopts_both_readings(self) -> None:
+        fake = self._make_fake({"online": True, "sensorTemperature": 75.92, "sensorHumidity": 56.8})
+
+        adopted = await fake.build_sensor(self._sensor())
+
+        assert adopted == ["3A2E181F68120103_temp", "3A2E181F68120103_hmdy"]
+        assert fake.prepare_device.await_count == 2
+
+    async def test_the_humidity_entity_is_a_humidity_sensor(self) -> None:
+        fake = self._make_fake({"online": True, "sensorTemperature": 75.92, "sensorHumidity": 56.8})
+
+        await fake.build_sensor(self._sensor())
+
+        humidity = fake.prepare_device.call_args_list[1][0][0]["cmps"]["humidity"]
+        assert humidity["device_class"] == "humidity"
+        assert humidity["unit_of_measurement"] == "%"
+        assert humidity["obj_id"] == "great_room_h5179_humidity"
+
+    async def test_temperature_ids_are_unchanged(self) -> None:
+        """These entities already exist in installs; moving their unique_id or obj_id would strand
+        them, since HA keys the registry on unique_id and never reassigns an entity_id."""
+        fake = self._make_fake({"online": True, "sensorTemperature": 75.92, "sensorHumidity": 56.8})
+
+        await fake.build_sensor(self._sensor())
+
+        temperature = fake.prepare_device.call_args_list[0][0][0]["cmps"]["temperature"]
+        assert temperature["uniq_id"] == "govee2mqtt_3A2E181F68120103temp_temperature"
+        assert temperature["obj_id"] == "great_room_h5179_temperature"
+
+    async def test_a_sensor_with_no_readings_is_not_adopted(self) -> None:
+        """An H5074 with no gateway: the cloud API can see the device but never its values."""
+        fake = self._make_fake({"online": False, "sensorTemperature": "", "sensorHumidity": ""})
+
+        adopted = await fake.build_sensor(self._sensor("Bedroom H5074", "H5074"))
+
+        assert adopted == []
+        fake.prepare_device.assert_not_awaited()
+
+    async def test_a_partly_reporting_sensor_adopts_only_what_reports(self) -> None:
+        fake = self._make_fake({"online": True, "sensorTemperature": 71.0, "sensorHumidity": ""})
+
+        adopted = await fake.build_sensor(self._sensor())
+
+        assert adopted == ["3A2E181F68120103_temp"]
+
+    async def test_a_zero_reading_still_counts(self) -> None:
+        """0 is falsy but perfectly real — 0% humidity or 0 degrees must not read as 'no data'."""
+        fake = self._make_fake({"online": True, "sensorTemperature": 0, "sensorHumidity": 0})
+
+        adopted = await fake.build_sensor(self._sensor())
+
+        assert len(adopted) == 2
+
+    async def test_the_state_is_read_once_and_handed_on(self) -> None:
+        """Two entities off one device must not mean two API reads, nor a third inside adoption."""
+        readings = {"online": True, "sensorTemperature": 75.92, "sensorHumidity": 56.8}
+        fake = self._make_fake(readings)
+
+        await fake.build_sensor(self._sensor())
+
+        fake.get_device.assert_awaited_once()
+        assert all(call.kwargs["state"] == readings for call in fake.prepare_device.call_args_list)
+
+    async def test_a_sensor_with_no_known_capabilities_reads_nothing(self) -> None:
+        fake = self._make_fake({})
+        sensor = {"device": "AA:BB", "deviceName": "Odd", "sku": "H5999", "capabilities": [{"instance": "somethingElse"}]}
+
+        assert await fake.build_sensor(sensor) == []
+        fake.get_device.assert_not_awaited()
