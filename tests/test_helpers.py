@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-
 from mqtt_helper import ConfigError
+
 from govee2mqtt.mixins.helpers import HelpersMixin
 
 

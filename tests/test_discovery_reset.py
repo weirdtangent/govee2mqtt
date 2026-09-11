@@ -3,8 +3,9 @@
 """Tests for clearing/rebuilding HA discovery when the entity layout changes."""
 
 import re
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from govee2mqtt.mixins.helpers import HelpersMixin
 from govee2mqtt.mixins.mqtt import MqttMixin
