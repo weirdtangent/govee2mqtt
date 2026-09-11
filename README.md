@@ -8,7 +8,7 @@ A few notes:
 * If you have many (10+) Govee devices, you will need to raise the GOVEE_DEVICE_INTERVAL setting because of their daily limit of API requests (currently 10,000/day).
 * Support is there for power on/off, brightness, and rgb_color.
 * "Rediscover" button added to service - when pressed, device discovery is re-run so HA will rediscover deleted devices
-* Device groups created in the Govee app are adopted as on/off-only lights, but they cannot report their own state - see [Device Groups Are Write-Only](#device-groups-are-write-only)
+* Device groups created in the Govee app are adopted as on/off-only lights (`light.<name>_group`), but they cannot report their own state - see [Device Groups Are Write-Only](#device-groups-are-write-only)
 
 ## Docker
 
@@ -85,6 +85,14 @@ Groups you create in the Govee app (`BaseGroup` / `SameModeGroup`) show up in th
 on/off-only lights, and because there is no state to read, govee2mqtt never polls them — the entity
 reflects the last command it sent, not what the group is really doing. Change a group from the Govee
 app or turn off one of its members and Home Assistant will not notice.
+
+The API also never says what is *in* a group — the payload is a name and `powerSwitch`, which would
+look identical for a group of humidifiers, and `BaseGroup` vs `SameModeGroup` reflects shared modes
+rather than device type. The light domain is therefore an assumption, resting on Govee's "Same Model
+Group Control" refusing non-light devices (it declines to group two humidifiers of one model). Group
+entities are named for what they are — `light.great_room_lamps_group`, not `light..._light` — both
+because it reads better and because a group sharing a name with a real device would otherwise
+contest its `entity_id` and be handed a `_2` suffix permanently.
 
 ### Incorrect Device Capabilities
 

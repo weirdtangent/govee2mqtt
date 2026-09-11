@@ -129,6 +129,14 @@ class GoveeMixin:
         /device/state and /device/scenes with "devices not exist". So there is nothing to poll and
         nothing to discover beyond on/off — the `is_group` flag tells build_device_states to leave
         them alone, and their state is whatever we last commanded.
+
+        `light` is an assumption, not something the API tells us: a group's payload is a name and
+        powerSwitch, and would look identical for a group of humidifiers. It holds because Govee's
+        "Same Model Group Control" refuses non-light devices — confirmed against two humidifiers of
+        one model (H7143), which it declined to group. If a non-light group ever does appear it
+        will be a new entity landing wrongly in the light domain, and HA pins an entity's domain at
+        first discovery, so it would have to be deleted and re-registered after teaching this
+        method the difference.
         """
         raw_id = str(group["device"])
         device_id = raw_id.replace(":", "").upper()
