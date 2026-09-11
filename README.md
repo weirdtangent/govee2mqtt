@@ -93,7 +93,8 @@ a **Same Model** group (all members identical) offers the full capability set in
 **General Group** (mixed members, e.g. "Bedroom Red") offers on/off, colour, brightness and scenes.
 Neither shows up in the API, and whether `/device/control` would accept them anyway is untested.
 
-Group entities are named for what they are — `light.great_room_lamps_group`, not `light..._light` —
+Group entities are named for what they are — `light.great_room_lamps_group` rather than
+`light.great_room_lamps_light` —
 both because it reads better and because a group sharing a name with a real device would otherwise
 contest its `entity_id` and be handed a `_2` suffix permanently.
 
