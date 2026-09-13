@@ -633,3 +633,64 @@ class TestGetDeviceName:
         fake.devices = {"D1": {"component": {}}}
 
         assert HelpersMixin.get_device_name(fake, "D1") == "D1"  # type: ignore[arg-type]
+
+
+# ===========================================================================
+# TestRescanDoesNotRepoll
+# ===========================================================================
+class TestRescanDoesNotRepoll:
+    """refresh_device_list re-runs prepare_device for every device it already knows, every
+    GOVEE_LIST_INTERVAL. Reading state there duplicated what the device loop had just read: 23
+    devices x 96 rescans = 2,208 API calls/day on a real account, against a 10,000/day quota.
+    """
+
+    def _make_fake(self, known: bool) -> "FakeGovee":
+        fake = FakeGovee()
+        fake.states = {"D1": {"internal": {"raw_id": "aa:bb", "sku": "H6008"}}}
+        fake.devices = {"D1": {"component": {}}} if known else {}
+        fake.upsert_device = MagicMock()  # type: ignore[method-assign]
+        fake.upsert_state = MagicMock()  # type: ignore[method-assign]
+        fake.build_device_states = AsyncMock()  # type: ignore[method-assign]
+        fake.is_discovered = MagicMock(return_value=known)  # type: ignore[method-assign]
+        fake.get_device_name = MagicMock(return_value="Dresser")  # type: ignore[method-assign]
+        fake.publish_device_discovery = AsyncMock()  # type: ignore[method-assign]
+        fake.publish_device_availability = AsyncMock()  # type: ignore[method-assign]
+        fake.publish_device_state = AsyncMock()  # type: ignore[method-assign]
+        return fake
+
+    def _device(self) -> dict[str, Any]:
+        return {"device": {"name": "Dresser", "model": "H6008"}}
+
+    async def test_a_first_sighting_reads_state(self) -> None:
+        """A brand-new device has nothing to publish until it is read, so this must still happen —
+        including for one that appears mid-run, like a group created in the Govee app."""
+        fake = self._make_fake(known=False)
+
+        await fake.prepare_device(self._device(), "aa:bb", "D1", "light")
+
+        fake.build_device_states.assert_awaited_once()
+
+    async def test_a_rescan_of_a_known_device_does_not(self) -> None:
+        fake = self._make_fake(known=True)
+
+        await fake.prepare_device(self._device(), "aa:bb", "D1", "light")
+
+        fake.build_device_states.assert_not_awaited()
+
+    async def test_a_rescan_still_republishes_state_and_availability(self) -> None:
+        """Skipping the *read* must not skip the publish — HA still needs the retained values."""
+        fake = self._make_fake(known=True)
+
+        await fake.prepare_device(self._device(), "aa:bb", "D1", "light")
+
+        fake.publish_device_state.assert_awaited_once_with("D1")
+        fake.publish_device_availability.assert_awaited_once_with("D1", online=True)
+
+    async def test_state_handed_in_is_still_applied_to_a_known_device(self) -> None:
+        """build_sensor passes readings it already paid for; those must not be dropped."""
+        fake = self._make_fake(known=True)
+        readings = {"online": True, "sensorTemperature": 75.92}
+
+        await fake.prepare_device(self._device(), "aa:bb", "D1", "light", state=readings)
+
+        fake.build_device_states.assert_awaited_once_with("D1", readings)

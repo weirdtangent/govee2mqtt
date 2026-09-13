@@ -1108,12 +1108,20 @@ class GoveeMixin:
         return components
 
     async def prepare_device(self: Govee2Mqtt, device: dict[str, Any], raw_id: str, device_id: str, type: str, state: dict[str, Any] | None = None) -> None:
+        first_sighting = device_id not in self.devices
+
         self.upsert_device(device_id, component=device)
         if "internal" not in self.states.get(device_id, {}):
             self.upsert_state(device_id, internal={"raw_id": raw_id, "sku": device["device"]["model"]})
-        # `state` lets a caller that has already read this device pass it in rather than pay for a
-        # second read; build_device_states falls back to fetching when it is None or empty
-        await self.build_device_states(device_id, state)
+
+        # Read state on first sighting, or when the caller already has it. NOT on a rescan of a
+        # device we already know: the device loop polls each of those every device_interval, so
+        # reading again here is a second API call per device per rescan that learns nothing. On a
+        # 36-device account that was 2,208 calls/day against a 10,000/day quota -- a quarter of the
+        # budget spent re-reading what had just been read. `state` itself skips the fetch, letting
+        # a caller that has already read the device pass it in (build_sensor does).
+        if first_sighting or state:
+            await self.build_device_states(device_id, state)
 
         if not self.is_discovered(device_id):
             self.logger.info(
