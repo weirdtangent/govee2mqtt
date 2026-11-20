@@ -541,6 +541,19 @@ class HelpersMixin:
                         "value": 1 if state_on else 0,
                     }
 
+                case "humidity":
+                    # target humidity, from the humidity number or the humidifier entity -- HA
+                    # sends "45" from one and may send "45.0" from the other
+                    try:
+                        target_humidity = round(float(value))
+                    except (TypeError, ValueError):
+                        continue
+                    capabilities["humidity"] = {
+                        "type": "devices.capabilities.range",
+                        "instance": "humidity",
+                        "value": target_humidity,
+                    }
+
                 case "nightlight_scene":
                     internal = self.states.get(device_id, {}).get("internal", {})
                     scene_labels = internal.get("nightlight_scene_labels", {})

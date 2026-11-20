@@ -185,3 +185,36 @@ def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]
         else:
             result[key] = value
     return result
+
+
+# ===========================================================================
+# TestCommandTopicsAreSubscribed
+# ===========================================================================
+class TestCommandTopicsAreSubscribed:
+    """A component whose cmd_t no subscription matches is a control that silently does nothing --
+    the power switch on humidifiers, purifiers and kettles was published on <device>/power/set,
+    which nothing listened to."""
+
+    @pytest.mark.parametrize(
+        "parts",
+        [
+            ("switch", "power"),
+            ("humidifier", "power"),
+            ("humidifier", "humidity"),
+            ("humidifier", "work_mode"),
+            ("number", "humidity"),
+            ("select", "work_mode"),
+        ],
+    )
+    def test_command_topic_is_subscribed(self, parts: tuple[str, str]) -> None:
+        from mqtt_helper import MqttHelper
+        from paho.mqtt.client import topic_matches_sub
+
+        fake = FakeMqtt()
+        helper = MqttHelper("govee2mqtt", default_qos=0, default_retain=True)
+        fake.mqtt_helper = helper
+        topic = helper.cmd_t("AABBCC", *parts)
+
+        assert any(topic_matches_sub(sub, topic) for sub in fake.mqtt_subscription_topics())
+        assert parse_device_topic(topic.split("/"))[2] == parts[1]  # type: ignore[index]
+        fake.close()

@@ -520,3 +520,26 @@ class TestGetDeviceNameHalfBuilt:
         fake.devices = {"D": {"component": {"device": {"name": "Great Room H5179"}}}}
 
         assert fake.get_device_name("D") == "Great Room H5179"
+
+
+# ===========================================================================
+# TestHumidifierCommands
+# ===========================================================================
+class TestHumidifierCommands:
+    def _make_humidifier(self) -> FakeHelpers:
+        fake = FakeHelpers()
+        fake.devices["HUM1"] = {"component": {"cmps": {"power": {"p": "switch"}, "humidifier": {"p": "humidifier"}}}}
+        fake.states["HUM1"] = {"internal": {}, "switch": {"power": "OFF"}}
+        return fake
+
+    @pytest.mark.parametrize("value", ["45", "45.0", 45])
+    def test_target_humidity_is_a_range_command(self, value: Any) -> None:
+        caps = self._make_humidifier().build_govee_capabilities("HUM1", "humidity", value)
+        assert caps == {"humidity": {"type": "devices.capabilities.range", "instance": "humidity", "value": 45}}
+
+    def test_unparseable_target_humidity_sends_nothing(self) -> None:
+        assert self._make_humidifier().build_govee_capabilities("HUM1", "humidity", "lots") == {}
+
+    def test_humidifier_power_is_a_power_switch(self) -> None:
+        caps = self._make_humidifier().build_govee_capabilities("HUM1", "power", "ON")
+        assert caps["powerSwitch"]["value"] == 1
