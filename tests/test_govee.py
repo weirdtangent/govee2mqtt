@@ -694,3 +694,87 @@ class TestRescanDoesNotRepoll:
         await fake.prepare_device(self._device(), "aa:bb", "D1", "light", state=readings)
 
         fake.build_device_states.assert_awaited_once_with("D1", readings)
+
+
+# ===========================================================================
+# TestBuildHumidifier
+# ===========================================================================
+class TestBuildHumidifier:
+    """Govee humidifiers (H714x) get a real `humidifier` entity alongside the loose power switch,
+    target-humidity number and work-mode select, so HA's humidifier cards can drive them."""
+
+    def _make_fake(self) -> FakeLightService:
+        fake = FakeLightService()
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        return fake
+
+    def _humidifier(self) -> dict[str, Any]:
+        return {
+            "sku": "H7142",
+            "device": "AA:BB:CC:DD:EE:FF:00:11",
+            "deviceName": "Humidifier-Great Room",
+            "capabilities": [
+                {"type": "devices.capabilities.on_off", "instance": "powerSwitch", "parameters": {}},
+                {"type": "devices.capabilities.range", "instance": "humidity", "parameters": {"range": {"min": 40, "max": 80, "precision": 1}}},
+                {
+                    "type": "devices.capabilities.work_mode",
+                    "instance": "workMode",
+                    "parameters": {
+                        "fields": [
+                            {"fieldName": "workMode", "options": [{"name": "Manual", "value": 1}, {"name": "Auto", "value": 3}]},
+                            {"fieldName": "modeValue", "options": [{"name": "Manual", "options": [{"value": 1}, {"value": 2}]}]},
+                        ]
+                    },
+                },
+            ],
+        }
+
+    async def _build(self, fake: FakeLightService) -> tuple[str, dict[str, Any]]:
+        device_id = await fake.build_humidifier(self._humidifier())
+        return device_id, fake.prepare_device.call_args[0][0]["cmps"]
+
+    async def test_publishes_a_humidifier_entity(self) -> None:
+        fake = self._make_fake()
+        device_id, cmps = await self._build(fake)
+        entity = cmps["humidifier"]
+        h = fake.mqtt_helper
+
+        assert entity["p"] == "humidifier"
+        assert entity["name"] is None
+        assert entity["obj_id"] == "humidifier_great_room_humidifier"
+        assert entity["device_class"] == "humidifier"
+        assert entity["stat_t"] == h.stat_t(device_id, "switch", "power")
+        assert entity["target_humidity_state_topic"] == h.stat_t(device_id, "number", "humidity")
+        assert entity["min_humidity"] == 40
+        assert entity["max_humidity"] == 80
+        assert entity["mode_state_topic"] == h.stat_t(device_id, "select", "work_mode")
+        assert entity["modes"] == ["Mist Level 1", "Mist Level 2", "Auto"]
+
+    async def test_humidifier_entity_does_not_reuse_the_power_switch_unique_id(self) -> None:
+        """The power switch already owns dev_unique_id(.., "humidifier"); HA keys its registry on
+        unique_id, so sharing it would make the two entities fight over one registry entry."""
+        fake = self._make_fake()
+        _, cmps = await self._build(fake)
+
+        assert cmps["humidifier"]["uniq_id"] != cmps["power"]["uniq_id"]
+
+    async def test_rescan_keeps_the_known_state(self) -> None:
+        """build_humidifier runs on every rescan and prepare_device publishes right after, so
+        re-seeding defaults flipped a running humidifier to OFF / 50% in HA until the next poll."""
+        fake = self._make_fake()
+        device_id, _ = await self._build(fake)
+        fake.upsert_state(device_id, switch={"power": "ON"}, number={"humidity": 45}, select={"work_mode": "Mist Level 2"})
+
+        await self._build(fake)
+
+        assert fake.states[device_id]["switch"]["power"] == "ON"
+        assert fake.states[device_id]["number"]["humidity"] == 45
+        assert fake.states[device_id]["select"]["work_mode"] == "Mist Level 2"
+
+    async def test_first_build_seeds_defaults(self) -> None:
+        fake = self._make_fake()
+        device_id, _ = await self._build(fake)
+
+        assert fake.states[device_id]["switch"]["power"] == "OFF"
+        assert fake.states[device_id]["number"]["humidity"] == 50
+        assert fake.states[device_id]["select"]["work_mode"] == "Auto"

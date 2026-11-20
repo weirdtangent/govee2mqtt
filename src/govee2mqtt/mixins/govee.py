@@ -274,7 +274,7 @@ class GoveeMixin:
                 "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "air_purifier"),
                 "obj_id": self.mqtt_helper.obj_id(air_purifier["deviceName"], "air_purifier"),
                 "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
-                "cmd_t": self.mqtt_helper.cmd_t(device_id, "power"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "power"),
                 "device_class": "switch",
                 "icon": "mdi:power",
             }
@@ -392,19 +392,62 @@ class GoveeMixin:
                             elif name not in work_mode_options:
                                 work_mode_options.append(name)
 
+        # Seed defaults only the first time. This runs on every rescan, and prepare_device publishes
+        # state right after, so re-seeding flipped a running humidifier to OFF / 50% / Auto in HA
+        # until the next device poll put it back.
+        known = self.states.get(device_id, {})
+
+        def seed(kind: str, key: str, value: Any) -> None:
+            if key not in known.get(kind, {}):
+                self.upsert_state(device_id, **{kind: {key: value}})
+
         cmps: dict[str, dict[str, Any]] = {}
 
         cmps["power"] = {
             "p": "switch",
             "name": "Power",
+            # "humidifier" here is historical -- the humidifier entity below cannot have it back
             "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidifier"),
             "obj_id": self.mqtt_helper.obj_id(humidifier["deviceName"], "power"),
             "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
-            "cmd_t": self.mqtt_helper.cmd_t(device_id, "power"),
+            "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "power"),
             "device_class": "switch",
             "icon": "mdi:power",
         }
-        self.upsert_state(device_id, switch={"power": "OFF"})
+        seed("switch", "power", "OFF")
+
+        # A real `humidifier` entity over the same power/humidity/mode state, so the device works
+        # with HA's humidifier cards and voice ("set the humidifier to 45%") rather than only as a
+        # loose switch + number + select
+        cmps["humidifier"] = {
+            "p": "humidifier",
+            "name": None,
+            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "humidifier_entity"),
+            "obj_id": self.mqtt_helper.obj_id(humidifier["deviceName"], "humidifier"),
+            "device_class": "humidifier",
+            "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
+            "cmd_t": self.mqtt_helper.cmd_t(device_id, "humidifier", "power"),
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "icon": "mdi:air-humidifier",
+        }
+        if device_has.get("humidity", False):
+            cmps["humidifier"].update(
+                {
+                    "target_humidity_state_topic": self.mqtt_helper.stat_t(device_id, "number", "humidity"),
+                    "target_humidity_command_topic": self.mqtt_helper.cmd_t(device_id, "humidifier", "humidity"),
+                    "min_humidity": min_humidity,
+                    "max_humidity": max_humidity,
+                }
+            )
+        if device_has.get("workMode", False) and work_mode_options:
+            cmps["humidifier"].update(
+                {
+                    "mode_state_topic": self.mqtt_helper.stat_t(device_id, "select", "work_mode"),
+                    "mode_command_topic": self.mqtt_helper.cmd_t(device_id, "humidifier", "work_mode"),
+                    "modes": work_mode_options,
+                }
+            )
 
         if device_has.get("brightness", False) or device_has.get("colorRgb", False):
             cmps.update(self.build_light_components(device_id, humidifier))
@@ -427,7 +470,7 @@ class GoveeMixin:
                 "entity_category": "config",
                 "icon": "mdi:water-percent",
             }
-            self.upsert_state(device_id, number={"humidity": 50})
+            seed("number", "humidity", 50)
 
         if device_has.get("warmMistToggle", False):
             cmps["warm_mist"] = {
@@ -440,7 +483,7 @@ class GoveeMixin:
                 "device_class": "switch",
                 "icon": "mdi:heat-wave",
             }
-            self.upsert_state(device_id, switch={"warm_mist": "OFF"})
+            seed("switch", "warm_mist", "OFF")
 
         if device_has.get("workMode", False) and work_mode_options:
             cmps["work_mode"] = {
@@ -453,8 +496,7 @@ class GoveeMixin:
                 "options": work_mode_options,
                 "icon": "mdi:water-pump",
             }
-            default_work_mode = "Auto" if "Auto" in work_mode_options else work_mode_options[0]
-            self.upsert_state(device_id, select={"work_mode": default_work_mode})
+            seed("select", "work_mode", "Auto" if "Auto" in work_mode_options else work_mode_options[0])
 
         if device_has.get("nightlightToggle", False) and nightlight_options:
             cmps["night_light"] = {
@@ -467,7 +509,7 @@ class GoveeMixin:
                 "options": nightlight_options,
                 "icon": "mdi:weather-night",
             }
-            self.upsert_state(device_id, select={"nightlight_scene": nightlight_options[0]})
+            seed("select", "nightlight_scene", nightlight_options[0])
 
         device = _build_device_payload(self, device_id, humidifier, "humidifier", cmps)
 
@@ -546,7 +588,7 @@ class GoveeMixin:
                 "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "kettle"),
                 "obj_id": self.mqtt_helper.obj_id(kettle["deviceName"], "kettle"),
                 "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
-                "cmd_t": self.mqtt_helper.cmd_t(device_id, "power"),
+                "cmd_t": self.mqtt_helper.cmd_t(device_id, "switch", "power"),
                 "device_class": "switch",
                 "icon": "mdi:kettle",
             }

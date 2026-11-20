@@ -29,6 +29,7 @@ class MqttMixin(BaseMqttMixin):
             f"{self.mqtt_helper.service_slug}/+/switch/+/set",
             f"{self.mqtt_helper.service_slug}/+/select/+/set",
             f"{self.mqtt_helper.service_slug}/+/number/+/set",
+            f"{self.mqtt_helper.service_slug}/+/humidifier/+/set",
         ]
 
     async def mqtt_on_message(self: Govee2Mqtt, client: Client, userdata: Any, msg: MQTTMessage) -> None:
