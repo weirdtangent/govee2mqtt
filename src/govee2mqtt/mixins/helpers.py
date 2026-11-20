@@ -541,6 +541,15 @@ class HelpersMixin:
                         "value": 1 if state_on else 0,
                     }
 
+                case "heater_mode":
+                    # the kettle's water_heater entity: HA's mode list is fixed, so on/off is all
+                    # it carries -- "off" is off, any heating mode is on
+                    capabilities["powerSwitch"] = {
+                        "type": "devices.capabilities.on_off",
+                        "instance": "powerSwitch",
+                        "value": 0 if str(value).lower() == "off" else 1,
+                    }
+
                 case "humidity":
                     # target humidity, from the humidity number or the humidifier entity -- HA
                     # sends "45" from one and may send "45.0" from the other

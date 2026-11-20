@@ -279,7 +279,21 @@ class GoveeMixin:
                 "icon": "mdi:power",
             }
         }
-        self.upsert_state(device_id, switch={"power": "OFF"})
+        _seed_once(self, device_id, "switch", "power", "OFF")
+
+        # HA has no purifier domain; a `fan` with the work modes as presets is what its fan and
+        # purifier cards drive
+        cmps["fan"] = {
+            "p": "fan",
+            "name": None,
+            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "fan"),
+            "obj_id": self.mqtt_helper.obj_id(air_purifier["deviceName"], "fan"),
+            "stat_t": self.mqtt_helper.stat_t(device_id, "switch", "power"),
+            "cmd_t": self.mqtt_helper.cmd_t(device_id, "fan", "power"),
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "icon": "mdi:air-purifier",
+        }
 
         if device_has.get("workMode", False) and work_mode_options:
             cmps["work_mode"] = {
@@ -292,8 +306,14 @@ class GoveeMixin:
                 "options": work_mode_options,
                 "icon": "mdi:air-purifier",
             }
-            default_work_mode = "Auto" if "Auto" in work_mode_options else work_mode_options[0]
-            self.upsert_state(device_id, select={"work_mode": default_work_mode})
+            cmps["fan"].update(
+                {
+                    "preset_mode_state_topic": self.mqtt_helper.stat_t(device_id, "select", "work_mode"),
+                    "preset_mode_command_topic": self.mqtt_helper.cmd_t(device_id, "fan", "work_mode"),
+                    "preset_modes": work_mode_options,
+                }
+            )
+            _seed_once(self, device_id, "select", "work_mode", "Auto" if "Auto" in work_mode_options else work_mode_options[0])
 
         if device_has.get("filterLifeTime", False):
             cmps["filter_life"] = {
@@ -392,15 +412,6 @@ class GoveeMixin:
                             elif name not in work_mode_options:
                                 work_mode_options.append(name)
 
-        # Seed defaults only the first time. This runs on every rescan, and prepare_device publishes
-        # state right after, so re-seeding flipped a running humidifier to OFF / 50% / Auto in HA
-        # until the next device poll put it back.
-        known = self.states.get(device_id, {})
-
-        def seed(kind: str, key: str, value: Any) -> None:
-            if key not in known.get(kind, {}):
-                self.upsert_state(device_id, **{kind: {key: value}})
-
         cmps: dict[str, dict[str, Any]] = {}
 
         cmps["power"] = {
@@ -414,7 +425,7 @@ class GoveeMixin:
             "device_class": "switch",
             "icon": "mdi:power",
         }
-        seed("switch", "power", "OFF")
+        _seed_once(self, device_id, "switch", "power", "OFF")
 
         # A real `humidifier` entity over the same power/humidity/mode state, so the device works
         # with HA's humidifier cards and voice ("set the humidifier to 45%") rather than only as a
@@ -470,7 +481,7 @@ class GoveeMixin:
                 "entity_category": "config",
                 "icon": "mdi:water-percent",
             }
-            seed("number", "humidity", 50)
+            _seed_once(self, device_id, "number", "humidity", 50)
 
         if device_has.get("warmMistToggle", False):
             cmps["warm_mist"] = {
@@ -483,7 +494,7 @@ class GoveeMixin:
                 "device_class": "switch",
                 "icon": "mdi:heat-wave",
             }
-            seed("switch", "warm_mist", "OFF")
+            _seed_once(self, device_id, "switch", "warm_mist", "OFF")
 
         if device_has.get("workMode", False) and work_mode_options:
             cmps["work_mode"] = {
@@ -496,7 +507,7 @@ class GoveeMixin:
                 "options": work_mode_options,
                 "icon": "mdi:water-pump",
             }
-            seed("select", "work_mode", "Auto" if "Auto" in work_mode_options else work_mode_options[0])
+            _seed_once(self, device_id, "select", "work_mode", "Auto" if "Auto" in work_mode_options else work_mode_options[0])
 
         if device_has.get("nightlightToggle", False) and nightlight_options:
             cmps["night_light"] = {
@@ -509,7 +520,7 @@ class GoveeMixin:
                 "options": nightlight_options,
                 "icon": "mdi:weather-night",
             }
-            seed("select", "nightlight_scene", nightlight_options[0])
+            _seed_once(self, device_id, "select", "nightlight_scene", nightlight_options[0])
 
         device = _build_device_payload(self, device_id, humidifier, "humidifier", cmps)
 
@@ -593,7 +604,31 @@ class GoveeMixin:
                 "icon": "mdi:kettle",
             }
         }
-        self.upsert_state(device_id, switch={"power": "OFF"})
+        _seed_once(self, device_id, "switch", "power", "OFF")
+
+        # A `water_heater` gives the kettle HA's thermostat-style card. Its modes must come from
+        # HA's fixed list, so it only carries on/off ("electric"/"off"); the tea presets stay on
+        # the work-mode select.
+        cmps["water_heater"] = {
+            "p": "water_heater",
+            "name": None,
+            "uniq_id": self.mqtt_helper.dev_unique_id(device_id, "water_heater"),
+            "obj_id": self.mqtt_helper.obj_id(kettle["deviceName"], "water_heater"),
+            "power_command_topic": self.mqtt_helper.cmd_t(device_id, "water_heater", "power"),
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "modes": ["off", "electric"],
+            "mode_state_topic": self.mqtt_helper.stat_t(device_id, "switch", "power"),
+            "mode_state_template": "{{ 'electric' if value == 'ON' else 'off' }}",
+            "mode_command_topic": self.mqtt_helper.cmd_t(device_id, "water_heater", "heater_mode"),
+            "temperature_unit": unit_symbol[-1],
+            "min_temp": temperature_min,
+            "max_temp": temperature_max,
+            "precision": 1.0 if temperature_step >= 1 else 0.5 if temperature_step >= 0.5 else 0.1,
+            "icon": "mdi:kettle",
+        }
+        if device_has.get("sensorTemperature", False):
+            cmps["water_heater"]["current_temperature_topic"] = self.mqtt_helper.stat_t(device_id, "sensor", "temperature")
 
         if device_has.get("sensorTemperature", False):
             cmps["temperature"] = {
@@ -624,7 +659,13 @@ class GoveeMixin:
                 "unit_of_measurement": unit_symbol,
                 "icon": "mdi:thermometer",
             }
-            self.upsert_state(device_id, number={"target_temperature": temperature_min})
+            cmps["water_heater"].update(
+                {
+                    "temperature_state_topic": self.mqtt_helper.stat_t(device_id, "number", "target_temperature"),
+                    "temperature_command_topic": self.mqtt_helper.cmd_t(device_id, "water_heater", "target_temperature"),
+                }
+            )
+            _seed_once(self, device_id, "number", "target_temperature", temperature_min)
 
         if device_has.get("workMode", False) and work_mode_options:
             cmps["work_mode"] = {
@@ -637,7 +678,7 @@ class GoveeMixin:
                 "options": work_mode_options,
                 "icon": "mdi:kettle-steam",
             }
-            self.upsert_state(device_id, select={"work_mode": work_mode_options[0]})
+            _seed_once(self, device_id, "select", "work_mode", work_mode_options[0])
 
         device = _build_device_payload(self, device_id, kettle, "kettle", cmps)
 
@@ -1173,6 +1214,14 @@ class GoveeMixin:
 
         await self.publish_device_availability(device_id, online=True)
         await self.publish_device_state(device_id)
+
+
+def _seed_once(service: Govee2Mqtt, device_id: str, kind: str, key: str, value: Any) -> None:
+    """Seed a default state only if there is none yet. The builders run on every rescan and
+    prepare_device publishes state right after, so seeding unconditionally flipped a running
+    device to OFF / its defaults in HA until the next device poll put it back."""
+    if key not in service.states.get(device_id, {}).get(kind, {}):
+        service.upsert_state(device_id, **{kind: {key: value}})
 
 
 def _build_device_payload(service: Govee2Mqtt, device_id: str, source: dict[str, Any], domain: str, components: dict[str, Any]) -> dict[str, Any]:

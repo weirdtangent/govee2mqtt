@@ -778,3 +778,109 @@ class TestBuildHumidifier:
         assert fake.states[device_id]["switch"]["power"] == "OFF"
         assert fake.states[device_id]["number"]["humidity"] == 50
         assert fake.states[device_id]["select"]["work_mode"] == "Auto"
+
+
+# ===========================================================================
+# TestBuildAirPurifier / TestBuildKettle
+# ===========================================================================
+class TestBuildAirPurifier:
+    """Purifiers get a `fan` entity with their work modes as presets, so HA's fan/purifier cards
+    can drive them."""
+
+    def _purifier(self) -> dict[str, Any]:
+        return {
+            "sku": "H7126",
+            "device": "AA:BB:CC:DD:EE:FF:00:22",
+            "deviceName": "Air Purifier - Office",
+            "capabilities": [
+                {"type": "devices.capabilities.on_off", "instance": "powerSwitch", "parameters": {}},
+                {
+                    "type": "devices.capabilities.work_mode",
+                    "instance": "workMode",
+                    "parameters": {"fields": [{"fieldName": "workMode", "options": [{"name": "Auto", "value": 3}, {"name": "Sleep", "value": 5}]}]},
+                },
+            ],
+        }
+
+    async def test_publishes_a_fan_with_work_modes_as_presets(self) -> None:
+        fake = FakeLightService()
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        device_id = await fake.build_air_purifier(self._purifier())
+        cmps = fake.prepare_device.call_args[0][0]["cmps"]
+        fan = cmps["fan"]
+        h = fake.mqtt_helper
+
+        assert fan["p"] == "fan"
+        assert fan["name"] is None
+        assert fan["obj_id"] == "air_purifier_office_fan"
+        assert fan["uniq_id"] not in {c["uniq_id"] for k, c in cmps.items() if k != "fan"}
+        assert fan["stat_t"] == h.stat_t(device_id, "switch", "power")
+        assert fan["preset_mode_state_topic"] == h.stat_t(device_id, "select", "work_mode")
+        assert fan["preset_modes"] == ["Auto", "Sleep"]
+
+    async def test_rescan_keeps_the_known_state(self) -> None:
+        fake = FakeLightService()
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        device_id = await fake.build_air_purifier(self._purifier())
+        fake.upsert_state(device_id, switch={"power": "ON"}, select={"work_mode": "Sleep"})
+
+        await fake.build_air_purifier(self._purifier())
+
+        assert fake.states[device_id]["switch"]["power"] == "ON"
+        assert fake.states[device_id]["select"]["work_mode"] == "Sleep"
+
+
+class TestBuildKettle:
+    """Kettles get a `water_heater` entity: on/off plus target and current temperature."""
+
+    def _kettle(self, *, with_sensor: bool = True) -> dict[str, Any]:
+        caps: list[dict[str, Any]] = [
+            {"type": "devices.capabilities.on_off", "instance": "powerSwitch", "parameters": {}},
+            {
+                "type": "devices.capabilities.temperature_setting",
+                "instance": "sliderTemperature",
+                "parameters": {
+                    "fields": [
+                        {"fieldName": "targetTemperature", "range": {"min": 40, "max": 212, "precision": 1}},
+                        {"fieldName": "temperatureUnit", "options": [{"name": "Fahrenheit", "defaultValue": "Fahrenheit"}]},
+                    ]
+                },
+            },
+        ]
+        if with_sensor:
+            caps.append({"type": "devices.capabilities.property", "instance": "sensorTemperature", "parameters": {}})
+        return {"sku": "H7171", "device": "AA:BB:CC:DD:EE:FF:00:33", "deviceName": "Smart Kettle", "capabilities": caps}
+
+    async def _build(self, kettle: dict[str, Any]) -> tuple[FakeLightService, str, dict[str, Any]]:
+        fake = FakeLightService()
+        fake.prepare_device = AsyncMock()  # type: ignore[method-assign]
+        device_id = await fake.build_kettle(kettle)
+        return fake, device_id, fake.prepare_device.call_args[0][0]["cmps"]
+
+    async def test_publishes_a_water_heater(self) -> None:
+        fake, device_id, cmps = await self._build(self._kettle())
+        heater = cmps["water_heater"]
+        h = fake.mqtt_helper
+
+        assert heater["p"] == "water_heater"
+        assert heater["obj_id"] == "smart_kettle_water_heater"
+        assert heater["uniq_id"] not in {c["uniq_id"] for k, c in cmps.items() if k != "water_heater"}
+        assert heater["modes"] == ["off", "electric"]
+        assert heater["mode_state_topic"] == h.stat_t(device_id, "switch", "power")
+        assert heater["temperature_unit"] == "F"
+        assert (heater["min_temp"], heater["max_temp"], heater["precision"]) == (40, 212, 1.0)
+        assert heater["temperature_state_topic"] == h.stat_t(device_id, "number", "target_temperature")
+        assert heater["current_temperature_topic"] == h.stat_t(device_id, "sensor", "temperature")
+
+    async def test_no_current_temperature_without_a_sensor(self) -> None:
+        _, _, cmps = await self._build(self._kettle(with_sensor=False))
+        assert "current_temperature_topic" not in cmps["water_heater"]
+
+    async def test_rescan_keeps_the_target_temperature(self) -> None:
+        """The target was re-seeded to the 40°F minimum on every rescan."""
+        fake, device_id, _ = await self._build(self._kettle())
+        fake.upsert_state(device_id, number={"target_temperature": 185})
+
+        await fake.build_kettle(self._kettle())
+
+        assert fake.states[device_id]["number"]["target_temperature"] == 185

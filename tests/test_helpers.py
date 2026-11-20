@@ -543,3 +543,13 @@ class TestHumidifierCommands:
     def test_humidifier_power_is_a_power_switch(self) -> None:
         caps = self._make_humidifier().build_govee_capabilities("HUM1", "power", "ON")
         assert caps["powerSwitch"]["value"] == 1
+
+
+class TestWaterHeaterModeCommand:
+    @pytest.mark.parametrize(("mode", "power"), [("off", 0), ("electric", 1), ("OFF", 0)])
+    def test_heater_mode_maps_to_power(self, mode: str, power: int) -> None:
+        fake = FakeHelpers()
+        fake.devices["K1"] = {"component": {"cmps": {"water_heater": {"p": "water_heater"}}}}
+        fake.states["K1"] = {"internal": {}}
+        caps = fake.build_govee_capabilities("K1", "heater_mode", mode)
+        assert caps == {"powerSwitch": {"type": "devices.capabilities.on_off", "instance": "powerSwitch", "value": power}}
