@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
     "deepmerge==4.0.0",
     "paho-mqtt>=2.2.0",
-    "pyyaml>=6.0.3",
+    "pyyaml>=6.0.4",
     "json-logging-graystorm",
     "mqtt-helper-graystorm",
     "types-pyyaml>=6.0.12.20261113",
@@ -24,7 +24,7 @@ govee2mqtt = "govee2mqtt.app:main"
 [project.optional-dependencies]
 dev = [
     # linting/formatting
-    "ruff>=0.17.5",
+    "ruff>=0.17.6",
 
     # testing/coverage
     "pytest>=9.2.0",
@@ -130,7 +130,7 @@ dev = [
     "pytest>=9.2.0",
     "pytest-asyncio>=1.5.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.17.5",
+    "ruff>=0.17.6",
     "types-requests>=2.33.0.20261030",
     "pip-audit>=2.10.1",
 ]
